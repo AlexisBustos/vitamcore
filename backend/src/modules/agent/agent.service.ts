@@ -137,7 +137,7 @@ export async function convertProposedTask(id: string) {
     projectId: proposed.projectId,
     title: proposed.title,
     description: proposed.description,
-    status: 'PENDING',
+    status: 'TODO',
     priority: proposed.priority,
     dueDate: proposed.dueDate,
     source: 'AI',
