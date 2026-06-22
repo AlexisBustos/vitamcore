@@ -47,12 +47,9 @@ export const projectStatus: Record<ProjectStatus, Tone> = {
 };
 
 export const taskStatus: Record<TaskStatus, Tone> = {
-  PENDING: { label: 'Pendiente', className: 'bg-slate-100 text-slate-600' },
-  IN_PROGRESS: { label: 'En curso', className: 'bg-blue-50 text-blue-700' },
-  BLOCKED: { label: 'Bloqueada', className: 'bg-red-50 text-red-700' },
-  IN_REVIEW: { label: 'En revisión', className: 'bg-violet-50 text-violet-700' },
-  COMPLETED: { label: 'Completada', className: 'bg-emerald-50 text-emerald-700' },
-  CANCELLED: { label: 'Cancelada', className: 'bg-slate-100 text-slate-500' },
+  TODO: { label: 'Por hacer', className: 'bg-slate-100 text-slate-600' },
+  DOING: { label: 'Haciendo', className: 'bg-blue-50 text-blue-700' },
+  DONE: { label: 'Hecho', className: 'bg-emerald-50 text-emerald-700' },
 };
 
 export const priority: Record<Priority, Tone> = {
