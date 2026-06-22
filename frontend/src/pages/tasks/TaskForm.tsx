@@ -23,6 +23,7 @@ interface Props {
   task?: Task | null;
   defaultOrganizationId?: string;
   defaultProjectId?: string;
+  defaultStatus?: Task['status'];
   // Bloquea el cambio de empresa/proyecto (al crear desde un proyecto).
   lockContext?: boolean;
 }
@@ -37,6 +38,7 @@ export function TaskForm({
   task,
   defaultOrganizationId,
   defaultProjectId,
+  defaultStatus,
   lockContext,
 }: Props) {
   const editing = !!task;
@@ -50,7 +52,7 @@ export function TaskForm({
     projectId: task?.projectId ?? defaultProjectId ?? '',
     title: task?.title ?? '',
     description: task?.description ?? '',
-    status: task?.status ?? 'TODO',
+    status: task?.status ?? defaultStatus ?? 'TODO',
     priority: task?.priority ?? 'MEDIUM',
     source: task?.source ?? 'MANUAL',
     owner: task?.owner ?? '',

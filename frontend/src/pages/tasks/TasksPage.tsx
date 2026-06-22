@@ -1,5 +1,13 @@
 import { useMemo, useState } from 'react';
-import { CheckCircle2, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import {
+  CheckCircle2,
+  LayoutGrid,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Table as TableIcon,
+  Trash2,
+} from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,12 +32,15 @@ import {
 import { cn } from '@/lib/utils';
 import type { Task } from '@/types/domain';
 import { TaskForm } from './TaskForm';
+import { TaskBoard } from './TaskBoard';
 
 export function TasksPage() {
   const [filters, setFilters] = useState<TaskFilters>({});
   const [taskForm, setTaskForm] = useState<{ open: boolean; task: Task | null }>(
     { open: false, task: null },
   );
+  const [view, setView] = useState<'table' | 'kanban'>('table');
+  const [newStatus, setNewStatus] = useState<Task['status']>('TODO');
 
   const { data: organizations } = useOrganizations();
   const { data: projects } = useProjects(
@@ -63,6 +74,11 @@ export function TasksPage() {
   async function handleDelete(task: Task) {
     if (!confirm(`¿Eliminar la tarea "${task.title}"?`)) return;
     await deleteTask.mutateAsync(task.id);
+  }
+
+  function handleAddInColumn(status: Task['status']) {
+    setNewStatus(status);
+    setTaskForm({ open: true, task: null });
   }
 
   return (
@@ -114,18 +130,34 @@ export function TasksPage() {
             onChange={(e) => set('overdue', e.target.value)}
           />
         </div>
+        <div className="mt-3 flex justify-end gap-1">
+          <Button
+            size="sm"
+            variant={view === 'table' ? 'primary' : 'outline'}
+            onClick={() => setView('table')}
+          >
+            <TableIcon className="h-4 w-4" /> Tabla
+          </Button>
+          <Button
+            size="sm"
+            variant={view === 'kanban' ? 'primary' : 'outline'}
+            onClick={() => setView('kanban')}
+          >
+            <LayoutGrid className="h-4 w-4" /> Kanban
+          </Button>
+        </div>
       </Card>
 
       {isLoading && <Spinner />}
       {isError && <ErrorState message={getErrorMessage(error)} />}
 
-      {data && data.length === 0 && (
+      {view === 'table' && data && data.length === 0 && (
         <EmptyState title="Sin tareas">
           No hay tareas que coincidan con los filtros.
         </EmptyState>
       )}
 
-      {data && data.length > 0 && (
+      {view === 'table' && data && data.length > 0 && (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -216,12 +248,30 @@ export function TasksPage() {
         </Card>
       )}
 
+      {view === 'kanban' &&
+        (!filters.projectId ? (
+          <EmptyState title="Selecciona un proyecto">
+            El tablero Kanban se organiza por proyecto. Elige un proyecto en los
+            filtros para ver su tablero.
+          </EmptyState>
+        ) : data ? (
+          <TaskBoard
+            tasks={data}
+            onAdd={handleAddInColumn}
+            onEditTask={(task) => setTaskForm({ open: true, task })}
+            onDeleteTask={handleDelete}
+          />
+        ) : null)}
+
       {taskForm.open && (
         <TaskForm
           open={taskForm.open}
           onClose={() => setTaskForm({ open: false, task: null })}
           task={taskForm.task}
           defaultOrganizationId={filters.organizationId}
+          defaultProjectId={filters.projectId}
+          defaultStatus={!taskForm.task ? newStatus : undefined}
+          lockContext={view === 'kanban' && !taskForm.task && !!filters.projectId}
         />
       )}
     </div>
