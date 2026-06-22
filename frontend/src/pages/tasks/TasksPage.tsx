@@ -87,7 +87,12 @@ export function TasksPage() {
         title="Tareas"
         description="Tareas ejecutivas y operativas de todas las empresas."
         actions={
-          <Button onClick={() => setTaskForm({ open: true, task: null })}>
+          <Button
+            onClick={() => {
+              setNewStatus('TODO');
+              setTaskForm({ open: true, task: null });
+            }}
+          >
             <Plus className="h-4 w-4" /> Nueva tarea
           </Button>
         }

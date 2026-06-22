@@ -31,6 +31,12 @@ export function BoardColumn({
     if (!over) setOver(true);
   }
 
+  function handleDragLeave(e: React.DragEvent<HTMLDivElement>) {
+    // Evita el parpadeo: solo limpia el resaltado al salir de la columna,
+    // no al pasar el cursor por encima de las tarjetas hijas.
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) setOver(false);
+  }
+
   function handleDrop(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault();
     setOver(false);
@@ -41,7 +47,7 @@ export function BoardColumn({
   return (
     <div
       onDragOver={handleDragOver}
-      onDragLeave={() => setOver(false)}
+      onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       className={[
         'flex w-full flex-col gap-3 rounded-[var(--radius)] border p-3 transition-colors',
