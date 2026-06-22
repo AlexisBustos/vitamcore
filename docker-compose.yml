@@ -1,0 +1,32 @@
+# =========================================================
+# VITAM CORE - Infraestructura local de desarrollo
+# PostgreSQL para el backend.
+#
+# Levantar:   docker compose up -d
+# Detener:    docker compose down
+# Borrar todo (incluye datos): docker compose down -v
+#
+# Las credenciales coinciden con backend/.env.example:
+#   postgresql://postgres:postgres@localhost:5432/vitamcore
+# =========================================================
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vitamcore-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: vitamcore
+    ports:
+      - "5432:5432"
+    volumes:
+      - vitamcore_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d vitamcore"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  vitamcore_pgdata:

@@ -1,0 +1,631 @@
+// =========================================================
+// VITAM CORE - Prisma schema
+// Base de datos: PostgreSQL
+// Sprint 1: módulos estructurales (Organization, BusinessUnit,
+// Project, Task) además del User/AppConfig del Sprint 0.
+// =========================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------
+// Enums
+// ---------------------------------------------------------
+
+/// Roles disponibles en esta etapa inicial.
+enum Role {
+  CEO
+  ADMIN
+}
+
+/// Tipo de empresa.
+enum OrganizationType {
+  HEALTHCARE
+  TECHNOLOGY
+  TRANSVERSAL
+}
+
+/// Estado genérico ACTIVE/INACTIVE (empresas y unidades).
+enum EntityStatus {
+  ACTIVE
+  INACTIVE
+}
+
+/// Estados del ciclo de vida de un proyecto.
+enum ProjectStatus {
+  IDEA
+  PLANNED
+  IN_PROGRESS
+  BLOCKED
+  IN_REVIEW
+  COMPLETED
+  PAUSED
+  CANCELLED
+}
+
+/// Estados de una tarea.
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  BLOCKED
+  IN_REVIEW
+  COMPLETED
+  CANCELLED
+}
+
+/// Prioridad compartida por proyectos y tareas.
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+/// Origen de una tarea.
+enum TaskSource {
+  MANUAL
+  MEETING
+  EMAIL
+  DOCUMENT
+  AI
+  OTHER
+}
+
+// --- Sprint 2 ---
+
+/// Etapas del pipeline comercial.
+enum SalesStatus {
+  LEAD
+  CONTACTED
+  MEETING_SCHEDULED
+  DIAGNOSIS_DONE
+  PROPOSAL_SENT
+  NEGOTIATION
+  WON
+  LOST
+  PAUSED
+}
+
+/// Origen de una oportunidad comercial.
+enum SalesSource {
+  MANUAL
+  REFERRAL
+  EMAIL
+  MEETING
+  WEBSITE
+  LINKEDIN
+  EXISTING_CLIENT
+  OTHER
+}
+
+/// Estado de un ingreso.
+enum IncomeStatus {
+  EXPECTED
+  INVOICED
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+/// Estado de un gasto.
+enum ExpenseStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+/// Frecuencia de recurrencia (ingresos y gastos).
+enum RecurrenceFrequency {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+/// Tipo de documento.
+enum DocumentType {
+  CONTRACT
+  PROPOSAL
+  QUOTE
+  REPORT
+  MEETING_MINUTES
+  FINANCIAL
+  TECHNICAL
+  LEGAL
+  NORMATIVE
+  OTHER
+}
+
+/// Estado de un documento.
+enum DocumentStatus {
+  ACTIVE
+  ARCHIVED
+  DRAFT
+  REVIEW
+  FINAL
+}
+
+/// Estado de una decisión estratégica.
+enum DecisionStatus {
+  DRAFT
+  ACTIVE
+  IMPLEMENTED
+  REVISIT
+  CANCELLED
+}
+
+// --- Sprint 3: Agent Layer ---
+
+/// Tipo de agente especializado.
+enum AgentType {
+  EXECUTIVE
+  FINANCE
+  SALES
+  PROJECT
+  DOCUMENT
+  STRATEGY
+  GENERAL
+}
+
+/// Rol de un mensaje en una conversación con el agente.
+enum AgentMessageRole {
+  USER
+  AGENT
+  SYSTEM
+  TOOL
+}
+
+/// Tipo de insight generado por el agente.
+enum InsightType {
+  EXECUTIVE_SUMMARY
+  RISK
+  FINANCIAL
+  SALES
+  PROJECT
+  TASK
+  DECISION
+  DOCUMENT
+  STRATEGY
+  GENERAL
+}
+
+/// Estado de un insight.
+enum InsightStatus {
+  NEW
+  REVIEWED
+  DISMISSED
+  ACTIONED
+}
+
+/// Estado de una tarea propuesta por el agente.
+enum ProposedTaskStatus {
+  PROPOSED
+  APPROVED
+  REJECTED
+  CONVERTED_TO_TASK
+}
+
+/// Tipo de reporte ejecutivo.
+enum ReportType {
+  DAILY
+  WEEKLY
+  MONTHLY
+  CONSOLIDATED
+  ORGANIZATION_SPECIFIC
+  CUSTOM
+}
+
+// ---------------------------------------------------------
+// Modelos base (Sprint 0)
+// ---------------------------------------------------------
+
+/// Usuario del sistema. En esta etapa basta con el CEO inicial.
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(ADMIN)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("users")
+}
+
+/// Configuración mínima de la aplicación (clave/valor).
+model AppConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("app_config")
+}
+
+// ---------------------------------------------------------
+// Módulos estructurales (Sprint 1)
+// ---------------------------------------------------------
+
+/// Empresa (Vitam Healthcare, Vitam Tech, transversal).
+model Organization {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  description String?
+  type        OrganizationType
+  status      EntityStatus     @default(ACTIVE)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  businessUnits        BusinessUnit[]
+  projects             Project[]
+  tasks                Task[]
+  salesOpportunities   SalesOpportunity[]
+  incomeRecords        IncomeRecord[]
+  expenseRecords       ExpenseRecord[]
+  documents            Document[]
+  strategicDecisions   StrategicDecision[]
+
+  @@map("organizations")
+}
+
+/// Unidad interna de una empresa.
+model BusinessUnit {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  type           String?
+  status         EntityStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  projects           Project[]
+  tasks              Task[]
+  salesOpportunities SalesOpportunity[]
+  incomeRecords      IncomeRecord[]
+  expenseRecords     ExpenseRecord[]
+  documents          Document[]
+  strategicDecisions StrategicDecision[]
+
+  // Una empresa no puede tener dos unidades con el mismo nombre.
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("business_units")
+}
+
+/// Proyecto estratégico, operativo, comercial o de desarrollo.
+model Project {
+  id             String        @id @default(cuid())
+  organizationId String
+  businessUnitId String?
+  name           String
+  description    String?
+  status         ProjectStatus @default(IDEA)
+  priority       Priority      @default(MEDIUM)
+  startDate      DateTime?
+  targetDate     DateTime?
+  owner          String?
+  nextAction     String?
+  risks          String?
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit       BusinessUnit?       @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  tasks              Task[]
+  salesOpportunities SalesOpportunity[]
+  incomeRecords      IncomeRecord[]
+  expenseRecords     ExpenseRecord[]
+  documents          Document[]
+  strategicDecisions StrategicDecision[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@index([businessUnitId])
+  @@index([status])
+  @@map("projects")
+}
+
+/// Tarea ejecutiva u operativa.
+model Task {
+  id             String     @id @default(cuid())
+  organizationId String
+  businessUnitId String?
+  projectId      String?
+  title          String
+  description    String?
+  status         TaskStatus @default(PENDING)
+  priority       Priority   @default(MEDIUM)
+  dueDate        DateTime?
+  owner          String?
+  source         TaskSource @default(MANUAL)
+  notes          String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([projectId])
+  @@index([status])
+  @@index([dueDate])
+  @@map("tasks")
+}
+
+// ---------------------------------------------------------
+// Módulos ejecutivos (Sprint 2)
+// Nota: los montos se almacenan como Int en la moneda indicada
+// (CLP por defecto, sin decimales). Es un control ejecutivo, no
+// contabilidad: suficiente y evita problemas de serialización.
+// ---------------------------------------------------------
+
+/// Oportunidad comercial (pipeline de ventas).
+model SalesOpportunity {
+  id               String      @id @default(cuid())
+  organizationId   String
+  businessUnitId   String?
+  projectId        String?
+  clientName       String
+  contactName      String?
+  contactEmail     String?
+  contactPhone     String?
+  opportunityName  String
+  productOrService String?
+  estimatedAmount  Int         @default(0)
+  currency         String      @default("CLP")
+  probability      Int         @default(0)
+  status           SalesStatus @default(LEAD)
+  expectedCloseDate DateTime?
+  nextAction       String?
+  nextFollowUpDate DateTime?
+  source           SalesSource @default(MANUAL)
+  notes            String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([nextFollowUpDate])
+  @@map("sales_opportunities")
+}
+
+/// Ingreso (esperado, facturado, pagado…).
+model IncomeRecord {
+  id                  String               @id @default(cuid())
+  organizationId      String
+  businessUnitId      String?
+  projectId           String?
+  clientName          String?
+  description         String
+  amount              Int                  @default(0)
+  currency            String               @default("CLP")
+  category            String?
+  status              IncomeStatus         @default(EXPECTED)
+  incomeDate          DateTime?
+  dueDate             DateTime?
+  isRecurring         Boolean              @default(false)
+  recurrenceFrequency RecurrenceFrequency?
+  notes               String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([incomeDate])
+  @@index([dueDate])
+  @@map("income_records")
+}
+
+/// Gasto (pendiente, pagado…).
+model ExpenseRecord {
+  id                  String               @id @default(cuid())
+  organizationId      String
+  businessUnitId      String?
+  projectId           String?
+  vendorName          String?
+  description         String
+  amount              Int                  @default(0)
+  currency            String               @default("CLP")
+  category            String?
+  status              ExpenseStatus        @default(PENDING)
+  expenseDate         DateTime?
+  dueDate             DateTime?
+  isRecurring         Boolean              @default(false)
+  recurrenceFrequency RecurrenceFrequency?
+  notes               String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([expenseDate])
+  @@index([dueDate])
+  @@map("expense_records")
+}
+
+/// Documento (registro y metadatos; archivo en storage externo a futuro).
+model Document {
+  id             String         @id @default(cuid())
+  organizationId String
+  businessUnitId String?
+  projectId      String?
+  title          String
+  description    String?
+  fileName       String?
+  fileUrl        String?
+  fileType       String?
+  fileSize       Int?
+  documentType   DocumentType   @default(OTHER)
+  status         DocumentStatus @default(ACTIVE)
+  clientName     String?
+  tags           String[]       @default([])
+  aiSummary      String?
+  uploadedAt     DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([documentType])
+  @@index([projectId])
+  @@map("documents")
+}
+
+/// Decisión estratégica (memoria de la dirección).
+model StrategicDecision {
+  id             String         @id @default(cuid())
+  organizationId String
+  businessUnitId String?
+  projectId      String?
+  title          String
+  context        String?
+  decision       String
+  rationale      String?
+  risks          String?
+  nextStep       String?
+  decisionDate   DateTime?
+  status         DecisionStatus @default(DRAFT)
+  notes          String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([decisionDate])
+  @@map("strategic_decisions")
+}
+
+// ---------------------------------------------------------
+// Agent Layer (Sprint 3)
+// Capa de análisis/auditoría. organizationId/projectId se guardan
+// como referencias opcionales (sin FK rígida) por ser una capa
+// transversal de registro de la actividad del agente.
+// ---------------------------------------------------------
+
+/// Conversación con el agente ejecutivo.
+model AgentConversation {
+  id             String    @id @default(cuid())
+  title          String
+  organizationId String?
+  projectId      String?
+  agentType      AgentType @default(EXECUTIVE)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  messages AgentMessage[]
+
+  @@index([agentType])
+  @@map("agent_conversations")
+}
+
+/// Mensaje dentro de una conversación con el agente.
+model AgentMessage {
+  id             String           @id @default(cuid())
+  conversationId String
+  role           AgentMessageRole
+  content        String
+  metadata       Json?
+  createdAt      DateTime         @default(now())
+
+  conversation AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@map("agent_messages")
+}
+
+/// Insight (hallazgo/recomendación) generado por el agente.
+model AgentInsight {
+  id             String        @id @default(cuid())
+  organizationId String?
+  projectId      String?
+  agentType      AgentType     @default(EXECUTIVE)
+  type           InsightType   @default(GENERAL)
+  title          String
+  summary        String
+  evidence       String?
+  recommendation String?
+  priority       Priority      @default(MEDIUM)
+  status         InsightStatus @default(NEW)
+  sourceData     Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([status])
+  @@index([agentType])
+  @@index([organizationId])
+  @@map("agent_insights")
+}
+
+/// Tarea propuesta por el agente (no se ejecuta sin aprobación del usuario).
+model AgentProposedTask {
+  id             String             @id @default(cuid())
+  organizationId String
+  businessUnitId String?
+  projectId      String?
+  title          String
+  description    String?
+  priority       Priority           @default(MEDIUM)
+  dueDate        DateTime?
+  rationale      String?
+  sourceInsightId String?
+  status         ProposedTaskStatus @default(PROPOSED)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([status])
+  @@index([organizationId])
+  @@map("agent_proposed_tasks")
+}
+
+/// Reporte ejecutivo generado por el agente.
+model ExecutiveReport {
+  id              String     @id @default(cuid())
+  title           String
+  organizationId  String?
+  reportType      ReportType @default(CUSTOM)
+  periodStart     DateTime?
+  periodEnd       DateTime?
+  content         String
+  highlights      String?
+  risks           String?
+  recommendations String?
+  nextActions     String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([reportType])
+  @@index([organizationId])
+  @@map("executive_reports")
+}
