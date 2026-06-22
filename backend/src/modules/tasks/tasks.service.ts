@@ -15,9 +15,9 @@ import type {
   UpdateTaskInput,
 } from './tasks.schema';
 
-// Estados que cuentan como "abiertos" para el cálculo de vencidas.
+// Estado que cuenta como "cerrado" para el cálculo de vencidas.
 const OPEN_STATUSES: Prisma.TaskWhereInput['status'] = {
-  notIn: ['COMPLETED', 'CANCELLED'],
+  not: 'DONE',
 };
 
 export async function list(filters: ListTasksFilters) {

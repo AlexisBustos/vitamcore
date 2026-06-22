@@ -142,9 +142,7 @@ export function ProjectDetailPage() {
                       Vence:{' '}
                       <span
                         className={
-                          isOverdue(task.dueDate) &&
-                          task.status !== 'COMPLETED' &&
-                          task.status !== 'CANCELLED'
+                          isOverdue(task.dueDate) && task.status !== 'DONE'
                             ? 'text-[var(--color-danger)]'
                             : ''
                         }

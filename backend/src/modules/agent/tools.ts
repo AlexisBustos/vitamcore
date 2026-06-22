@@ -142,10 +142,7 @@ const getTasks: InternalTool = {
         projectId: { type: 'string' },
         status: {
           type: 'string',
-          enum: [
-            'PENDING', 'IN_PROGRESS', 'BLOCKED', 'IN_REVIEW',
-            'COMPLETED', 'CANCELLED',
-          ],
+          enum: ['TODO', 'DOING', 'DONE'],
         },
         priority: {
           type: 'string',
@@ -164,7 +161,7 @@ const getTasks: InternalTool = {
     };
     if (input.overdue) {
       where.dueDate = { lt: new Date() };
-      where.status = { notIn: ['COMPLETED', 'CANCELLED'] };
+      where.status = { not: 'DONE' };
     }
     return prisma.task.findMany({
       where,

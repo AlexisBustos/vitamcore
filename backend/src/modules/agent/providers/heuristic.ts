@@ -110,13 +110,13 @@ export class HeuristicProvider implements AgentProvider {
         prisma.task.count({
           where: orgWhere(orgId, {
             priority: 'CRITICAL',
-            status: { notIn: ['COMPLETED', 'CANCELLED'] },
+            status: { not: 'DONE' },
           }),
         }),
         prisma.task.count({
           where: orgWhere(orgId, {
             dueDate: { lt: new Date() },
-            status: { notIn: ['COMPLETED', 'CANCELLED'] },
+            status: { not: 'DONE' },
           }),
         }),
         prisma.strategicDecision.count({
@@ -353,7 +353,7 @@ export class HeuristicProvider implements AgentProvider {
       prisma.task.findMany({
         where: orgWhere(orgId, {
           dueDate: { lt: new Date() },
-          status: { notIn: ['COMPLETED', 'CANCELLED'] },
+          status: { not: 'DONE' },
         }),
         include: { project: { select: { name: true } } },
         take: 20,
@@ -361,7 +361,7 @@ export class HeuristicProvider implements AgentProvider {
       prisma.task.count({
         where: orgWhere(orgId, {
           priority: 'CRITICAL',
-          status: { notIn: ['COMPLETED', 'CANCELLED'] },
+          status: { not: 'DONE' },
         }),
       }),
     ]);
@@ -421,7 +421,7 @@ export class HeuristicProvider implements AgentProvider {
       prisma.task.findMany({
         where: orgWhere(orgId, {
           dueDate: { lte: in7 },
-          status: { notIn: ['COMPLETED', 'CANCELLED'] },
+          status: { not: 'DONE' },
         }),
         orderBy: { dueDate: 'asc' },
         include: { project: { select: { name: true } } },

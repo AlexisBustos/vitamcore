@@ -14,13 +14,7 @@ export type ProjectStatus =
   | 'COMPLETED'
   | 'PAUSED'
   | 'CANCELLED';
-export type TaskStatus =
-  | 'PENDING'
-  | 'IN_PROGRESS'
-  | 'BLOCKED'
-  | 'IN_REVIEW'
-  | 'COMPLETED'
-  | 'CANCELLED';
+export type TaskStatus = 'TODO' | 'DOING' | 'DONE';
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 export type TaskSource =
   | 'MANUAL'

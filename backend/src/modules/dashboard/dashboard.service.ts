@@ -18,16 +18,9 @@ const PROJECT_STATUSES: ProjectStatus[] = [
   'CANCELLED',
 ];
 
-const TASK_STATUSES: TaskStatus[] = [
-  'PENDING',
-  'IN_PROGRESS',
-  'BLOCKED',
-  'IN_REVIEW',
-  'COMPLETED',
-  'CANCELLED',
-];
+const TASK_STATUSES: TaskStatus[] = ['TODO', 'DOING', 'DONE'];
 
-const CLOSED_TASK_STATUSES: TaskStatus[] = ['COMPLETED', 'CANCELLED'];
+const CLOSED_TASK_STATUSES: TaskStatus[] = ['DONE'];
 
 export async function getSummary(organizationId?: string) {
   const orgFilter = organizationId ? { organizationId } : {};
@@ -46,7 +39,7 @@ export async function getSummary(organizationId?: string) {
   ] = await Promise.all([
     prisma.project.count({ where: { ...orgFilter, status: 'IN_PROGRESS' } }),
     prisma.project.count({ where: { ...orgFilter, status: 'BLOCKED' } }),
-    prisma.task.count({ where: { ...orgFilter, status: 'PENDING' } }),
+    prisma.task.count({ where: { ...orgFilter, status: 'TODO' } }),
     prisma.task.count({
       where: {
         ...orgFilter,

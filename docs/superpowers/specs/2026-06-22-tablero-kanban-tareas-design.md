@@ -68,7 +68,7 @@ Cambios derivados de la reducción de estados (el enum `TaskStatus` es independi
   - `CLOSED_TASK_STATUSES` → `['DONE']`.
   - El conteo de "tareas pendientes" `status: 'PENDING'` → `status: 'TODO'`.
 - **`modules/agent/tools.ts`**: el `enum` del parámetro `status` de la tool `getTasks` → 3 valores; el filtro de vencidas `notIn: ['COMPLETED','CANCELLED']` → `not: 'DONE'`.
-- **`modules/agent/providers/heuristic.ts`**: las 6 ocurrencias de `notIn: ['COMPLETED','CANCELLED']` (tareas abiertas/vencidas/críticas/próximas, líneas 113, 119, 348, 356, 364, 424) → `not: 'DONE'`.
+- **`modules/agent/providers/heuristic.ts`**: las **5** ocurrencias de `notIn: ['COMPLETED','CANCELLED']` **sobre `prisma.task`** (tareas abiertas/vencidas/críticas/próximas, líneas 113, 119, 356, 364, 424) → `not: 'DONE'`. **OJO:** la ocurrencia de la línea ~348 es un `prisma.project.findMany` (ProjectStatus, que no tiene `DONE`) y **NO** se toca.
 - **`modules/agent/agent.service.ts`** (edición confirmada): `convertProposedTask` fija `status: 'PENDING'` al crear la tarea real (~línea 140) → cambiar a `'TODO'`.
 - **`prisma/seed.ts`** (edición confirmada): usa miembros del enum `TaskStatus` (`TaskStatus.PENDING`, `IN_PROGRESS`, `BLOCKED`, `COMPLETED`, líneas ~304-385) al sembrar tareas → remapear a `TODO`/`DOING`/`DONE`. Los usos de `ProjectStatus.*` y `ExpenseStatus.*` en el mismo archivo se dejan intactos.
 
