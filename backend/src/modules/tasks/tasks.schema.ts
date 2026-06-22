@@ -1,14 +1,7 @@
 import { z } from 'zod';
 import { priorityEnum } from '../projects/projects.schema';
 
-export const taskStatusEnum = z.enum([
-  'PENDING',
-  'IN_PROGRESS',
-  'BLOCKED',
-  'IN_REVIEW',
-  'COMPLETED',
-  'CANCELLED',
-]);
+export const taskStatusEnum = z.enum(['TODO', 'DOING', 'DONE']);
 
 export const taskSourceEnum = z.enum([
   'MANUAL',
@@ -32,7 +25,7 @@ export const createTaskSchema = z.object({
   projectId: z.string().min(1).optional().nullable(),
   title: z.string().trim().min(2, 'El título es obligatorio'),
   description: optionalText,
-  status: taskStatusEnum.default('PENDING'),
+  status: taskStatusEnum.default('TODO'),
   priority: priorityEnum.default('MEDIUM'),
   dueDate: dateInput,
   owner: z.string().trim().max(200).optional().nullable(),
