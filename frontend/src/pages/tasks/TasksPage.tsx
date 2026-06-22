@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Ban, CheckCircle2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { CheckCircle2, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -143,9 +143,7 @@ export function TasksPage() {
               <tbody className="divide-y divide-[var(--color-border)]">
                 {data.map((task) => {
                   const overdue =
-                    isOverdue(task.dueDate) &&
-                    task.status !== 'COMPLETED' &&
-                    task.status !== 'CANCELLED';
+                    isOverdue(task.dueDate) && task.status !== 'DONE';
                   return (
                     <tr key={task.id} className="hover:bg-[var(--color-muted)]/40">
                       <td className="px-4 py-3 font-medium text-[var(--color-foreground)]">
@@ -178,18 +176,18 @@ export function TasksPage() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            title="Marcar completada"
-                            onClick={() => quickStatus(task, 'COMPLETED')}
+                            title="Marcar Hecho"
+                            onClick={() => quickStatus(task, 'DONE')}
                           >
                             <CheckCircle2 className="h-4 w-4 text-[var(--color-success)]" />
                           </Button>
                           <Button
                             size="sm"
                             variant="ghost"
-                            title="Marcar bloqueada"
-                            onClick={() => quickStatus(task, 'BLOCKED')}
+                            title="Volver a Por hacer"
+                            onClick={() => quickStatus(task, 'TODO')}
                           >
-                            <Ban className="h-4 w-4 text-[var(--color-warning)]" />
+                            <RotateCcw className="h-4 w-4 text-[var(--color-muted-foreground)]" />
                           </Button>
                           <Button
                             size="sm"

@@ -50,7 +50,7 @@ export function TaskForm({
     projectId: task?.projectId ?? defaultProjectId ?? '',
     title: task?.title ?? '',
     description: task?.description ?? '',
-    status: task?.status ?? 'PENDING',
+    status: task?.status ?? 'TODO',
     priority: task?.priority ?? 'MEDIUM',
     source: task?.source ?? 'MANUAL',
     owner: task?.owner ?? '',
