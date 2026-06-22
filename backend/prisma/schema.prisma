@@ -51,12 +51,9 @@ enum ProjectStatus {
 
 /// Estados de una tarea.
 enum TaskStatus {
-  PENDING
-  IN_PROGRESS
-  BLOCKED
-  IN_REVIEW
-  COMPLETED
-  CANCELLED
+  TODO
+  DOING
+  DONE
 }
 
 /// Prioridad compartida por proyectos y tareas.
@@ -345,7 +342,7 @@ model Task {
   projectId      String?
   title          String
   description    String?
-  status         TaskStatus @default(PENDING)
+  status         TaskStatus @default(TODO)
   priority       Priority   @default(MEDIUM)
   dueDate        DateTime?
   owner          String?
