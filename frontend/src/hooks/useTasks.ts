@@ -4,7 +4,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { api, toQuery } from '@/lib/api';
-import type { Task } from '@/types/domain';
+import type { Task, TaskStatus } from '@/types/domain';
 
 const KEY = ['tasks'];
 
@@ -33,6 +33,37 @@ export function useSaveTask() {
         ? api.patch(`/tasks/${payload.id}`, payload.data)
         : api.post('/tasks', payload.data),
     onSuccess: () => invalidateTaskGraph(qc),
+  });
+}
+
+export function useMoveTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: TaskStatus }) =>
+      api.patch(`/tasks/${id}`, { status }),
+    // Actualización optimista: mueve la tarjeta de columna al instante.
+    onMutate: async ({ id, status }) => {
+      await qc.cancelQueries({ queryKey: KEY });
+      const snapshots = qc.getQueriesData<Task[]>({ queryKey: KEY });
+      for (const [key, tasks] of snapshots) {
+        if (!tasks) continue;
+        qc.setQueryData<Task[]>(
+          key,
+          tasks.map((t) => (t.id === id ? { ...t, status } : t)),
+        );
+      }
+      return { snapshots };
+    },
+    onError: (_err, _vars, context) => {
+      // Si el PATCH falla, revierte al estado previo: la tarjeta "salta" de
+      // vuelta a su columna original, lo que señala visualmente el fallo.
+      // (No hay sistema de toasts; el rollback + el refetch de onSettled
+      // bastan para reflejar el estado real del servidor.)
+      context?.snapshots.forEach(([key, tasks]) => {
+        qc.setQueryData(key, tasks);
+      });
+    },
+    onSettled: () => invalidateTaskGraph(qc),
   });
 }
 
