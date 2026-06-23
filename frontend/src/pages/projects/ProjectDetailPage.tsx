@@ -40,6 +40,12 @@ export function ProjectDetailPage() {
     navigate('/proyectos');
   }
 
+  const doneTasks = project.tasks.filter((t) => t.status === 'DONE').length;
+  const totalTasks = project.tasks.length;
+  const progress = totalTasks
+    ? Math.round((doneTasks / totalTasks) * 100)
+    : 0;
+
   const info: { label: string; value: string }[] = [
     { label: 'Empresa', value: project.organization?.name ?? '—' },
     { label: 'Unidad', value: project.businessUnit?.name ?? '—' },
@@ -75,6 +81,28 @@ export function ProjectDetailPage() {
         <ProjectStatusBadge value={project.status} />
         <PriorityBadge value={project.priority} />
       </div>
+
+      {/* Avance del proyecto según tareas completadas */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-medium text-[var(--color-foreground)]">
+              Avance
+            </span>
+            <span className="text-[var(--color-muted-foreground)]">
+              {totalTasks === 0
+                ? 'Sin tareas'
+                : `${doneTasks}/${totalTasks} tareas · ${progress}%`}
+            </span>
+          </div>
+          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[var(--color-muted)]">
+            <div
+              className="h-full rounded-full bg-emerald-500 transition-all"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-5">

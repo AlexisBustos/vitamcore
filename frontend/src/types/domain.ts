@@ -77,6 +77,7 @@ export interface Project {
   organization?: Ref;
   businessUnit?: Ref | null;
   _count?: { tasks: number };
+  taskStats?: { total: number; done: number }; // avance según tareas (solo en listado)
 }
 
 export interface ProjectDetail extends Project {
