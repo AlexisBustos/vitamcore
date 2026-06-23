@@ -126,6 +126,20 @@ enum RecurrenceFrequency {
   YEARLY
 }
 
+/// Tipo de importación financiera mensual.
+enum FinancialImportType {
+  SALES_REPORT
+  PURCHASE_REPORT
+  BANK_STATEMENT
+}
+
+/// Estado de un lote de importación financiera.
+enum FinancialImportStatus {
+  PREVIEW
+  CONFIRMED
+  FAILED
+}
+
 /// Tipo de documento.
 enum DocumentType {
   CONTRACT
@@ -262,14 +276,17 @@ model Organization {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  businessUnits        BusinessUnit[]
-  projects             Project[]
-  tasks                Task[]
-  salesOpportunities   SalesOpportunity[]
-  incomeRecords        IncomeRecord[]
-  expenseRecords       ExpenseRecord[]
-  documents            Document[]
-  strategicDecisions   StrategicDecision[]
+  businessUnits          BusinessUnit[]
+  projects               Project[]
+  tasks                  Task[]
+  salesOpportunities     SalesOpportunity[]
+  incomeRecords          IncomeRecord[]
+  expenseRecords         ExpenseRecord[]
+  bankAccounts           BankAccount[]
+  financialImportBatches FinancialImportBatch[]
+  bankTransactions       BankTransaction[]
+  documents              Document[]
+  strategicDecisions     StrategicDecision[]
 
   @@map("organizations")
 }
@@ -371,27 +388,27 @@ model Task {
 
 /// Oportunidad comercial (pipeline de ventas).
 model SalesOpportunity {
-  id               String      @id @default(cuid())
-  organizationId   String
-  businessUnitId   String?
-  projectId        String?
-  clientName       String
-  contactName      String?
-  contactEmail     String?
-  contactPhone     String?
-  opportunityName  String
-  productOrService String?
-  estimatedAmount  Int         @default(0)
-  currency         String      @default("CLP")
-  probability      Int         @default(0)
-  status           SalesStatus @default(LEAD)
+  id                String      @id @default(cuid())
+  organizationId    String
+  businessUnitId    String?
+  projectId         String?
+  clientName        String
+  contactName       String?
+  contactEmail      String?
+  contactPhone      String?
+  opportunityName   String
+  productOrService  String?
+  estimatedAmount   Int         @default(0)
+  currency          String      @default("CLP")
+  probability       Int         @default(0)
+  status            SalesStatus @default(LEAD)
   expectedCloseDate DateTime?
-  nextAction       String?
-  nextFollowUpDate DateTime?
-  source           SalesSource @default(MANUAL)
-  notes            String?
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
+  nextAction        String?
+  nextFollowUpDate  DateTime?
+  source            SalesSource @default(MANUAL)
+  notes             String?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
 
   organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
@@ -409,6 +426,7 @@ model IncomeRecord {
   organizationId      String
   businessUnitId      String?
   projectId           String?
+  importBatchId       String?
   clientName          String?
   description         String
   amount              Int                  @default(0)
@@ -419,18 +437,27 @@ model IncomeRecord {
   dueDate             DateTime?
   isRecurring         Boolean              @default(false)
   recurrenceFrequency RecurrenceFrequency?
+  sourceDocumentType  String?
+  sourceFolio         String?
+  sourceRut           String?
+  sourceIssueDate     DateTime?
+  sourceDedupeKey     String?              @unique
+  rawData             Json?
   notes               String?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
-  project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit?         @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  project      Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  importBatch  FinancialImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
+  @@index([importBatchId])
   @@index([status])
   @@index([incomeDate])
   @@index([dueDate])
+  @@index([sourceIssueDate])
   @@map("income_records")
 }
 
@@ -440,6 +467,7 @@ model ExpenseRecord {
   organizationId      String
   businessUnitId      String?
   projectId           String?
+  importBatchId       String?
   vendorName          String?
   description         String
   amount              Int                  @default(0)
@@ -450,19 +478,117 @@ model ExpenseRecord {
   dueDate             DateTime?
   isRecurring         Boolean              @default(false)
   recurrenceFrequency RecurrenceFrequency?
+  sourceDocumentType  String?
+  sourceFolio         String?
+  sourceRut           String?
+  sourceIssueDate     DateTime?
+  sourceDedupeKey     String?              @unique
+  rawData             Json?
   notes               String?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
-  project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit?         @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  project      Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  importBatch  FinancialImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
+  @@index([importBatchId])
   @@index([status])
   @@index([expenseDate])
   @@index([dueDate])
+  @@index([sourceIssueDate])
   @@map("expense_records")
+}
+
+/// Cuenta bancaria usada para importar cartolas.
+model BankAccount {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  bankName       String?
+  accountNumber  String
+  currency       String   @default("CLP")
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization  Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  importBatches FinancialImportBatch[]
+  transactions  BankTransaction[]
+
+  @@unique([organizationId, accountNumber])
+  @@index([organizationId])
+  @@index([isActive])
+  @@map("bank_accounts")
+}
+
+/// Lote de importación financiera mensual.
+model FinancialImportBatch {
+  id               String                @id @default(cuid())
+  organizationId   String
+  bankAccountId    String?
+  type             FinancialImportType
+  status           FinancialImportStatus @default(PREVIEW)
+  periodMonth      DateTime
+  originalFileName String
+  fileSize         Int
+  sourceHash       String
+  rowsTotal        Int                   @default(0)
+  rowsValid        Int                   @default(0)
+  rowsSkipped      Int                   @default(0)
+  rowsDuplicated   Int                   @default(0)
+  totalIncome      Int                   @default(0)
+  totalExpense     Int                   @default(0)
+  totalCharges     Int                   @default(0)
+  totalCredits     Int                   @default(0)
+  warnings         Json?
+  previewData      Json?
+  createdAt        DateTime              @default(now())
+  confirmedAt      DateTime?
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bankAccount      BankAccount?      @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+  incomeRecords    IncomeRecord[]
+  expenseRecords   ExpenseRecord[]
+  bankTransactions BankTransaction[]
+
+  @@index([organizationId])
+  @@index([type])
+  @@index([periodMonth])
+  @@index([status])
+  @@index([sourceHash])
+  @@map("financial_import_batches")
+}
+
+/// Movimiento bancario importado desde cartola.
+model BankTransaction {
+  id              String   @id @default(cuid())
+  organizationId  String
+  bankAccountId   String
+  importBatchId   String
+  transactionDate DateTime
+  description     String
+  channel         String?
+  documentNumber  String?
+  chargeAmount    Int      @default(0)
+  creditAmount    Int      @default(0)
+  balance         Int?
+  currency        String   @default("CLP")
+  rawData         Json?
+  dedupeKey       String
+  createdAt       DateTime @default(now())
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bankAccount  BankAccount          @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  importBatch  FinancialImportBatch @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+
+  @@unique([bankAccountId, dedupeKey])
+  @@index([organizationId])
+  @@index([bankAccountId])
+  @@index([transactionDate])
+  @@map("bank_transactions")
 }
 
 /// Documento (registro y metadatos; archivo en storage externo a futuro).
@@ -587,19 +713,19 @@ model AgentInsight {
 
 /// Tarea propuesta por el agente (no se ejecuta sin aprobación del usuario).
 model AgentProposedTask {
-  id             String             @id @default(cuid())
-  organizationId String
-  businessUnitId String?
-  projectId      String?
-  title          String
-  description    String?
-  priority       Priority           @default(MEDIUM)
-  dueDate        DateTime?
-  rationale      String?
+  id              String             @id @default(cuid())
+  organizationId  String
+  businessUnitId  String?
+  projectId       String?
+  title           String
+  description     String?
+  priority        Priority           @default(MEDIUM)
+  dueDate         DateTime?
+  rationale       String?
   sourceInsightId String?
-  status         ProposedTaskStatus @default(PROPOSED)
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  status          ProposedTaskStatus @default(PROPOSED)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 
   @@index([status])
   @@index([organizationId])
