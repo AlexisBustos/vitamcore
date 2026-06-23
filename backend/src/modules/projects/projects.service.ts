@@ -2,6 +2,7 @@
  * Lógica de negocio de proyectos (Project).
  */
 import { Prisma } from '@prisma/client';
+import type { ProjectStatus, TaskStatus } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { badRequest, notFound } from '../../utils/http-error';
 import {
@@ -14,8 +15,18 @@ import type {
   UpdateProjectInput,
 } from './projects.schema';
 
+// Estados del "camino feliz" que la automatización puede gestionar.
+// Los demás (BLOCKED, PAUSED, CANCELLED, IN_REVIEW) son decisiones manuales
+// y nunca se tocan automáticamente.
+const STATUS_AUTO: ProjectStatus[] = [
+  'IDEA',
+  'PLANNED',
+  'IN_PROGRESS',
+  'COMPLETED',
+];
+
 export async function list(filters: ListProjectsFilters) {
-  return prisma.project.findMany({
+  const projects = await prisma.project.findMany({
     where: {
       organizationId: filters.organizationId,
       businessUnitId: filters.businessUnitId,
@@ -28,6 +39,23 @@ export async function list(filters: ListProjectsFilters) {
       businessUnit: { select: { id: true, name: true } },
       _count: { select: { tasks: true } },
     },
+  });
+
+  if (projects.length === 0) return [];
+
+  // Desglose de tareas por proyecto/estado para calcular el avance (done/total).
+  const grouped = await prisma.task.groupBy({
+    by: ['projectId', 'status'],
+    where: { projectId: { in: projects.map((p) => p.id) } },
+    _count: { _all: true },
+  });
+
+  return projects.map((project) => {
+    const stats = grouped.filter((g) => g.projectId === project.id);
+    const total = stats.reduce((sum, g) => sum + g._count._all, 0);
+    const done =
+      stats.find((g) => g.status === 'DONE')?._count._all ?? 0;
+    return { ...project, taskStats: { total, done } };
   });
 }
 
@@ -101,4 +129,59 @@ function handleUniqueError(err: unknown) {
     );
   }
   return err;
+}
+
+/**
+ * Calcula el estado que "merece" un proyecto según el recuento de sus tareas
+ * por estado. Devuelve `null` cuando no hay opinión (sin tareas o todas por
+ * hacer): en ese caso la automatización no debe tocar el proyecto.
+ */
+function deriveStatus(
+  grouped: { status: TaskStatus; _count: { _all: number } }[],
+): ProjectStatus | null {
+  const total = grouped.reduce((sum, g) => sum + g._count._all, 0);
+  if (total === 0) return null; // sin tareas → sin opinión
+
+  const done = grouped.find((g) => g.status === 'DONE')?._count._all ?? 0;
+  if (done === total) return 'COMPLETED'; // todas hechas
+
+  const todo = grouped.find((g) => g.status === 'TODO')?._count._all ?? 0;
+  if (todo === total) return null; // todas por hacer → sin opinión
+
+  return 'IN_PROGRESS'; // hay actividad (algún DOING, o DONE parcial)
+}
+
+/**
+ * Sincroniza el estado del proyecto con el avance de sus tareas.
+ * - Respeta los estados manuales: si el proyecto no está en STATUS_AUTO, no hace nada.
+ * - Solo escribe si el estado derivado difiere del actual.
+ * Es un efecto secundario best-effort: si el proyecto no existe, retorna en silencio.
+ *
+ * Acepta un cliente transaccional para ejecutarse dentro de la misma transacción
+ * que la mutación de tarea que lo dispara (así el groupBy ve la escritura reciente).
+ */
+export async function syncProjectStatus(
+  projectId: string,
+  client: Prisma.TransactionClient = prisma,
+): Promise<void> {
+  const project = await client.project.findUnique({
+    where: { id: projectId },
+    select: { id: true, status: true },
+  });
+  if (!project) return;
+  if (!STATUS_AUTO.includes(project.status)) return;
+
+  const grouped = await client.task.groupBy({
+    by: ['status'],
+    where: { projectId },
+    _count: { _all: true },
+  });
+
+  const derived = deriveStatus(grouped);
+  if (!derived || derived === project.status) return;
+
+  await client.project.update({
+    where: { id: projectId },
+    data: { status: derived },
+  });
 }
