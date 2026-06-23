@@ -9,6 +9,7 @@ import {
   assertOrganization,
   assertProjectInOrganization,
 } from '../shared/relations';
+import { syncProjectStatus } from '../projects/projects.service';
 import type {
   CreateTaskInput,
   ListTasksFilters,
@@ -61,13 +62,19 @@ export async function getById(id: string) {
 export async function create(input: CreateTaskInput) {
   await assertOrganization(input.organizationId);
   await assertRelations(input.organizationId, input.businessUnitId, input.projectId);
-  return prisma.task.create({ data: input });
+  // Las validaciones anteriores solo leen, así que pueden ir fuera de la
+  // transacción. La escritura + la sincronización del proyecto van juntas.
+  return prisma.$transaction(async (tx) => {
+    const task = await tx.task.create({ data: input });
+    if (task.projectId) await syncProjectStatus(task.projectId, tx);
+    return task;
+  });
 }
 
 export async function update(id: string, input: UpdateTaskInput) {
   const current = await prisma.task.findUnique({
     where: { id },
-    select: { id: true, organizationId: true },
+    select: { id: true, organizationId: true, projectId: true },
   });
   if (!current) throw notFound('Tarea no encontrada');
 
@@ -77,16 +84,27 @@ export async function update(id: string, input: UpdateTaskInput) {
     input.projectId,
   );
 
-  return prisma.task.update({ where: { id }, data: input });
+  return prisma.$transaction(async (tx) => {
+    const task = await tx.task.update({ where: { id }, data: input });
+    // Si la tarea se movió de proyecto, hay que recalcular ambos.
+    const affected = new Set<string>();
+    if (current.projectId) affected.add(current.projectId);
+    if (task.projectId) affected.add(task.projectId);
+    for (const pid of affected) await syncProjectStatus(pid, tx);
+    return task;
+  });
 }
 
 export async function remove(id: string) {
-  const exists = await prisma.task.findUnique({
+  const existing = await prisma.task.findUnique({
     where: { id },
-    select: { id: true },
+    select: { id: true, projectId: true },
   });
-  if (!exists) throw notFound('Tarea no encontrada');
-  await prisma.task.delete({ where: { id } });
+  if (!existing) throw notFound('Tarea no encontrada');
+  await prisma.$transaction(async (tx) => {
+    await tx.task.delete({ where: { id } });
+    if (existing.projectId) await syncProjectStatus(existing.projectId, tx);
+  });
 }
 
 /** Valida que unidad y proyecto (si vienen) pertenezcan a la empresa. */
