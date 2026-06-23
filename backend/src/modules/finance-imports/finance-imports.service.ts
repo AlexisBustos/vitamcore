@@ -216,7 +216,7 @@ function readRows(file: UploadFile, type: FinancialImportType) {
   const workbook = XLSX.read(file.buffer, {
     type: 'buffer',
     cellDates: true,
-    raw: false,
+    raw: true,
   });
   const sheetName =
     type === FinancialImportType.BANK_STATEMENT
@@ -225,10 +225,41 @@ function readRows(file: UploadFile, type: FinancialImportType) {
   if (!sheetName) throw badRequest('El archivo no contiene la hoja DETALLE');
 
   const sheet = workbook.Sheets[sheetName];
+  if (type === FinancialImportType.BANK_STATEMENT) {
+    return readBankRows(sheet);
+  }
+
   return XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
     defval: '',
-    raw: false,
+    raw: true,
   });
+}
+
+function readBankRows(sheet: XLSX.WorkSheet) {
+  const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+    header: 1,
+    defval: '',
+    raw: true,
+  });
+  const headerIndex = matrix.findIndex((row) =>
+    row.some((cell) => String(cell).trim().toUpperCase() === 'FECHA') &&
+    row.some((cell) => String(cell).toUpperCase().includes('SALDO')),
+  );
+  if (headerIndex === -1) {
+    throw badRequest('La cartola no contiene encabezados reconocibles');
+  }
+
+  const headers = matrix[headerIndex].map((cell) => String(cell).trim());
+  return matrix
+    .slice(headerIndex + 1)
+    .map((row) => {
+      const record: Record<string, unknown> = {};
+      headers.forEach((header, index) => {
+        if (header) record[header] = row[index] ?? '';
+      });
+      return record;
+    })
+    .filter((row) => Object.values(row).some((value) => String(value).trim()));
 }
 
 function parseRows(

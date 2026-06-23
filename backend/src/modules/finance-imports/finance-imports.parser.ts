@@ -220,7 +220,13 @@ export function parseBankRows(
         valueOf(row, 'Descripcion', 'Descripción', 'Glosa'),
       );
       const documentNumber = text(
-        valueOf(row, 'Documento', 'Numero Documento', 'Número Documento'),
+        valueOf(
+          row,
+          'Documento',
+          'Numero Documento',
+          'Número Documento',
+          'Nro. Docto.',
+        ),
       );
       const chargeAmount = normalizeMoney(
         valueOf(row, 'Cargos (CLP)', 'Cargo', 'Cargos'),
