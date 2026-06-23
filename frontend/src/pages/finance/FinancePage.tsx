@@ -5,13 +5,15 @@ import { cn } from '@/lib/utils';
 import { FinanceSummaryTab } from './FinanceSummaryTab';
 import { IncomeTab } from './IncomeTab';
 import { ExpensesTab } from './ExpensesTab';
+import { FinanceImportsTab } from './FinanceImportsTab';
 
-type Tab = 'summary' | 'income' | 'expenses';
+type Tab = 'summary' | 'income' | 'expenses' | 'imports';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'summary', label: 'Resumen' },
   { id: 'income', label: 'Ingresos' },
   { id: 'expenses', label: 'Gastos' },
+  { id: 'imports', label: 'Importaciones' },
 ];
 
 export function FinancePage() {
@@ -54,6 +56,9 @@ export function FinancePage() {
       {tab === 'summary' && <FinanceSummaryTab organizationId={organizationId} />}
       {tab === 'income' && <IncomeTab organizationId={organizationId} />}
       {tab === 'expenses' && <ExpensesTab organizationId={organizationId} />}
+      {tab === 'imports' && (
+        <FinanceImportsTab organizationId={organizationId} />
+      )}
     </div>
   );
 }

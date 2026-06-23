@@ -20,13 +20,16 @@ async function request<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
+  const isFormData = options.body instanceof FormData;
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
+    headers: isFormData
+      ? { ...options.headers }
+      : {
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
   });
 
   const isJson = res.headers
@@ -54,6 +57,11 @@ export const api = {
     request<T>(path, {
       method: 'PATCH',
       body: data ? JSON.stringify(data) : undefined,
+    }),
+  postForm: <T>(path: string, formData: FormData) =>
+    request<T>(path, {
+      method: 'POST',
+      body: formData,
     }),
   del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
 };
