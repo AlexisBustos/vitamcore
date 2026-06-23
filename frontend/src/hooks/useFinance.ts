@@ -5,7 +5,10 @@ import {
 } from '@tanstack/react-query';
 import { api, toQuery } from '@/lib/api';
 import type {
+  BankAccount,
   ExpenseRecord,
+  FinancialImportBatch,
+  FinancialImportType,
   FinanceSummary,
   IncomeRecord,
 } from '@/types/domain';
@@ -17,6 +20,33 @@ export type FinanceFilters = {
   category?: string;
   status?: string;
   isRecurring?: string;
+};
+
+export type FinanceImportFilters = {
+  organizationId?: string;
+  bankAccountId?: string;
+  type?: FinancialImportType;
+};
+
+export type ImportPreviewInput = {
+  organizationId: string;
+  bankAccountId?: string;
+  type: FinancialImportType;
+  periodMonth: string;
+  file: File;
+};
+
+export type ImportPreviewRow = {
+  status: 'VALID' | 'WARNING' | 'DUPLICATE' | 'ERROR';
+  dedupeKey: string;
+  warnings: string[];
+  data: Record<string, unknown>;
+  rawData: Record<string, unknown>;
+};
+
+export type ImportPreviewResponse = {
+  batch: FinancialImportBatch;
+  rows: ImportPreviewRow[];
 };
 
 // ----- Resumen financiero -----
@@ -89,6 +119,93 @@ export function useDeleteExpense() {
   return useMutation({
     mutationFn: (id: string) => api.del(`/expenses/${id}`),
     onSuccess: () => invalidateFinance(qc),
+  });
+}
+
+// ----- Importaciones financieras -----
+export function useBankAccounts(organizationId?: string) {
+  return useQuery({
+    queryKey: ['finance-imports', 'accounts', organizationId ?? 'all'],
+    queryFn: () =>
+      api
+        .get<{ data: BankAccount[] }>(
+          `/finance/imports/accounts${toQuery({ organizationId })}`,
+        )
+        .then((r) => r.data),
+  });
+}
+
+export function useCreateBankAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      api.post<{ data: BankAccount }>('/finance/imports/accounts', data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['finance-imports'] });
+    },
+  });
+}
+
+export function useUpdateBankAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { id: string; data: Record<string, unknown> }) =>
+      api.patch<{ data: BankAccount }>(
+        `/finance/imports/accounts/${payload.id}`,
+        payload.data,
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['finance-imports'] });
+    },
+  });
+}
+
+export function useFinanceImportBatches(filters: FinanceImportFilters = {}) {
+  return useQuery({
+    queryKey: ['finance-imports', 'batches', filters],
+    queryFn: () =>
+      api
+        .get<{ data: FinancialImportBatch[] }>(
+          `/finance/imports/batches${toQuery(filters)}`,
+        )
+        .then((r) => r.data),
+  });
+}
+
+export function useFinanceImportPreview() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ImportPreviewInput) => {
+      const formData = new FormData();
+      formData.append('organizationId', input.organizationId);
+      formData.append('type', input.type);
+      formData.append('periodMonth', input.periodMonth);
+      formData.append('file', input.file);
+      if (input.bankAccountId) {
+        formData.append('bankAccountId', input.bankAccountId);
+      }
+      return api
+        .postForm<{ data: ImportPreviewResponse }>(
+          '/finance/imports/preview',
+          formData,
+        )
+        .then((r) => r.data);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['finance-imports'] });
+    },
+  });
+}
+
+export function useConfirmFinanceImport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (batchId: string) =>
+      api.post('/finance/imports/confirm', { batchId }),
+    onSuccess: () => {
+      invalidateFinance(qc);
+      qc.invalidateQueries({ queryKey: ['finance-imports'] });
+    },
   });
 }
 

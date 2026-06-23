@@ -137,6 +137,11 @@ export type RecurrenceFrequency =
   | 'MONTHLY'
   | 'QUARTERLY'
   | 'YEARLY';
+export type FinancialImportType =
+  | 'SALES_REPORT'
+  | 'PURCHASE_REPORT'
+  | 'BANK_STATEMENT';
+export type FinancialImportStatus = 'PREVIEW' | 'CONFIRMED' | 'FAILED';
 export type DocumentType =
   | 'CONTRACT'
   | 'PROPOSAL'
@@ -229,6 +234,61 @@ export interface ExpenseRecord extends ContextRefs {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface BankAccount {
+  id: string;
+  organizationId: string;
+  name: string;
+  bankName: string | null;
+  accountNumber: string;
+  currency: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  organization?: Ref;
+}
+
+export interface BankTransaction {
+  id: string;
+  organizationId: string;
+  bankAccountId: string;
+  importBatchId: string;
+  transactionDate: string;
+  description: string;
+  channel: string | null;
+  documentNumber: string | null;
+  chargeAmount: number;
+  creditAmount: number;
+  balance: number | null;
+  currency: string;
+  createdAt: string;
+  organization?: Ref;
+  bankAccount?: Pick<BankAccount, 'id' | 'name' | 'accountNumber'>;
+}
+
+export interface FinancialImportBatch {
+  id: string;
+  organizationId: string;
+  bankAccountId: string | null;
+  type: FinancialImportType;
+  status: FinancialImportStatus;
+  periodMonth: string;
+  originalFileName: string;
+  fileSize: number;
+  sourceHash: string;
+  rowsTotal: number;
+  rowsValid: number;
+  rowsSkipped: number;
+  rowsDuplicated: number;
+  totalIncome: number;
+  totalExpense: number;
+  totalCharges: number;
+  totalCredits: number;
+  createdAt: string;
+  confirmedAt: string | null;
+  organization?: Ref;
+  bankAccount?: Pick<BankAccount, 'id' | 'name' | 'accountNumber'> | null;
 }
 
 export interface DocumentRecord extends ContextRefs {
