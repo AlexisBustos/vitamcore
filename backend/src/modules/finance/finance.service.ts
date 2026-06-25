@@ -64,7 +64,12 @@ export async function getSummary(organizationId?: string) {
     // Por cobrar (ingresos manuales): sin neto calculado, por estado clásico.
     prisma.incomeRecord.aggregate({
       _sum: { amount: true },
-      where: { ...orgFilter, netAmount: null, status: { in: INCOME_PENDING } },
+      where: {
+        ...orgFilter,
+        documentKind: { not: 'CREDIT_NOTE' },
+        netAmount: null,
+        status: { in: INCOME_PENDING },
+      },
     }),
     prisma.expenseRecord.aggregate({
       _sum: { amount: true },
@@ -98,6 +103,7 @@ export async function getSummary(organizationId?: string) {
       _count: { _all: true },
       where: {
         ...orgFilter,
+        documentKind: { not: 'CREDIT_NOTE' },
         netAmount: null,
         status: { in: INCOME_PENDING },
         dueDate: { lt: now },
@@ -132,7 +138,12 @@ export async function getSummary(organizationId?: string) {
     }),
     // Próximos vencimientos financieros.
     prisma.incomeRecord.findMany({
-      where: { ...orgFilter, dueDate: { gte: now }, status: { in: INCOME_PENDING } },
+      where: {
+        ...orgFilter,
+        documentKind: { not: 'CREDIT_NOTE' },
+        dueDate: { gte: now },
+        status: { in: INCOME_PENDING },
+      },
       orderBy: { dueDate: 'asc' },
       take: 6,
       select: {
