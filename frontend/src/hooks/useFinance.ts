@@ -21,6 +21,8 @@ export type FinanceFilters = {
   category?: string;
   status?: string;
   isRecurring?: string;
+  documentKind?: string;
+  paymentState?: 'receivable' | 'overdue' | 'paid' | 'cancelled';
 };
 
 export type FinanceImportFilters = {
@@ -91,6 +93,18 @@ export function useDeleteIncome() {
   return useMutation({
     mutationFn: (id: string) => api.del(`/income/${id}`),
     onSuccess: () => invalidateFinance(qc),
+  });
+}
+
+export function useRegisterPayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { id: string; paidDate: string | null }) =>
+      api.patch(`/income/${payload.id}/payment`, { paidDate: payload.paidDate }),
+    onSuccess: () => {
+      invalidateFinance(qc);
+      qc.invalidateQueries({ queryKey: ['clients'] });
+    },
   });
 }
 
