@@ -2,6 +2,7 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   CalendarClock,
+  CheckCircle2,
   Repeat,
   Wallet,
 } from 'lucide-react';
@@ -41,15 +42,24 @@ export function FinanceSummaryTab({ organizationId }: { organizationId?: string 
         />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <MetricCard
-          title="Ingresos pendientes"
+          title="Por cobrar"
           value={formatMoney(data.pendingIncome)}
+        />
+        <MetricCard
+          title="Cobrado"
+          value={formatMoney(data.collectedIncome)}
+          icon={CheckCircle2}
+          tone="success"
         />
         <MetricCard
           title="Gastos pendientes"
           value={formatMoney(data.pendingExpense)}
         />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
         <MetricCard
           title="Ingresos recurrentes"
           value={formatMoney(data.recurringIncome)}

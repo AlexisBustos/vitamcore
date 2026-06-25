@@ -163,7 +163,7 @@ export function DashboardPage() {
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <MetricCard
-              title="Ingresos pendientes"
+              title="Por cobrar"
               value={formatMoney(data.totals.pendingIncome)}
             />
             <MetricCard
