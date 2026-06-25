@@ -18,6 +18,18 @@ const refs = {
   project: { select: { id: true, name: true } },
 };
 
+// Estados de un ingreso aún por cobrar (mismos que usa el resumen financiero).
+const PENDING_STATUSES = ['EXPECTED', 'INVOICED', 'OVERDUE'] as const;
+
+// "Saldo por cobrar" coherente con los KPIs de finance.service: usa netAmount
+// cuando está calculado (ventas importadas) y, si no, cae al estado clásico
+// (ingresos manuales o ventas legacy sin netAmount). Sin esto, el KPI y la
+// pestaña de Cuentas por cobrar pueden descuadrar.
+const RECEIVABLE_OR: Prisma.IncomeRecordWhereInput['OR'] = [
+  { netAmount: { gt: 0 }, status: { not: 'CANCELLED' } },
+  { netAmount: null, status: { in: [...PENDING_STATUSES] } },
+];
+
 export async function list(filters: ListIncomeFilters) {
   const where: Prisma.IncomeRecordWhereInput = {
     organizationId: filters.organizationId,
@@ -35,15 +47,15 @@ export async function list(filters: ListIncomeFilters) {
   if (filters.paymentState === 'receivable') {
     excludeNC();
     where.paidDate = null;
-    where.netAmount = { gt: 0 };
+    where.OR = RECEIVABLE_OR;
   } else if (filters.paymentState === 'overdue') {
     excludeNC();
     where.paidDate = null;
-    where.netAmount = { gt: 0 };
-    const now = new Date();
-    where.dueDate = { lt: now };
+    where.dueDate = { lt: new Date() };
+    where.OR = RECEIVABLE_OR;
   } else if (filters.paymentState === 'paid') {
     where.paidDate = { not: null };
+    where.status = { not: 'CANCELLED' };
   } else if (filters.paymentState === 'cancelled') {
     where.netAmount = 0;
   }
