@@ -775,14 +775,18 @@ export async function registerPayment(id: string, input: RegisterPaymentInput) {
   if (rec.documentKind === 'CREDIT_NOTE') {
     throw badRequest('Una nota de crédito no se cobra');
   }
+  // netAmount === 0 = factura totalmente anulada por NC. netAmount null = ingreso
+  // manual (no importado): es cobrable, por eso solo bloqueamos el 0 explícito.
   if (rec.netAmount === 0) {
     throw badRequest('Una factura anulada no se cobra');
   }
+  // Normaliza undefined → null para que un body sin paidDate revierta el cobro.
+  const paidDate = input.paidDate ?? null;
   return prisma.incomeRecord.update({
     where: { id },
     data: {
-      paidDate: input.paidDate,
-      status: input.paidDate ? 'PAID' : 'INVOICED',
+      paidDate,
+      status: paidDate ? 'PAID' : 'INVOICED',
     },
   });
 }
