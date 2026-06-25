@@ -47,8 +47,15 @@ export const listIncomeQuery = z.object({
   category: z.string().optional(),
   status: incomeStatusEnum.optional(),
   isRecurring: z.enum(['true', 'false']).optional(),
+  documentKind: z.enum(['SALE', 'CREDIT_NOTE', 'DEBIT_NOTE']).optional(),
+  paymentState: z.enum(['receivable', 'overdue', 'paid', 'cancelled']).optional(),
+});
+
+export const registerPaymentSchema = z.object({
+  paidDate: dateInput.nullable(),
 });
 
 export type CreateIncomeInput = z.infer<typeof createIncomeSchema>;
 export type UpdateIncomeInput = z.infer<typeof updateIncomeSchema>;
 export type ListIncomeFilters = z.infer<typeof listIncomeQuery>;
+export type RegisterPaymentInput = z.infer<typeof registerPaymentSchema>;
