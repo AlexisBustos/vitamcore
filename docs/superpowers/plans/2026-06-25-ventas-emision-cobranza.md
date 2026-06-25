@@ -213,19 +213,13 @@ Dentro de `parseSalesRows`, reemplaza el objeto `data` (líneas ~158-173) por:
           sourceFolio: folio,
           sourceRut: rut,
           sourceIssueDate: issueDate,
-          // Referencia de la factura anulada (solo NC).
-          creditedFolio:
-            documentKind === 'CREDIT_NOTE'
-              ? text(valueOf(row, 'NRO DOCUMENTO ANULADO'))
-              : '',
-          creditedDocType:
-            documentKind === 'CREDIT_NOTE'
-              ? text(valueOf(row, 'TIPO DOCUMENTO ANULADO'))
-              : '',
         },
 ```
 
-(Se elimina la llamada `parsePaid(valueOf(row, 'PAGADO'))`.)
+(Se elimina la llamada `parsePaid(valueOf(row, 'PAGADO'))`.) La referencia de la
+factura anulada (`NRO DOCUMENTO ANULADO`) **no** se duplica en `data`: queda en el
+`rawData` original de la fila, que se persiste en la columna `rawData` del
+`IncomeRecord`, y la Task 4 la lee de ahí al vincular las notas de crédito.
 
 - [ ] **Step 3: Omitir filas no emitidas**
 
@@ -288,15 +282,20 @@ const preview = parseSalesRows([
 ]);
 
 const factura = preview.rows[0].data;
-const nc = preview.rows[1].data;
+const nc = preview.rows[1];
 assert.strictEqual(factura.status, 'INVOICED', 'factura debe quedar INVOICED');
 assert.strictEqual(
   (factura.dueDate as Date).getUTCMonth(),
   1,
   'vencimiento = febrero (emisión + 1 mes)',
 );
-assert.strictEqual(nc.documentKind, 'CREDIT_NOTE');
-assert.strictEqual(nc.creditedFolio, '1971', 'NC referencia folio 1971');
+assert.strictEqual(nc.data.documentKind, 'CREDIT_NOTE');
+// El folio anulado queda en rawData (no en data); de ahí lo lee la Task 4.
+assert.strictEqual(
+  String((nc.rawData as Record<string, unknown>)['NRO DOCUMENTO ANULADO']),
+  '1971',
+  'rawData conserva el folio anulado',
+);
 console.log('parser OK');
 ```
 
