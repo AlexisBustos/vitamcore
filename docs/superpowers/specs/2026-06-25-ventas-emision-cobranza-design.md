@@ -131,8 +131,11 @@ limpia y reimporta el libro 2026 (importación idempotente por `dedupeKey`).
 - **Eliminar** la adivinanza de pago. Toda factura y nota de débito entra como
   emitida/por cobrar; la columna `PAGADO` se ignora.
 - Extraer `NRO DOCUMENTO ANULADO` y `TIPO DOCUMENTO ANULADO` para las notas de
-  crédito y guardarlos en `data`.
-- Calcular `dueDate = incomeDate + 1 mes`.
+  crédito y guardarlos en `data` (el tipo se usa para desambiguar el vínculo, ver
+  más abajo).
+- Calcular `dueDate = incomeDate + 1 mes`. **Se descarta intencionalmente** la
+  columna `FECHA VENCIMIENTO DOCUMENTO` del libro (viene vacía y el plazo es fijo
+  de 1 mes; ver no-objetivos).
 - Omitir filas con `EMITIDO != "SI"` (no son ventas válidas).
 
 ### Service — confirmación (`finance-imports.service.ts`)
@@ -141,13 +144,19 @@ Vinculación NC→factura en **dos pasadas** dentro de la transacción (la NC pu
 venir antes que su factura en el mismo lote):
 
 1. Insertar todos los documentos. Las facturas/ND con `netAmount = amount`.
-2. Para cada nota de crédito, buscar la factura por
-   `(organizationId, sourceFolio = NRO DOCUMENTO ANULADO)`:
-   - **Encontrada** → setear `creditsIncomeId`; recalcular el `netAmount` de la
-     factura (`amount + Σ NC`). Puede quedar en 0 (anulación total) o > 0
+2. Para cada nota de crédito, buscar la factura candidata filtrando por
+   `organizationId`, `documentKind IN (SALE, DEBIT_NOTE)` y
+   `sourceFolio = NRO DOCUMENTO ANULADO`. Como **no** existe constraint único en
+   `(organizationId, sourceFolio)`, hay que resolver posibles múltiples coincidencias:
+   - **Una coincidencia** → setear `creditsIncomeId`; recalcular el `netAmount` de
+     la factura (`amount + Σ NC`). Puede quedar en 0 (anulación total) o > 0
      (parcial).
-   - **No encontrada** (factura de un período anterior no importado) → la NC
-     queda con `creditsIncomeId = null` y se agrega una **advertencia** al lote.
+   - **Varias coincidencias** → desempatar usando `TIPO DOCUMENTO ANULADO`
+     (mapeado al tipo de documento) y, si persiste el empate, elegir la de
+     `incomeDate` más reciente y agregar una **advertencia** al lote indicando la
+     ambigüedad.
+   - **Ninguna coincidencia** (factura de un período anterior no importado) → la
+     NC queda con `creditsIncomeId = null` y se agrega una **advertencia** al lote.
      No bloquea la importación. Su monto negativo afecta el emitido neto agregado
      pero no reduce una factura puntual.
 
@@ -181,8 +190,10 @@ Reescritura, solo sobre facturas (`SALE`/`DEBIT_NOTE`), excluyendo notas de cré
 - **Vencido** = lo anterior con `dueDate < hoy`.
 - **Cobrado** = Σ `netAmount` con `paidDate` presente.
 - **Emitido neto del mes** = Σ `amount` de todos los documentos del mes (facturas
-  + NC, que restan). Queda en 0 para una factura totalmente anulada → sin
-  descuadre.
+  + NC, que restan), agrupando por `incomeDate` (igual que `currentMonthRange()`
+  actual). Queda en 0 para una factura totalmente anulada → sin descuadre. Nota:
+  una NC emitida en un mes posterior a su factura desplaza el neteo entre meses;
+  es un comportamiento aceptado.
 
 Con esto, el caso original (−273.822) pasa a mostrar "Por cobrar" = solo facturas
 con neto > 0 impagas, siempre positivo.
