@@ -1,3 +1,5 @@
+import { addMonths } from '../shared/dates';
+
 export type ImportRowStatus = 'VALID' | 'WARNING' | 'DUPLICATE' | 'ERROR';
 
 export interface ParsedImportRow {
@@ -135,17 +137,23 @@ export function parseSalesRows(
       const folio = text(valueOf(row, 'FOLIO'));
       const rut = normalizeRut(valueOf(row, 'RUT'));
       const issueDate = normalizeDate(valueOf(row, 'FECHA'));
-      const dueDate = normalizeDate(valueOf(row, 'FECHA VENCIMIENTO DOCUMENTO'));
       const amount = normalizeMoney(valueOf(row, 'TOTAL'));
       const documentKind = classifyDocumentKind(documentType);
+      const emitido = upper(text(valueOf(row, 'EMITIDO'))) === 'SI';
       const warnings = [
+        ...(!emitido ? ['Documento no emitido'] : []),
         ...(!issueDate ? ['Fila de venta sin fecha'] : []),
         ...(!folio ? ['Fila de venta sin folio'] : []),
         ...(!rut ? ['Fila de venta sin RUT'] : []),
       ];
+      const status = !emitido
+        ? ('ERROR' as const)
+        : warnings.length > 0
+        ? ('WARNING' as const)
+        : ('VALID' as const);
 
       return {
-        status: warnings.length > 0 ? 'WARNING' : 'VALID',
+        status,
         dedupeKey: [
           'SALES_REPORT',
           documentType,
@@ -163,9 +171,11 @@ export function parseSalesRows(
           category:
             documentKind === 'CREDIT_NOTE' ? 'Notas de crédito' : 'Ventas',
           documentKind,
-          status: parsePaid(valueOf(row, 'PAGADO')) ? 'PAID' : 'INVOICED',
+          // Emisión: por cobrar; el libro NO declara cobranza, no se adivina pago.
+          status: 'INVOICED',
           incomeDate: issueDate,
-          dueDate: dueDate ?? issueDate,
+          // Vencimiento fijo a 1 mes desde la emisión (el libro lo trae vacío).
+          dueDate: issueDate ? addMonths(issueDate, 1) : null,
           sourceDocumentType: documentType,
           sourceFolio: folio,
           sourceRut: rut,
