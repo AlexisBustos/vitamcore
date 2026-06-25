@@ -322,11 +322,14 @@ git commit -m "feat: parser de ventas registra emision y referencia de NC"
 En `createRow`, dentro del bloque `if (batch.type === FinancialImportType.SALES_REPORT)`,
 en el `data` del `tx.incomeRecord.create`, agrega (junto a `documentKind`/`clientId`):
 
+Calcula el `documentKind` una sola vez y reúsalo:
+
 ```ts
-          documentKind: documentKindOf(row.data.documentKind),
+          // (arriba del create) const kind = documentKindOf(row.data.documentKind);
+          documentKind: kind,
           // Factura/ND nace con neto = monto; la NC no tiene neto propio.
           netAmount:
-            documentKindOf(row.data.documentKind) === DocumentKind.CREDIT_NOTE
+            kind === DocumentKind.CREDIT_NOTE
               ? null
               : numberOrDefault(row.data.amount),
           paidDate: null,
@@ -389,8 +392,14 @@ async function linkCreditNotes(
   organizationId: string,
 ): Promise<string[]> {
   const warnings: string[] = [];
+  // `creditsIncomeId: null` hace el vínculo idempotente: nunca re-resta una NC
+  // que ya fue vinculada (defensa ante reprocesos).
   const creditNotes = await tx.incomeRecord.findMany({
-    where: { importBatchId: batchId, documentKind: DocumentKind.CREDIT_NOTE },
+    where: {
+      importBatchId: batchId,
+      documentKind: DocumentKind.CREDIT_NOTE,
+      creditsIncomeId: null,
+    },
     select: { id: true, amount: true, sourceFolio: true, rawData: true },
   });
 
