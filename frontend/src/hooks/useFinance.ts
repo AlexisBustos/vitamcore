@@ -11,6 +11,7 @@ import type {
   FinancialImportType,
   FinanceSummary,
   IncomeRecord,
+  SalesImportSummary,
 } from '@/types/domain';
 
 export type FinanceFilters = {
@@ -47,6 +48,7 @@ export type ImportPreviewRow = {
 export type ImportPreviewResponse = {
   batch: FinancialImportBatch;
   rows: ImportPreviewRow[];
+  salesSummary: SalesImportSummary | null;
 };
 
 // ----- Resumen financiero -----
@@ -205,6 +207,7 @@ export function useConfirmFinanceImport() {
     onSuccess: () => {
       invalidateFinance(qc);
       qc.invalidateQueries({ queryKey: ['finance-imports'] });
+      qc.invalidateQueries({ queryKey: ['clients'] });
     },
   });
 }

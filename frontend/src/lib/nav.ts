@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   Settings,
   TrendingUp,
+  Users,
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
@@ -29,6 +30,7 @@ export const navItems: NavItem[] = [
   { label: 'Proyectos', path: '/proyectos', icon: FolderKanban },
   { label: 'Tareas', path: '/tareas', icon: CheckSquare },
   { label: 'Ventas', path: '/ventas', icon: TrendingUp },
+  { label: 'Clientes', path: '/clientes', icon: Users },
   { label: 'Finanzas', path: '/finanzas', icon: Wallet },
   { label: 'Documentos', path: '/documentos', icon: FileText },
   { label: 'Decisiones', path: '/decisiones', icon: Gavel },

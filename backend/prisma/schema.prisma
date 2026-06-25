@@ -140,6 +140,15 @@ enum FinancialImportStatus {
   FAILED
 }
 
+/// Clasificación de un documento de venta.
+/// SALE = factura/boleta (suma), CREDIT_NOTE = nota de crédito (resta),
+/// DEBIT_NOTE = nota de débito (suma). El monto se almacena con su signo.
+enum DocumentKind {
+  SALE
+  CREDIT_NOTE
+  DEBIT_NOTE
+}
+
 /// Tipo de documento.
 enum DocumentType {
   CONTRACT
@@ -285,6 +294,7 @@ model Organization {
   bankAccounts           BankAccount[]
   financialImportBatches FinancialImportBatch[]
   bankTransactions       BankTransaction[]
+  clients                Client[]
   documents              Document[]
   strategicDecisions     StrategicDecision[]
 
@@ -420,6 +430,27 @@ model SalesOpportunity {
   @@map("sales_opportunities")
 }
 
+/// Cliente (razón social + RUT) consolidado por empresa.
+/// Se crea/actualiza automáticamente al importar reportes de ventas.
+/// Los acumulados (neto, bruto, notas de crédito, conteos) NO se almacenan:
+/// se calculan al vuelo agregando sus IncomeRecord.
+model Client {
+  id             String   @id @default(cuid())
+  organizationId String
+  rut            String
+  name           String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  incomes      IncomeRecord[]
+
+  // Un RUT es único dentro de cada empresa (carteras separadas por empresa).
+  @@unique([organizationId, rut])
+  @@index([organizationId])
+  @@map("clients")
+}
+
 /// Ingreso (esperado, facturado, pagado…).
 model IncomeRecord {
   id                  String               @id @default(cuid())
@@ -427,6 +458,8 @@ model IncomeRecord {
   businessUnitId      String?
   projectId           String?
   importBatchId       String?
+  clientId            String?
+  documentKind        DocumentKind         @default(SALE)
   clientName          String?
   description         String
   amount              Int                  @default(0)
@@ -451,9 +484,11 @@ model IncomeRecord {
   businessUnit BusinessUnit?         @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
   project      Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
   importBatch  FinancialImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  client       Client?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([importBatchId])
+  @@index([clientId])
   @@index([status])
   @@index([incomeDate])
   @@index([dueDate])

@@ -132,6 +132,7 @@ export type IncomeStatus =
   | 'OVERDUE'
   | 'CANCELLED';
 export type ExpenseStatus = 'PENDING' | 'PAID' | 'OVERDUE' | 'CANCELLED';
+export type DocumentKind = 'SALE' | 'CREDIT_NOTE' | 'DEBIT_NOTE';
 export type RecurrenceFrequency =
   | 'WEEKLY'
   | 'MONTHLY'
@@ -201,6 +202,8 @@ export interface IncomeRecord extends ContextRefs {
   organizationId: string;
   businessUnitId: string | null;
   projectId: string | null;
+  clientId: string | null;
+  documentKind: DocumentKind;
   clientName: string | null;
   description: string;
   amount: number;
@@ -234,6 +237,40 @@ export interface ExpenseRecord extends ContextRefs {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ClientStats {
+  netSales: number;
+  grossInvoiced: number;
+  totalCreditNotes: number;
+  invoiceCount: number;
+  creditNoteCount: number;
+  documentCount: number;
+  lastDocumentDate: string | null;
+}
+
+export interface Client {
+  id: string;
+  organizationId: string;
+  rut: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  organization?: Ref;
+  stats: ClientStats;
+}
+
+export interface ClientDetail extends Client {
+  incomes: IncomeRecord[];
+}
+
+/// Resumen específico de una importación de ventas (separación factura/NC).
+export interface SalesImportSummary {
+  totalGross: number;
+  totalCreditNotes: number;
+  totalNet: number;
+  clientsNew: number;
+  clientsExisting: number;
 }
 
 export interface BankAccount {

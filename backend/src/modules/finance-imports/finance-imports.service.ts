@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto';
-import { FinancialImportStatus, FinancialImportType, Prisma } from '@prisma/client';
+import {
+  DocumentKind,
+  FinancialImportStatus,
+  FinancialImportType,
+  Prisma,
+} from '@prisma/client';
 import * as XLSX from 'xlsx';
 import { prisma } from '../../lib/prisma';
 import { badRequest, notFound } from '../../utils/http-error';
@@ -129,7 +134,43 @@ export async function previewImport(input: PreviewImportInput, file?: UploadFile
     include: refs,
   });
 
-  return { batch, rows: rowsWithDuplicates };
+  const salesSummary =
+    input.type === FinancialImportType.SALES_REPORT
+      ? await buildSalesSummary(input.organizationId, parsed, rowsWithDuplicates)
+      : null;
+
+  return { batch, rows: rowsWithDuplicates, salesSummary };
+}
+
+/// Resumen específico de ventas: separa bruto facturado, notas de crédito y
+/// neto, y cuántos clientes (por RUT) se crearían vs. ya existen.
+async function buildSalesSummary(
+  organizationId: string,
+  parsed: ParsedImportPreview,
+  rows: ParsedImportRow[],
+) {
+  const ruts = new Set<string>();
+  for (const row of rows) {
+    if (row.status === 'ERROR') continue;
+    const rut = typeof row.data.sourceRut === 'string' ? row.data.sourceRut : '';
+    if (rut) ruts.add(rut);
+  }
+
+  const existing = await prisma.client.findMany({
+    where: { organizationId, rut: { in: [...ruts] } },
+    select: { rut: true },
+  });
+  const existingRuts = new Set(existing.map((c) => c.rut));
+  const clientsExisting = existingRuts.size;
+  const clientsNew = [...ruts].filter((rut) => !existingRuts.has(rut)).length;
+
+  return {
+    totalGross: parsed.totalGross,
+    totalCreditNotes: parsed.totalCreditNotes,
+    totalNet: parsed.totalIncome,
+    clientsNew,
+    clientsExisting,
+  };
 }
 
 export async function confirmImport(batchId: string) {
@@ -374,11 +415,18 @@ async function createRow(
 ) {
   try {
     if (batch.type === FinancialImportType.SALES_REPORT) {
+      const clientName = stringOrNull(row.data.clientName);
+      const rut = stringOrNull(row.data.sourceRut);
+      const clientId = rut
+        ? await upsertClient(tx, batch.organizationId, rut, clientName)
+        : null;
       await tx.incomeRecord.create({
         data: {
           organizationId: batch.organizationId,
           importBatchId: batch.id,
-          clientName: stringOrNull(row.data.clientName),
+          clientId,
+          documentKind: documentKindOf(row.data.documentKind),
+          clientName,
           description: stringOrDefault(row.data.description, 'Ingreso importado'),
           amount: numberOrDefault(row.data.amount),
           currency: stringOrDefault(row.data.currency, 'CLP'),
@@ -388,7 +436,7 @@ async function createRow(
           dueDate: dateOrNull(row.data.dueDate),
           sourceDocumentType: stringOrNull(row.data.sourceDocumentType),
           sourceFolio: stringOrNull(row.data.sourceFolio),
-          sourceRut: stringOrNull(row.data.sourceRut),
+          sourceRut: rut,
           sourceIssueDate: dateOrNull(row.data.sourceIssueDate),
           sourceDedupeKey: row.dedupeKey,
           rawData: row.rawData,
@@ -449,6 +497,29 @@ async function createRow(
     }
     throw error;
   }
+}
+
+/// Crea el cliente si no existe (por empresa + RUT) o actualiza su razón
+/// social si cambió. Devuelve el id del cliente para vincularlo al ingreso.
+async function upsertClient(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  rut: string,
+  name: string | null,
+) {
+  const client = await tx.client.upsert({
+    where: { organizationId_rut: { organizationId, rut } },
+    create: { organizationId, rut, name: name ?? rut },
+    update: name ? { name } : {},
+    select: { id: true },
+  });
+  return client.id;
+}
+
+function documentKindOf(value: Prisma.JsonValue | undefined): DocumentKind {
+  if (value === 'CREDIT_NOTE') return DocumentKind.CREDIT_NOTE;
+  if (value === 'DEBIT_NOTE') return DocumentKind.DEBIT_NOTE;
+  return DocumentKind.SALE;
 }
 
 function normalizePeriodMonth(date: Date) {

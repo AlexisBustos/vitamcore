@@ -360,21 +360,54 @@ function PreviewPanel({
           label="Duplicadas"
           value={String(preview.batch.rowsDuplicated)}
         />
-        <SummaryCard
-          label="Ingresos"
-          value={formatMoney(preview.batch.totalIncome)}
-        />
-        <SummaryCard
-          label="Gastos"
-          value={formatMoney(preview.batch.totalExpense)}
-        />
-        <SummaryCard
-          label="Banco"
-          value={`${formatMoney(preview.batch.totalCredits)} / ${formatMoney(
-            preview.batch.totalCharges,
-          )}`}
-        />
+        {preview.salesSummary ? (
+          <>
+            <SummaryCard
+              label="Bruto facturado"
+              value={formatMoney(preview.salesSummary.totalGross)}
+            />
+            <SummaryCard
+              label="Notas de crédito"
+              value={formatMoney(-preview.salesSummary.totalCreditNotes)}
+            />
+            <SummaryCard
+              label="Venta neta"
+              value={formatMoney(preview.salesSummary.totalNet)}
+            />
+          </>
+        ) : (
+          <>
+            <SummaryCard
+              label="Ingresos"
+              value={formatMoney(preview.batch.totalIncome)}
+            />
+            <SummaryCard
+              label="Gastos"
+              value={formatMoney(preview.batch.totalExpense)}
+            />
+            <SummaryCard
+              label="Banco"
+              value={`${formatMoney(preview.batch.totalCredits)} / ${formatMoney(
+                preview.batch.totalCharges,
+              )}`}
+            />
+          </>
+        )}
       </div>
+
+      {preview.salesSummary && (
+        <div className="px-5 pb-1 text-sm text-[var(--color-muted-foreground)]">
+          Clientes:{' '}
+          <strong className="text-[var(--color-foreground)]">
+            {preview.salesSummary.clientsNew}
+          </strong>{' '}
+          nuevos ·{' '}
+          <strong className="text-[var(--color-foreground)]">
+            {preview.salesSummary.clientsExisting}
+          </strong>{' '}
+          existentes
+        </div>
+      )}
 
       {confirmError && (
         <div className="px-5 pb-4">
@@ -387,6 +420,7 @@ function PreviewPanel({
           <thead className="bg-[var(--color-muted)] text-left text-xs text-[var(--color-muted-foreground)]">
             <tr>
               <th className="px-4 py-3 font-medium">Estado</th>
+              <th className="px-4 py-3 font-medium">Tipo</th>
               <th className="px-4 py-3 font-medium">Descripción</th>
               <th className="px-4 py-3 font-medium">Fecha</th>
               <th className="px-4 py-3 text-right font-medium">Monto</th>
@@ -397,6 +431,9 @@ function PreviewPanel({
             {rows.map((row) => (
               <tr key={row.dedupeKey}>
                 <td className="px-4 py-3">{statusLabel[row.status]}</td>
+                <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
+                  {rowKindLabel(row)}
+                </td>
                 <td className="px-4 py-3">{rowDescription(row)}</td>
                 <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
                   {rowDate(row)}
@@ -453,6 +490,14 @@ function batchStatusName(status: string) {
   if (status === 'CONFIRMED') return 'Confirmada';
   if (status === 'FAILED') return 'Fallida';
   return status;
+}
+
+function rowKindLabel(row: ImportPreviewRow) {
+  const kind = row.data.documentKind;
+  if (kind === 'CREDIT_NOTE') return 'Nota de crédito';
+  if (kind === 'DEBIT_NOTE') return 'Nota de débito';
+  if (kind === 'SALE') return 'Factura';
+  return '—';
 }
 
 function rowDescription(row: ImportPreviewRow) {

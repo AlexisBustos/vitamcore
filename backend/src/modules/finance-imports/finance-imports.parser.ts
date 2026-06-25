@@ -8,6 +8,8 @@ export interface ParsedImportRow {
   rawData: Record<string, unknown>;
 }
 
+export type DocumentKind = 'SALE' | 'CREDIT_NOTE' | 'DEBIT_NOTE';
+
 export interface ParsedImportPreview {
   rows: ParsedImportRow[];
   rowsTotal: number;
@@ -17,6 +19,10 @@ export interface ParsedImportPreview {
   totalExpense: number;
   totalCharges: number;
   totalCredits: number;
+  /** Solo ventas: bruto facturado (facturas + notas de débito). */
+  totalGross: number;
+  /** Solo ventas: total de notas de crédito en valor absoluto. */
+  totalCreditNotes: number;
   warnings: string[];
 }
 
@@ -54,7 +60,12 @@ function buildPreview(
   totals: Partial<
     Pick<
       ParsedImportPreview,
-      'totalIncome' | 'totalExpense' | 'totalCharges' | 'totalCredits'
+      | 'totalIncome'
+      | 'totalExpense'
+      | 'totalCharges'
+      | 'totalCredits'
+      | 'totalGross'
+      | 'totalCreditNotes'
     >
   > = {},
 ): ParsedImportPreview {
@@ -67,8 +78,23 @@ function buildPreview(
     totalExpense: totals.totalExpense ?? 0,
     totalCharges: totals.totalCharges ?? 0,
     totalCredits: totals.totalCredits ?? 0,
+    totalGross: totals.totalGross ?? 0,
+    totalCreditNotes: totals.totalCreditNotes ?? 0,
     warnings: rows.flatMap((row) => row.warnings),
   };
+}
+
+/// Clasifica un documento de venta por su descripción tributaria.
+/// Las notas de crédito restan; facturas, boletas y notas de débito suman.
+export function classifyDocumentKind(documentType: string): DocumentKind {
+  const t = upper(documentType);
+  if (t.includes('NOTA DE CREDITO') || t.includes('NOTA DE CRÉDITO')) {
+    return 'CREDIT_NOTE';
+  }
+  if (t.includes('NOTA DE DEBITO') || t.includes('NOTA DE DÉBITO')) {
+    return 'DEBIT_NOTE';
+  }
+  return 'SALE';
 }
 
 export function normalizeMoney(value: unknown): number {
@@ -111,6 +137,7 @@ export function parseSalesRows(
       const issueDate = normalizeDate(valueOf(row, 'FECHA'));
       const dueDate = normalizeDate(valueOf(row, 'FECHA VENCIMIENTO DOCUMENTO'));
       const amount = normalizeMoney(valueOf(row, 'TOTAL'));
+      const documentKind = classifyDocumentKind(documentType);
       const warnings = [
         ...(!issueDate ? ['Fila de venta sin fecha'] : []),
         ...(!folio ? ['Fila de venta sin folio'] : []),
@@ -133,7 +160,9 @@ export function parseSalesRows(
           description: `${documentType} ${folio}`.trim(),
           amount,
           currency: text(valueOf(row, 'TIPO DE MONEDA')) || 'CLP',
-          category: 'Ventas',
+          category:
+            documentKind === 'CREDIT_NOTE' ? 'Notas de crédito' : 'Ventas',
+          documentKind,
           status: parsePaid(valueOf(row, 'PAGADO')) ? 'PAID' : 'INVOICED',
           incomeDate: issueDate,
           dueDate: dueDate ?? issueDate,
@@ -146,11 +175,24 @@ export function parseSalesRows(
       } satisfies ParsedImportRow;
     });
 
+  const totalIncome = parsedRows.reduce(
+    (sum, row) => sum + (Number(row.data.amount) || 0),
+    0,
+  );
+  const totalCreditNotes = parsedRows.reduce(
+    (sum, row) =>
+      row.data.documentKind === 'CREDIT_NOTE'
+        ? sum + Math.abs(Number(row.data.amount) || 0)
+        : sum,
+    0,
+  );
+  // Bruto facturado = neto + notas de crédito (las NC vienen con signo negativo).
+  const totalGross = totalIncome + totalCreditNotes;
+
   return buildPreview(parsedRows, {
-    totalIncome: parsedRows.reduce(
-      (sum, row) => sum + (Number(row.data.amount) || 0),
-      0,
-    ),
+    totalIncome,
+    totalGross,
+    totalCreditNotes,
   });
 }
 
