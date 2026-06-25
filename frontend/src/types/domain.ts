@@ -215,6 +215,10 @@ export interface IncomeRecord extends ContextRefs {
   isRecurring: boolean;
   recurrenceFrequency: RecurrenceFrequency | null;
   notes: string | null;
+  netAmount: number | null;
+  paidDate: string | null;
+  creditsIncomeId: string | null;
+  sourceFolio: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -372,6 +376,7 @@ export interface FinanceSummary {
   monthExpense: number;
   estimatedResult: number;
   pendingIncome: number;
+  collectedIncome: number;
   pendingExpense: number;
   recurringIncome: number;
   recurringExpense: number;

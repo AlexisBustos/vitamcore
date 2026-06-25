@@ -197,6 +197,11 @@ export async function confirmImport(batchId: string) {
       else duplicated += 1;
     }
 
+    let linkWarnings: string[] = [];
+    if (batch.type === FinancialImportType.SALES_REPORT) {
+      linkWarnings = await linkCreditNotes(tx, batch.id, batch.organizationId);
+    }
+
     const updated = await tx.financialImportBatch.update({
       where: { id: batch.id },
       data: {
@@ -204,6 +209,11 @@ export async function confirmImport(batchId: string) {
         confirmedAt: new Date(),
         rowsDuplicated: duplicated,
         rowsValid: inserted,
+        warnings: (() => {
+          const prev = Array.isArray(batch.warnings) ? batch.warnings : [];
+          const merged = [...prev, ...linkWarnings];
+          return merged as Prisma.InputJsonValue;
+        })(),
       },
       include: refs,
     });
@@ -420,12 +430,19 @@ async function createRow(
       const clientId = rut
         ? await upsertClient(tx, batch.organizationId, rut, clientName)
         : null;
+      const kind = documentKindOf(row.data.documentKind);
       await tx.incomeRecord.create({
         data: {
           organizationId: batch.organizationId,
           importBatchId: batch.id,
           clientId,
-          documentKind: documentKindOf(row.data.documentKind),
+          documentKind: kind,
+          // Factura/ND nace con neto = monto; la NC no tiene neto propio.
+          netAmount:
+            kind === DocumentKind.CREDIT_NOTE
+              ? null
+              : numberOrDefault(row.data.amount),
+          paidDate: null,
           clientName,
           description: stringOrDefault(row.data.description, 'Ingreso importado'),
           amount: numberOrDefault(row.data.amount),
@@ -547,4 +564,80 @@ function dateOrNull(value: Prisma.JsonValue | undefined) {
   if (typeof value !== 'string' || !value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/// Lee una clave de un objeto rawData ignorando mayúsculas y espacios extremos.
+function rawValue(raw: unknown, key: string): string | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const target = key.trim().toUpperCase();
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (k.trim().toUpperCase() === target) {
+      const s = typeof v === 'string' ? v.trim() : '';
+      return s ? s : null;
+    }
+  }
+  return null;
+}
+
+/// Segunda pasada: vincula cada nota de crédito del lote con la factura que
+/// anula (por `NRO DOCUMENTO ANULADO`) y recalcula su neto. Devuelve
+/// advertencias para folios ambiguos o sin factura encontrada.
+async function linkCreditNotes(
+  tx: Prisma.TransactionClient,
+  batchId: string,
+  organizationId: string,
+): Promise<string[]> {
+  const warnings: string[] = [];
+  // `creditsIncomeId: null` hace el vínculo idempotente: nunca re-resta una NC
+  // que ya fue vinculada (defensa ante reprocesos).
+  const creditNotes = await tx.incomeRecord.findMany({
+    where: {
+      importBatchId: batchId,
+      documentKind: DocumentKind.CREDIT_NOTE,
+      creditsIncomeId: null,
+    },
+    select: { id: true, amount: true, sourceFolio: true, rawData: true },
+  });
+
+  for (const nc of creditNotes) {
+    const folio = rawValue(nc.rawData, 'NRO DOCUMENTO ANULADO');
+    if (!folio) {
+      warnings.push(`NC ${nc.sourceFolio ?? ''}: sin folio de documento anulado`);
+      continue;
+    }
+
+    const candidates = await tx.incomeRecord.findMany({
+      where: {
+        organizationId,
+        sourceFolio: folio,
+        documentKind: { in: [DocumentKind.SALE, DocumentKind.DEBIT_NOTE] },
+      },
+      orderBy: { incomeDate: 'desc' },
+      select: { id: true, amount: true, netAmount: true },
+    });
+
+    if (candidates.length === 0) {
+      warnings.push(`NC ${nc.sourceFolio ?? ''}: factura ${folio} no encontrada`);
+      continue;
+    }
+    if (candidates.length > 1) {
+      warnings.push(
+        `NC ${nc.sourceFolio ?? ''}: varias facturas con folio ${folio}, se usó la más reciente`,
+      );
+    }
+
+    const factura = candidates[0];
+    await tx.incomeRecord.update({
+      where: { id: nc.id },
+      data: { creditsIncomeId: factura.id },
+    });
+    // netAmount de la factura = su neto actual + monto (negativo) de la NC.
+    const base = factura.netAmount ?? factura.amount;
+    await tx.incomeRecord.update({
+      where: { id: factura.id },
+      data: { netAmount: base + nc.amount },
+    });
+  }
+
+  return warnings;
 }

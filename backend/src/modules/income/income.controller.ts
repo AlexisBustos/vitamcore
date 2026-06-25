@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import {
   createIncomeSchema,
   listIncomeQuery,
+  registerPaymentSchema,
   updateIncomeSchema,
 } from './income.schema';
 import * as service from './income.service';
@@ -28,4 +29,9 @@ export async function updateController(req: Request, res: Response) {
 export async function removeController(req: Request, res: Response) {
   await service.remove(req.params.id);
   res.json({ ok: true });
+}
+
+export async function registerPaymentController(req: Request, res: Response) {
+  const input = registerPaymentSchema.parse(req.body);
+  res.json({ data: await service.registerPayment(req.params.id, input) });
 }

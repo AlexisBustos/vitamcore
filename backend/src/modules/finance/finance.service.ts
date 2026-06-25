@@ -17,11 +17,13 @@ export async function getSummary(organizationId?: string) {
   const [
     monthIncome,
     monthExpense,
-    pendingIncome,
+    pendingSales,      // (antes pendingIncome) — dividido en ventas + manuales
+    pendingManual,
     pendingExpense,
     recurringIncome,
     recurringExpense,
-    overdueIncome,
+    overdueSales,      // (antes overdueIncome) — dividido en ventas + manuales
+    overdueManual,
     overdueExpense,
     incomeByCategory,
     expenseByCategory,
@@ -29,6 +31,7 @@ export async function getSummary(organizationId?: string) {
     expenseByOrg,
     upcomingIncome,
     upcomingExpense,
+    collectedIncome,   // nuevo — va al final
   ] = await Promise.all([
     // Totales del mes (por fecha de ingreso/gasto, excluyendo cancelados).
     prisma.incomeRecord.aggregate({
@@ -47,10 +50,26 @@ export async function getSummary(organizationId?: string) {
         status: { not: 'CANCELLED' },
       },
     }),
-    // Pendientes (no pagados ni cancelados).
+    // Por cobrar (ventas): neto positivo, no pagado, excluye notas de crédito.
+    prisma.incomeRecord.aggregate({
+      _sum: { netAmount: true },
+      where: {
+        ...orgFilter,
+        documentKind: { not: 'CREDIT_NOTE' },
+        status: { not: 'CANCELLED' },
+        paidDate: null,
+        netAmount: { gt: 0 },
+      },
+    }),
+    // Por cobrar (ingresos manuales): sin neto calculado, por estado clásico.
     prisma.incomeRecord.aggregate({
       _sum: { amount: true },
-      where: { ...orgFilter, status: { in: INCOME_PENDING } },
+      where: {
+        ...orgFilter,
+        documentKind: { not: 'CREDIT_NOTE' },
+        netAmount: null,
+        status: { in: INCOME_PENDING },
+      },
     }),
     prisma.expenseRecord.aggregate({
       _sum: { amount: true },
@@ -65,11 +84,30 @@ export async function getSummary(organizationId?: string) {
       _sum: { amount: true },
       where: { ...orgFilter, isRecurring: true, status: { not: 'CANCELLED' } },
     }),
-    // Vencidos (con vencimiento pasado y aún no resueltos).
+    // Vencido (ventas): por cobrar con dueDate pasado.
+    prisma.incomeRecord.aggregate({
+      _sum: { netAmount: true },
+      _count: { _all: true },
+      where: {
+        ...orgFilter,
+        documentKind: { not: 'CREDIT_NOTE' },
+        status: { not: 'CANCELLED' },
+        paidDate: null,
+        netAmount: { gt: 0 },
+        dueDate: { lt: now },
+      },
+    }),
+    // Vencido (manuales).
     prisma.incomeRecord.aggregate({
       _sum: { amount: true },
       _count: { _all: true },
-      where: { ...orgFilter, dueDate: { lt: now }, status: { in: INCOME_PENDING } },
+      where: {
+        ...orgFilter,
+        documentKind: { not: 'CREDIT_NOTE' },
+        netAmount: null,
+        status: { in: INCOME_PENDING },
+        dueDate: { lt: now },
+      },
     }),
     prisma.expenseRecord.aggregate({
       _sum: { amount: true },
@@ -100,7 +138,12 @@ export async function getSummary(organizationId?: string) {
     }),
     // Próximos vencimientos financieros.
     prisma.incomeRecord.findMany({
-      where: { ...orgFilter, dueDate: { gte: now }, status: { in: INCOME_PENDING } },
+      where: {
+        ...orgFilter,
+        documentKind: { not: 'CREDIT_NOTE' },
+        dueDate: { gte: now },
+        status: { in: INCOME_PENDING },
+      },
       orderBy: { dueDate: 'asc' },
       take: 6,
       select: {
@@ -118,6 +161,11 @@ export async function getSummary(organizationId?: string) {
         dueDate: true, status: true,
         organization: { select: { id: true, name: true } },
       },
+    }),
+    // Cobrado: facturas con pago registrado.
+    prisma.incomeRecord.aggregate({
+      _sum: { netAmount: true },
+      where: { ...orgFilter, status: { not: 'CANCELLED' }, paidDate: { not: null } },
     }),
   ]);
 
@@ -158,13 +206,16 @@ export async function getSummary(organizationId?: string) {
     monthIncome: monthIncomeTotal,
     monthExpense: monthExpenseTotal,
     estimatedResult: monthIncomeTotal - monthExpenseTotal,
-    pendingIncome: pendingIncome._sum.amount ?? 0,
+    pendingIncome:
+      (pendingSales._sum.netAmount ?? 0) + (pendingManual._sum.amount ?? 0),
+    collectedIncome: collectedIncome._sum.netAmount ?? 0,
     pendingExpense: pendingExpense._sum.amount ?? 0,
     recurringIncome: recurringIncome._sum.amount ?? 0,
     recurringExpense: recurringExpense._sum.amount ?? 0,
     overdueIncome: {
-      count: overdueIncome._count._all,
-      amount: overdueIncome._sum.amount ?? 0,
+      count: overdueSales._count._all + overdueManual._count._all,
+      amount:
+        (overdueSales._sum.netAmount ?? 0) + (overdueManual._sum.amount ?? 0),
     },
     overdueExpense: {
       count: overdueExpense._count._all,

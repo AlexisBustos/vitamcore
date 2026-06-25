@@ -460,6 +460,9 @@ model IncomeRecord {
   importBatchId       String?
   clientId            String?
   documentKind        DocumentKind         @default(SALE)
+  netAmount           Int?                 // neto por cobrar de la factura tras NC; null en NC
+  paidDate            DateTime?            // fecha de cobro; null = por cobrar
+  creditsIncomeId     String?              // en una NC: factura que anula
   clientName          String?
   description         String
   amount              Int                  @default(0)
@@ -484,7 +487,9 @@ model IncomeRecord {
   businessUnit BusinessUnit?         @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
   project      Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
   importBatch  FinancialImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
-  client       Client?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  client        Client?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  creditsIncome IncomeRecord?         @relation("CreditNotes", fields: [creditsIncomeId], references: [id], onDelete: SetNull)
+  creditedBy    IncomeRecord[]        @relation("CreditNotes")
 
   @@index([organizationId])
   @@index([importBatchId])
@@ -493,6 +498,8 @@ model IncomeRecord {
   @@index([incomeDate])
   @@index([dueDate])
   @@index([sourceIssueDate])
+  @@index([creditsIncomeId])
+  @@index([paidDate])
   @@map("income_records")
 }
 
