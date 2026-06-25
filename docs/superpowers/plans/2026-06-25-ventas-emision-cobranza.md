@@ -988,7 +988,9 @@ export function ReceivablesTab({ organizationId }: { organizationId?: string }) 
                       onClick={() =>
                         registrar.mutate({
                           id: r.id,
-                          paidDate: new Date().toISOString().slice(0, 10),
+                          // toLocaleDateString('en-CA') = fecha LOCAL en YYYY-MM-DD
+                          // (toISOString daría la fecha UTC, errónea de madrugada en Chile).
+                          paidDate: new Date().toLocaleDateString('en-CA'),
                         })
                       }
                     >
