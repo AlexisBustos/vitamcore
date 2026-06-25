@@ -574,9 +574,16 @@ En el array del `Promise.all`, donde hoy está la agregación de `pendingIncome`
       },
     }),
     // Por cobrar (ingresos manuales): sin neto calculado, por estado clásico.
+    // Excluye CREDIT_NOTE: las NC importadas también tienen netAmount null y
+    // ya están netadas en el bucket de ventas; sin este filtro se restarían dos veces.
     prisma.incomeRecord.aggregate({
       _sum: { amount: true },
-      where: { ...orgFilter, netAmount: null, status: { in: INCOME_PENDING } },
+      where: {
+        ...orgFilter,
+        documentKind: { not: 'CREDIT_NOTE' },
+        netAmount: null,
+        status: { in: INCOME_PENDING },
+      },
     }),
 ```
 
@@ -599,12 +606,14 @@ Donde hoy está `overdueIncome` (líneas ~69-73), reemplázala por estas dos
         dueDate: { lt: now },
       },
     }),
-    // Vencido (manuales).
+    // Vencido (manuales). Excluye CREDIT_NOTE por la misma razón que el bucket
+    // de "por cobrar" manual (evita doble resta de notas de crédito importadas).
     prisma.incomeRecord.aggregate({
       _sum: { amount: true },
       _count: { _all: true },
       where: {
         ...orgFilter,
+        documentKind: { not: 'CREDIT_NOTE' },
         netAmount: null,
         status: { in: INCOME_PENDING },
         dueDate: { lt: now },
