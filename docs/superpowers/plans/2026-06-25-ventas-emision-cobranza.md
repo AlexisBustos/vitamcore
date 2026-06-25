@@ -562,12 +562,13 @@ En el array del `Promise.all`, donde hoy está la agregación de `pendingIncome`
 3 y 4; `pendingExpense` sigue inmediatamente después):
 
 ```ts
-    // Por cobrar (ventas): neto positivo, no pagado, excluye notas de crédito.
+    // Por cobrar (ventas): neto positivo, no pagado, excluye NC y canceladas.
     prisma.incomeRecord.aggregate({
       _sum: { netAmount: true },
       where: {
         ...orgFilter,
         documentKind: { not: 'CREDIT_NOTE' },
+        status: { not: 'CANCELLED' },
         paidDate: null,
         netAmount: { gt: 0 },
       },
@@ -592,6 +593,7 @@ Donde hoy está `overdueIncome` (líneas ~69-73), reemplázala por estas dos
       where: {
         ...orgFilter,
         documentKind: { not: 'CREDIT_NOTE' },
+        status: { not: 'CANCELLED' },
         paidDate: null,
         netAmount: { gt: 0 },
         dueDate: { lt: now },
@@ -616,10 +618,10 @@ Como **último** elemento del `Promise.all` (después de `upcomingExpense`), agr
 (corresponde al nombre `collectedIncome`, también el último del destructuring):
 
 ```ts
-    // Cobrado: facturas con pago registrado.
+    // Cobrado: facturas con pago registrado (excluye canceladas).
     prisma.incomeRecord.aggregate({
       _sum: { netAmount: true },
-      where: { ...orgFilter, paidDate: { not: null } },
+      where: { ...orgFilter, status: { not: 'CANCELLED' }, paidDate: { not: null } },
     }),
 ```
 
