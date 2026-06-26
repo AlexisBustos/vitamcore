@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { CreditCard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -111,7 +112,22 @@ export function PayablesTab({ organizationId }: { organizationId?: string }) {
               <tbody className="divide-y divide-[var(--color-border)]">
                 {rows.map((r) => (
                   <tr key={r.id}>
-                    <td className="px-4 py-3">{r.vendorName ?? '—'}</td>
+                    <td className="px-4 py-3">
+                      {r.vendorName ? (
+                        r.vendorId ? (
+                          <Link
+                            to={`/proveedores/${r.vendorId}`}
+                            className="text-[var(--color-primary)] hover:underline"
+                          >
+                            {r.vendorName}
+                          </Link>
+                        ) : (
+                          r.vendorName
+                        )
+                      ) : (
+                        '—'
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
                       {r.sourceFolio ?? '—'}
                     </td>

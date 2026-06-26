@@ -12,6 +12,8 @@ import { TasksPage } from '@/pages/tasks/TasksPage';
 import { SalesPage } from '@/pages/sales/SalesPage';
 import { ClientsPage } from '@/pages/clients/ClientsPage';
 import { ClientDetailPage } from '@/pages/clients/ClientDetailPage';
+import { VendorsPage } from '@/pages/vendors/VendorsPage';
+import { VendorDetailPage } from '@/pages/vendors/VendorDetailPage';
 import { FinancePage } from '@/pages/finance/FinancePage';
 import { DocumentsPage } from '@/pages/documents/DocumentsPage';
 import { DecisionsPage } from '@/pages/decisions/DecisionsPage';
@@ -42,6 +44,8 @@ export default function App() {
           <Route path="/ventas" element={<SalesPage />} />
           <Route path="/clientes" element={<ClientsPage />} />
           <Route path="/clientes/:id" element={<ClientDetailPage />} />
+          <Route path="/proveedores" element={<VendorsPage />} />
+          <Route path="/proveedores/:id" element={<VendorDetailPage />} />
           <Route path="/finanzas" element={<FinancePage />} />
           <Route path="/documentos" element={<DocumentsPage />} />
           <Route path="/decisiones" element={<DecisionsPage />} />
