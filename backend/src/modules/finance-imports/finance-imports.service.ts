@@ -463,11 +463,17 @@ async function createRow(
     }
 
     if (batch.type === FinancialImportType.PURCHASE_REPORT) {
+      const vendorName = stringOrNull(row.data.vendorName);
+      const rut = stringOrNull(row.data.sourceRut);
+      const vendorId = rut
+        ? await upsertVendor(tx, batch.organizationId, rut, vendorName)
+        : null;
       await tx.expenseRecord.create({
         data: {
           organizationId: batch.organizationId,
           importBatchId: batch.id,
-          vendorName: stringOrNull(row.data.vendorName),
+          vendorId,
+          vendorName,
           description: stringOrDefault(row.data.description, 'Gasto importado'),
           amount: numberOrDefault(row.data.amount),
           currency: stringOrDefault(row.data.currency, 'CLP'),
@@ -477,7 +483,7 @@ async function createRow(
           dueDate: dateOrNull(row.data.dueDate),
           sourceDocumentType: stringOrNull(row.data.sourceDocumentType),
           sourceFolio: stringOrNull(row.data.sourceFolio),
-          sourceRut: stringOrNull(row.data.sourceRut),
+          sourceRut: rut,
           sourceIssueDate: dateOrNull(row.data.sourceIssueDate),
           sourceDedupeKey: row.dedupeKey,
           rawData: row.rawData,
@@ -531,6 +537,21 @@ async function upsertClient(
     select: { id: true },
   });
   return client.id;
+}
+
+async function upsertVendor(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  rut: string,
+  name: string | null,
+) {
+  const vendor = await tx.vendor.upsert({
+    where: { organizationId_rut: { organizationId, rut } },
+    create: { organizationId, rut, name: name ?? rut },
+    update: name ? { name } : {},
+    select: { id: true },
+  });
+  return vendor.id;
 }
 
 function documentKindOf(value: Prisma.JsonValue | undefined): DocumentKind {
