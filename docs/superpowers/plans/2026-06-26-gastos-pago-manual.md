@@ -54,9 +54,20 @@ En `schema.prisma`, modelo `ExpenseRecord`, agrega `paidDate` justo después de 
   expenseDate         DateTime?
 ```
 
-Y agrega el índice después de `@@index([dueDate])`:
+Y agrega el índice `@@index([paidDate])`. Para que el anclaje sea único de
+`ExpenseRecord` (la pareja `dueDate`/`sourceIssueDate` también existe en `IncomeRecord`),
+incluye `@@index([expenseDate])` como contexto. Reemplaza:
 
 ```prisma
+  @@index([expenseDate])
+  @@index([dueDate])
+  @@index([sourceIssueDate])
+```
+
+por:
+
+```prisma
+  @@index([expenseDate])
   @@index([dueDate])
   @@index([paidDate])
   @@index([sourceIssueDate])
