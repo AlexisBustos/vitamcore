@@ -27,13 +27,14 @@ type ExpenseStatsRow = {
 function computeStats(expenses: ExpenseStatsRow[]) {
   let totalSpent = 0;
   let paidAmount = 0;
+  let documentCount = 0;
   let lastDocumentDate: Date | null = null;
 
   for (const exp of expenses) {
-    if (exp.status !== ExpenseStatus.CANCELLED) {
-      totalSpent += exp.amount ?? 0;
-      if (exp.paidDate) paidAmount += exp.amount ?? 0;
-    }
+    if (exp.status === ExpenseStatus.CANCELLED) continue;
+    totalSpent += exp.amount ?? 0;
+    if (exp.paidDate) paidAmount += exp.amount ?? 0;
+    documentCount += 1;
     const date = exp.sourceIssueDate ?? exp.expenseDate;
     if (date && (!lastDocumentDate || date > lastDocumentDate)) {
       lastDocumentDate = date;
@@ -44,7 +45,7 @@ function computeStats(expenses: ExpenseStatsRow[]) {
     totalSpent,
     paidAmount,
     pendingAmount: totalSpent - paidAmount,
-    documentCount: expenses.length,
+    documentCount,
     lastDocumentDate,
   };
 }
