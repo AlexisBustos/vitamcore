@@ -235,6 +235,8 @@ export interface ExpenseRecord extends ContextRefs {
   currency: string;
   category: string | null;
   status: ExpenseStatus;
+  paidDate: string | null;
+  sourceFolio: string | null;
   expenseDate: string | null;
   dueDate: string | null;
   isRecurring: boolean;

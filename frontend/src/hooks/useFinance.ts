@@ -22,7 +22,7 @@ export type FinanceFilters = {
   status?: string;
   isRecurring?: string;
   documentKind?: string;
-  paymentState?: 'receivable' | 'overdue' | 'paid' | 'cancelled';
+  paymentState?: 'receivable' | 'payable' | 'overdue' | 'paid' | 'cancelled';
   month?: string;
 };
 
@@ -146,6 +146,25 @@ export function useDeleteExpense() {
   return useMutation({
     mutationFn: (id: string) => api.del(`/expenses/${id}`),
     onSuccess: () => invalidateFinance(qc),
+  });
+}
+
+export function useRegisterExpensePayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { id: string; paidDate: string | null }) =>
+      api.patch(`/expenses/${payload.id}/payment`, { paidDate: payload.paidDate }),
+    onSuccess: () => invalidateFinance(qc),
+  });
+}
+
+export function useExpenseMonths(organizationId?: string) {
+  return useQuery({
+    queryKey: ['expenses', 'months', organizationId ?? 'all'],
+    queryFn: () =>
+      api
+        .get<{ data: string[] }>(`/expenses/months${toQuery({ organizationId })}`)
+        .then((r) => r.data),
   });
 }
 
