@@ -9,7 +9,8 @@ const MESES = [
 // 'YYYY-MM' → 'Enero 2026'
 function labelMes(ym: string): string {
   const [y, m] = ym.split('-').map(Number);
-  return `${MESES[m - 1] ?? ym} ${y}`;
+  const nombre = MESES[m - 1];
+  return nombre != null ? `${nombre} ${y}` : ym;
 }
 
 export function MonthFilter({
