@@ -235,6 +235,7 @@ export interface ExpenseRecord extends ContextRefs {
   currency: string;
   category: string | null;
   status: ExpenseStatus;
+  vendorId: string | null;
   paidDate: string | null;
   sourceFolio: string | null;
   expenseDate: string | null;
@@ -269,6 +270,29 @@ export interface Client {
 
 export interface ClientDetail extends Client {
   incomes: IncomeRecord[];
+}
+
+export interface VendorStats {
+  totalSpent: number;
+  paidAmount: number;
+  pendingAmount: number;
+  documentCount: number;
+  lastDocumentDate: string | null;
+}
+
+export interface Vendor {
+  id: string;
+  organizationId: string;
+  rut: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  organization?: Ref;
+  stats: VendorStats;
+}
+
+export interface VendorDetail extends Vendor {
+  expenses: ExpenseRecord[];
 }
 
 /// Resumen específico de una importación de ventas (separación factura/NC).

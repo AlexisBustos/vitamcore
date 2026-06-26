@@ -261,4 +261,5 @@ function invalidateFinance(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['expenses'] });
   qc.invalidateQueries({ queryKey: ['finance'] });
   qc.invalidateQueries({ queryKey: ['dashboard'] });
+  qc.invalidateQueries({ queryKey: ['vendors'] });
 }
