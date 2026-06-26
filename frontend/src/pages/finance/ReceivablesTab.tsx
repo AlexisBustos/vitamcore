@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState, Spinner } from '@/components/ui/feedback';
 import { formatDate, formatMoney } from '@/lib/domain';
 import { getErrorMessage } from '@/lib/errors';
-import { useIncome, useRegisterPayment } from '@/hooks/useFinance';
+import { useIncome, useIncomeMonths, useRegisterPayment } from '@/hooks/useFinance';
 import { MonthFilter } from '@/components/MonthFilter';
 
 type Estado = 'receivable' | 'overdue' | 'paid' | 'cancelled';
@@ -31,6 +31,7 @@ export function ReceivablesTab({
     month,
   });
   const registrar = useRegisterPayment();
+  const { data: months = [] } = useIncomeMonths(organizationId);
 
   const total = rows.reduce((s, r) => s + (r.netAmount ?? r.amount), 0);
 
@@ -62,11 +63,7 @@ export function ReceivablesTab({
           ))}
         </div>
         <div className="w-48">
-          <MonthFilter
-            organizationId={organizationId}
-            value={month}
-            onChange={setMonth}
-          />
+          <MonthFilter months={months} value={month} onChange={setMonth} />
         </div>
       </div>
 

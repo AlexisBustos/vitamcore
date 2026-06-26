@@ -1,5 +1,4 @@
 import { Select } from '@/components/ui/select';
-import { useIncomeMonths } from '@/hooks/useFinance';
 
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -14,15 +13,14 @@ function labelMes(ym: string): string {
 }
 
 export function MonthFilter({
-  organizationId,
+  months,
   value,
   onChange,
 }: {
-  organizationId?: string;
+  months: string[];
   value?: string;
   onChange: (value: string | undefined) => void;
 }) {
-  const { data: months = [] } = useIncomeMonths(organizationId);
   return (
     <Select
       placeholder="Todos los meses"

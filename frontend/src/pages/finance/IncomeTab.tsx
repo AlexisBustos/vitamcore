@@ -13,6 +13,7 @@ import { getErrorMessage } from '@/lib/errors';
 import {
   useIncome,
   useDeleteIncome,
+  useIncomeMonths,
   type FinanceFilters,
 } from '@/hooks/useFinance';
 import type { IncomeRecord } from '@/types/domain';
@@ -31,6 +32,7 @@ export function IncomeTab({ organizationId }: { organizationId?: string }) {
   const filters: FinanceFilters = { organizationId, ...extra };
   const { data, isLoading, isError, error } = useIncome(filters);
   const remove = useDeleteIncome();
+  const { data: months = [] } = useIncomeMonths(organizationId);
 
   async function handleDelete(item: IncomeRecord) {
     if (!confirm(`¿Eliminar el ingreso "${item.description}"?`)) return;
@@ -57,7 +59,7 @@ export function IncomeTab({ organizationId }: { organizationId?: string }) {
             }
           />
           <MonthFilter
-            organizationId={organizationId}
+            months={months}
             value={extra.month}
             onChange={(month) => setExtra((x) => ({ ...x, month }))}
           />
