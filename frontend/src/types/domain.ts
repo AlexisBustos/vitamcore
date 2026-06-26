@@ -219,6 +219,7 @@ export interface IncomeRecord extends ContextRefs {
   paidDate: string | null;
   creditsIncomeId: string | null;
   sourceFolio: string | null;
+  sourceIssueDate: string | null;
   createdAt: string;
   updatedAt: string;
 }
