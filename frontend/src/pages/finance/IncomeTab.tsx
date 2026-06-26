@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Pencil, Plus, Repeat, Trash2 } from 'lucide-react';
+import { MonthFilter } from '@/components/MonthFilter';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
@@ -17,7 +19,11 @@ import type { IncomeRecord } from '@/types/domain';
 import { IncomeForm } from './IncomeForm';
 
 export function IncomeTab({ organizationId }: { organizationId?: string }) {
-  const [extra, setExtra] = useState<{ category?: string; status?: string }>({});
+  const [extra, setExtra] = useState<{
+    category?: string;
+    status?: string;
+    month?: string;
+  }>({});
   const [form, setForm] = useState<{ open: boolean; item: IncomeRecord | null }>(
     { open: false, item: null },
   );
@@ -34,7 +40,7 @@ export function IncomeTab({ organizationId }: { organizationId?: string }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="grid flex-1 gap-3 sm:grid-cols-2 lg:max-w-md">
+        <div className="grid flex-1 gap-3 sm:grid-cols-2 lg:max-w-2xl lg:grid-cols-3">
           <Input
             placeholder="Categoría"
             value={extra.category ?? ''}
@@ -49,6 +55,11 @@ export function IncomeTab({ organizationId }: { organizationId?: string }) {
             onChange={(e) =>
               setExtra((x) => ({ ...x, status: e.target.value || undefined }))
             }
+          />
+          <MonthFilter
+            organizationId={organizationId}
+            value={extra.month}
+            onChange={(month) => setExtra((x) => ({ ...x, month }))}
           />
         </div>
         <Button onClick={() => setForm({ open: true, item: null })}>
@@ -67,6 +78,7 @@ export function IncomeTab({ organizationId }: { organizationId?: string }) {
               <thead className="bg-[var(--color-muted)] text-left text-xs text-[var(--color-muted-foreground)]">
                 <tr>
                   <th className="px-4 py-3 font-medium">Descripción</th>
+                  <th className="px-4 py-3 font-medium">Cliente</th>
                   <th className="px-4 py-3 font-medium">Empresa</th>
                   <th className="px-4 py-3 font-medium">Categoría</th>
                   <th className="px-4 py-3 text-right font-medium">Monto</th>
@@ -85,6 +97,24 @@ export function IncomeTab({ organizationId }: { organizationId?: string }) {
                           <Repeat className="h-3.5 w-3.5 text-[var(--color-muted-foreground)]" />
                         )}
                       </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {r.clientName ? (
+                        r.clientId ? (
+                          <Link
+                            to={`/clientes/${r.clientId}`}
+                            className="text-[var(--color-primary)] hover:underline"
+                          >
+                            {r.clientName}
+                          </Link>
+                        ) : (
+                          <span className="text-[var(--color-muted-foreground)]">
+                            {r.clientName}
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-[var(--color-muted-foreground)]">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
                       {r.organization?.name ?? '—'}
