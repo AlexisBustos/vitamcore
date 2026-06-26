@@ -130,6 +130,16 @@ export function useExpenses(filters: FinanceFilters = {}) {
   });
 }
 
+export function useExpenseMonths(organizationId?: string) {
+  return useQuery({
+    queryKey: ['expenses', 'months', organizationId ?? 'all'],
+    queryFn: () =>
+      api
+        .get<{ data: string[] }>(`/expenses/months${toQuery({ organizationId })}`)
+        .then((r) => r.data),
+  });
+}
+
 export function useSaveExpense() {
   const qc = useQueryClient();
   return useMutation({
@@ -155,16 +165,6 @@ export function useRegisterExpensePayment() {
     mutationFn: (payload: { id: string; paidDate: string | null }) =>
       api.patch(`/expenses/${payload.id}/payment`, { paidDate: payload.paidDate }),
     onSuccess: () => invalidateFinance(qc),
-  });
-}
-
-export function useExpenseMonths(organizationId?: string) {
-  return useQuery({
-    queryKey: ['expenses', 'months', organizationId ?? 'all'],
-    queryFn: () =>
-      api
-        .get<{ data: string[] }>(`/expenses/months${toQuery({ organizationId })}`)
-        .then((r) => r.data),
   });
 }
 
