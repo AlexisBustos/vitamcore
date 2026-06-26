@@ -122,7 +122,9 @@ export function PayablesTab({ organizationId }: { organizationId?: string }) {
                             {r.vendorName}
                           </Link>
                         ) : (
-                          r.vendorName
+                          <span className="text-[var(--color-muted-foreground)]">
+                            {r.vendorName}
+                          </span>
                         )
                       ) : (
                         '—'
