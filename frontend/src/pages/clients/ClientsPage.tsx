@@ -101,6 +101,11 @@ export function ClientsPage() {
                   <tr
                     key={c.id}
                     onClick={() => navigate(`/clientes/${c.id}`)}
+                    onKeyDown={(e) =>
+                      (e.key === 'Enter' || e.key === ' ') &&
+                      navigate(`/clientes/${c.id}`)
+                    }
+                    tabIndex={0}
                     className="cursor-pointer hover:bg-[var(--color-muted)]/40"
                   >
                     <td className="px-4 py-3">

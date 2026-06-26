@@ -112,7 +112,7 @@ export function ClientDetailPage() {
                   <tbody className="divide-y divide-[var(--color-border)]">
                     {client.incomes.map((inc) => {
                       const esNC = inc.documentKind === 'CREDIT_NOTE';
-                      const estado = estadoCobro(inc);
+                      const estado = esNC ? null : estadoCobro(inc);
                       return (
                         <tr
                           key={inc.id}
@@ -138,8 +138,8 @@ export function ClientDetailPage() {
                                 —
                               </span>
                             ) : (
-                              <Badge className={ESTADO_CLASS[estado]}>
-                                {ESTADO_LABEL[estado]}
+                              <Badge className={ESTADO_CLASS[estado!]}>
+                                {ESTADO_LABEL[estado!]}
                               </Badge>
                             )}
                           </td>
