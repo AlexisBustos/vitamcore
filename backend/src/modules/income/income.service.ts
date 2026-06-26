@@ -73,6 +73,14 @@ export async function list(filters: ListIncomeFilters) {
     where.netAmount = 0;
   }
 
+  if (filters.month) {
+    const [y, m] = filters.month.split('-').map(Number);
+    where.incomeDate = {
+      gte: new Date(Date.UTC(y, m - 1, 1)),
+      lt: new Date(Date.UTC(y, m, 1)), // primer día del mes siguiente
+    };
+  }
+
   return prisma.incomeRecord.findMany({
     where,
     orderBy: [{ incomeDate: 'desc' }, { createdAt: 'desc' }],
@@ -141,4 +149,19 @@ export async function remove(id: string) {
   });
   if (!exists) throw notFound('Ingreso no encontrado');
   await prisma.incomeRecord.delete({ where: { id } });
+}
+
+/// Meses (YYYY-MM) que tienen ingresos, ordenados descendente. Alimenta el
+/// desplegable de filtro por mes (solo ofrece meses con datos).
+export async function listMonths(organizationId?: string): Promise<string[]> {
+  const orgClause = organizationId
+    ? Prisma.sql`AND "organizationId" = ${organizationId}`
+    : Prisma.empty;
+  const rows = await prisma.$queryRaw<{ mes: string }[]>(Prisma.sql`
+    SELECT DISTINCT to_char(date_trunc('month', "incomeDate"), 'YYYY-MM') AS mes
+    FROM "income_records"
+    WHERE "incomeDate" IS NOT NULL ${orgClause}
+    ORDER BY mes DESC
+  `);
+  return rows.map((r) => r.mes);
 }

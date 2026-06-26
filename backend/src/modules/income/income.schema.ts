@@ -49,6 +49,10 @@ export const listIncomeQuery = z.object({
   isRecurring: z.enum(['true', 'false']).optional(),
   documentKind: z.enum(['SALE', 'CREDIT_NOTE', 'DEBIT_NOTE']).optional(),
   paymentState: z.enum(['receivable', 'overdue', 'paid', 'cancelled']).optional(),
+  month: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/, 'Formato de mes inválido (YYYY-MM)')
+    .optional(),
 });
 
 export const registerPaymentSchema = z.object({
