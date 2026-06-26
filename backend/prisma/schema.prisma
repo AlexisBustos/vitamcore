@@ -516,6 +516,7 @@ model ExpenseRecord {
   currency            String               @default("CLP")
   category            String?
   status              ExpenseStatus        @default(PENDING)
+  paidDate            DateTime?
   expenseDate         DateTime?
   dueDate             DateTime?
   isRecurring         Boolean              @default(false)
@@ -540,6 +541,7 @@ model ExpenseRecord {
   @@index([status])
   @@index([expenseDate])
   @@index([dueDate])
+  @@index([paidDate])
   @@index([sourceIssueDate])
   @@map("expense_records")
 }
