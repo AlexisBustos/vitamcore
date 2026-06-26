@@ -4,6 +4,8 @@ import {
   createController,
   getController,
   listController,
+  listMonthsController,
+  registerPaymentController,
   removeController,
   updateController,
 } from './expenses.controller';
@@ -11,7 +13,9 @@ import {
 export const expensesRouter = Router();
 
 expensesRouter.get('/', asyncHandler(listController));
+expensesRouter.get('/months', asyncHandler(listMonthsController));
 expensesRouter.post('/', asyncHandler(createController));
+expensesRouter.patch('/:id/payment', asyncHandler(registerPaymentController));
 expensesRouter.get('/:id', asyncHandler(getController));
 expensesRouter.patch('/:id', asyncHandler(updateController));
 expensesRouter.delete('/:id', asyncHandler(removeController));

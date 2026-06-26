@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import {
   createExpenseSchema,
   listExpenseQuery,
+  registerPaymentSchema,
   updateExpenseSchema,
 } from './expenses.schema';
 import * as service from './expenses.service';
@@ -9,6 +10,18 @@ import * as service from './expenses.service';
 export async function listController(req: Request, res: Response) {
   const filters = listExpenseQuery.parse(req.query);
   res.json({ data: await service.list(filters) });
+}
+
+export async function listMonthsController(req: Request, res: Response) {
+  const { organizationId } = listExpenseQuery
+    .pick({ organizationId: true })
+    .parse(req.query);
+  res.json({ data: await service.listMonths(organizationId) });
+}
+
+export async function registerPaymentController(req: Request, res: Response) {
+  const input = registerPaymentSchema.parse(req.body);
+  res.json({ data: await service.registerPayment(req.params.id, input) });
 }
 
 export async function getController(req: Request, res: Response) {
