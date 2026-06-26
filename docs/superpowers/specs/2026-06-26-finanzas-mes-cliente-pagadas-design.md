@@ -101,9 +101,23 @@ Nuevo `GET /income/months?organizationId=` → `{ data: string[] }` con los mese
 `YYYY-MM` que tienen ingresos, ordenados descendente.
 
 - `income.service.ts → listMonths(organizationId?)`: consulta los meses distintos de
-  `incomeDate`. Usar `prisma.$queryRaw` con `to_char(date_trunc('month', "incomeDate"),
-  'YYYY-MM')`, filtrando por organización cuando venga e ignorando `incomeDate` nulo.
-  Devuelve `string[]` ordenado desc.
+  `incomeDate` con `prisma.$queryRaw`, usando `to_char(date_trunc('month', "incomeDate"),
+  'YYYY-MM')`, ignorando `incomeDate` nulo y ordenando desc. Detalles técnicos:
+  - `$queryRaw` devuelve **filas como objetos** (`{ mes: string }[]`), no `string[]`;
+    mapear con `rows.map((r) => r.mes)` para devolver `string[]`.
+  - El filtro opcional por empresa se compone con `Prisma.sql` (no concatenar strings):
+    `const orgClause = organizationId ? Prisma.sql\`AND "organizationId" = ${organizationId}\` : Prisma.empty;`
+    y embeberlo en la consulta. Importar `Prisma` desde `@prisma/client`.
+  - Consulta de referencia:
+    ```ts
+    const rows = await prisma.$queryRaw<{ mes: string }[]>(Prisma.sql`
+      SELECT DISTINCT to_char(date_trunc('month', "incomeDate"), 'YYYY-MM') AS mes
+      FROM "income_records"
+      WHERE "incomeDate" IS NOT NULL ${orgClause}
+      ORDER BY mes DESC
+    `);
+    return rows.map((r) => r.mes);
+    ```
 - `income.controller.ts → listMonthsController`: valida `organizationId` opcional
   (`z.object({ organizationId: z.string().optional() }).parse(req.query)`) y responde
   `{ data }`.
