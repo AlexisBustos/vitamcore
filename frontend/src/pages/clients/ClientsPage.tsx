@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Users } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { Card } from '@/components/ui/card';
@@ -12,6 +13,7 @@ import { useClients, type ClientFilters } from '@/hooks/useClients';
 
 export function ClientsPage() {
   const [filters, setFilters] = useState<ClientFilters>({});
+  const navigate = useNavigate();
 
   const { data, isLoading, isError, error } = useClients(filters);
 
@@ -96,7 +98,11 @@ export function ClientsPage() {
               </thead>
               <tbody className="divide-y divide-[var(--color-border)]">
                 {data.map((c) => (
-                  <tr key={c.id} className="hover:bg-[var(--color-muted)]/40">
+                  <tr
+                    key={c.id}
+                    onClick={() => navigate(`/clientes/${c.id}`)}
+                    className="cursor-pointer hover:bg-[var(--color-muted)]/40"
+                  >
                     <td className="px-4 py-3">
                       <p className="font-medium text-[var(--color-foreground)]">
                         {c.name}
