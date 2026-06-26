@@ -10,20 +10,27 @@ import { expenseStatusOptions, formatDate, formatMoney } from '@/lib/domain';
 import { getErrorMessage } from '@/lib/errors';
 import {
   useExpenses,
+  useExpenseMonths,
   useDeleteExpense,
   type FinanceFilters,
 } from '@/hooks/useFinance';
+import { MonthFilter } from '@/components/MonthFilter';
 import type { ExpenseRecord } from '@/types/domain';
 import { ExpenseForm } from './ExpenseForm';
 
 export function ExpensesTab({ organizationId }: { organizationId?: string }) {
-  const [extra, setExtra] = useState<{ category?: string; status?: string }>({});
+  const [extra, setExtra] = useState<{
+    category?: string;
+    status?: string;
+    month?: string;
+  }>({});
   const [form, setForm] = useState<{ open: boolean; item: ExpenseRecord | null }>(
     { open: false, item: null },
   );
 
   const filters: FinanceFilters = { organizationId, ...extra };
   const { data, isLoading, isError, error } = useExpenses(filters);
+  const { data: months = [] } = useExpenseMonths(organizationId);
   const remove = useDeleteExpense();
 
   async function handleDelete(item: ExpenseRecord) {
@@ -34,7 +41,7 @@ export function ExpensesTab({ organizationId }: { organizationId?: string }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="grid flex-1 gap-3 sm:grid-cols-2 lg:max-w-md">
+        <div className="grid flex-1 gap-3 sm:grid-cols-2 lg:max-w-2xl lg:grid-cols-3">
           <Input
             placeholder="Categoría"
             value={extra.category ?? ''}
@@ -49,6 +56,11 @@ export function ExpensesTab({ organizationId }: { organizationId?: string }) {
             onChange={(e) =>
               setExtra((x) => ({ ...x, status: e.target.value || undefined }))
             }
+          />
+          <MonthFilter
+            months={months}
+            value={extra.month}
+            onChange={(month) => setExtra((x) => ({ ...x, month }))}
           />
         </div>
         <Button onClick={() => setForm({ open: true, item: null })}>
