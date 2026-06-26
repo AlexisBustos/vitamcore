@@ -27,7 +27,9 @@ en ingresos. Llevamos los gastos a paridad con ingresos:
 - Datos actuales: 38 gastos importados — **20 quedaron PAID** (por `PAGADO=SI`), 18 PENDING.
 - Los KPIs de gastos en `finance.service.ts` se basan en `status`
   (`EXPENSE_PENDING = ['PENDING','OVERDUE']`); **no hay KPI de "pagado"**. Al reparar los
-  20 a PENDING, quedan correctamente contados como pendientes. Sin cambios de KPIs.
+  20 a PENDING, quedan correctamente contados como pendientes. Sin cambios de *código* de
+  KPIs (el valor de `pendingExpense` sube por la suma de los 20 reparados; es el resultado
+  esperado, no una regresión).
 - Ingresos ya tienen el patrón a copiar: `registerPayment`, guard `normalizePaidStatus`,
   `listMonths`, `paymentState`, y `ReceivablesTab`.
 
@@ -83,7 +85,7 @@ Espejo del módulo de ingresos:
     `paymentState: z.enum(['payable','overdue','paid','cancelled']).optional()` y
     `month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Formato de mes inválido (YYYY-MM)').optional()`.
   - Agregar `registerPaymentSchema = z.object({ paidDate: dateInput.nullable() })` y su
-    tipo `RegisterPaymentInput` (importar `dateInput` de `../shared/zod`).
+    tipo `RegisterPaymentInput` (`dateInput` ya está importado de `../shared/zod`).
 - `expenses.service.ts`:
   - Constante `PAYABLE_STATUSES = ['PENDING','OVERDUE'] as const`.
   - Helper guard:
@@ -144,13 +146,17 @@ Espejo del módulo de ingresos:
 - `expenses.routes.ts`: agregar
   `expensesRouter.get('/months', asyncHandler(listMonthsController))` y
   `expensesRouter.patch('/:id/payment', asyncHandler(registerPaymentController))`. La ruta
-  `/months` debe ir **antes** de `/:id`.
+  `/months` debe ir **antes** de `/:id`, y `/:id/payment` **antes** de `/:id` (paridad con
+  `income.routes.ts`).
 
 ## Frontend
 
 ### 4. Tipos y hooks
 
-- `types/domain.ts`: agregar `paidDate: string | null` a `ExpenseRecord`.
+- `types/domain.ts`: agregar a `ExpenseRecord` los campos `paidDate: string | null` y
+  `sourceFolio: string | null`. Este último ya lo devuelve el backend (`list` usa
+  `include: refs`, sin `select`, así que vienen todos los escalares) pero el tipo no lo
+  declaraba; `PayablesTab` lo necesita para la columna Folio.
 - `hooks/useFinance.ts`:
   - Ampliar `FinanceFilters.paymentState` a
     `'receivable' | 'payable' | 'overdue' | 'paid' | 'cancelled'`.
@@ -199,7 +205,7 @@ Espejo de `ReceivablesTab.tsx`:
   `expenses.routes.ts` — pago manual, filtros, meses.
 
 **Frontend**
-- `types/domain.ts` — `paidDate` en `ExpenseRecord`.
+- `types/domain.ts` — `paidDate` y `sourceFolio` en `ExpenseRecord`.
 - `hooks/useFinance.ts` — `paymentState` ampliado, `useRegisterExpensePayment`,
   `useExpenseMonths`.
 - `components/MonthFilter.tsx` — prop `months`.
