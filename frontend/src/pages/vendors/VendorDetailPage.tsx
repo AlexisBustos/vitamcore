@@ -111,7 +111,7 @@ export function VendorDetailPage() {
                             {exp.sourceFolio ?? '—'}
                           </td>
                           <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
-                            {formatDate(exp.expenseDate ?? exp.dueDate)}
+                            {formatDate(exp.sourceIssueDate ?? exp.expenseDate)}
                           </td>
                           <td className="px-4 py-3">{exp.description}</td>
                           <td className="px-4 py-3 text-right font-medium">
