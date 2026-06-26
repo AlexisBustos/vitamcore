@@ -135,6 +135,13 @@ gastos de ese proveedor).
 - `useVendors(filters)` → `GET /vendors`.
 - `useVendorDetail(id)` → `GET /vendors/:id`.
 
+### 5b. Invalidación de `['vendors']` (`hooks/useFinance.ts`)
+Para que las stats del proveedor se refresquen en el lugar (igual que `['clients']`):
+- En `invalidateFinance` agregar `qc.invalidateQueries({ queryKey: ['vendors'] })`
+  (cubre el pago de gastos vía `useRegisterExpensePayment`, que ya lo usa).
+- En `useConfirmFinanceImport`, donde hoy invalida `['clients']`, invalidar también
+  `['vendors']` (para que importar compras refresque la lista de proveedores).
+
 ### 6. Páginas (espejo de Clientes)
 - `pages/vendors/VendorsPage.tsx`: buscador + filtro de empresa + tarjetas de resumen
   (Proveedores, Total gastado, Pendiente) + tabla (Proveedor [name/rut] · Empresa ·
@@ -145,6 +152,9 @@ gastos de ese proveedor).
   Descripción · Monto · Estado). El **estado de pago** se deriva localmente (helper
   `estadoPago`): `CANCELLED`→Anulado, `paidDate`→Pagado, `dueDate<hoy` sin pago→Vencido,
   si no →Pendiente. Estados loading/error/empty.
+  - **Solo lectura a propósito**: a diferencia de `ClientDetailPage` (que tiene "Marcar
+    pagada"), el detalle de proveedor no incluye acción de pago — el pago de gastos se
+    hace en la pestaña **Cuentas por pagar**, para no duplicar el flujo.
 
 ### 7. Rutas y navegación
 - `App.tsx`: rutas `/proveedores` → `VendorsPage` y `/proveedores/:id` → `VendorDetailPage`
@@ -162,9 +172,9 @@ gastos de ese proveedor).
 `finance-imports.service.ts`, nuevos `vendors.{schema,service,controller,routes}.ts`,
 `routes/index.ts`.
 
-**Frontend**: `types/domain.ts`, nuevo `hooks/useVendors.ts`, nuevos
-`pages/vendors/VendorsPage.tsx` y `VendorDetailPage.tsx`, `App.tsx`, `lib/nav.ts`,
-`pages/finance/PayablesTab.tsx`.
+**Frontend**: `types/domain.ts`, nuevo `hooks/useVendors.ts`, `hooks/useFinance.ts`
+(invalidación `['vendors']`), nuevos `pages/vendors/VendorsPage.tsx` y
+`VendorDetailPage.tsx`, `App.tsx`, `lib/nav.ts`, `pages/finance/PayablesTab.tsx`.
 
 ## Manejo de errores y casos borde
 
