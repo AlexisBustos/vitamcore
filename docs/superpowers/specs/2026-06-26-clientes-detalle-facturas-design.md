@@ -73,7 +73,8 @@ Componente de página. Estructura:
 - **Cabecera (`PageHeader`):** título = nombre del cliente; descripción = `RUT ·
   empresa`. Incluir un enlace/botón "← Volver" a `/clientes` (con `Link` o
   `useNavigate`).
-- **Stats (`MetricCard`, grid):** Venta neta (`stats.netSales`), Bruto facturado
+- **Stats (`MetricCard`, grid responsive `sm:grid-cols-2 lg:grid-cols-4`):**
+  Venta neta (`stats.netSales`), Bruto facturado
   (`stats.grossInvoiced`), Notas de crédito (`stats.totalCreditNotes`, tono
   `warning` si > 0), N.º facturas (`stats.invoiceCount`).
 - **Tabla de documentos (`incomes`):** columnas
@@ -85,13 +86,22 @@ Componente de página. Estructura:
   `Neto` (`netAmount ?? amount`) ·
   `Estado` (badge derivado, ver abajo) ·
   `Acción`.
-- **Estado de cobro derivado** (misma lógica que `ReceivablesTab`, helper local):
-  - `status === 'CANCELLED'` → **Anulada**
-  - tiene `paidDate` → **Pagada**
-  - `dueDate` existe y `< hoy` y sin `paidDate` → **Vencida**
-  - en otro caso → **Por cobrar**
+- **Estado de cobro derivado** — helper **nuevo y local** a esta página (no existe
+  uno reusable: `ReceivablesTab` filtra por estado en el servidor vía
+  `paymentState`, no calcula un badge en cliente). Las reglas se alinean
+  deliberadamente con la semántica del backend (`income.service.ts`) para que el
+  detalle y Cuentas por cobrar **no se contradigan**. Precedencia, solo para
+  documentos que **no** son nota de crédito:
+  - `netAmount === 0` → **Anulada** (misma regla que `paymentState='cancelled'`).
+  - tiene `paidDate` → **Pagada** (backend: `paidDate != null` y `status != CANCELLED`;
+    como ya excluimos `netAmount === 0` arriba, basta con `paidDate`).
+  - `dueDate` existe y `< hoy` (y sin `paidDate`) → **Vencida**.
+  - en otro caso → **Por cobrar**.
+  - **Notas de crédito** (`documentKind === 'CREDIT_NOTE'`): no llevan estado de
+    cobro; la columna Estado muestra `'—'` (su naturaleza ya se ve en la columna Tipo).
 - **Acción de pago:** para documentos que **no** son nota de crédito
-  (`documentKind !== 'CREDIT_NOTE'`):
+  (`documentKind !== 'CREDIT_NOTE'`; las notas de débito sí son cobrables y por tanto
+  muestran acción, lo cual es intencional):
   - sin `paidDate` → botón "Marcar pagada" →
     `registrar.mutate({ id: r.id, paidDate: new Date().toLocaleDateString('en-CA') })`
     (fecha **local** YYYY-MM-DD, igual que en `ReceivablesTab`, para no registrar el
