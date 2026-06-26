@@ -30,6 +30,19 @@ const RECEIVABLE_OR: Prisma.IncomeRecordWhereInput['OR'] = [
   { netAmount: null, status: { in: [...PENDING_STATUSES] } },
 ];
 
+// Invariante de cobranza: el estado PAID solo es válido si hay fecha de cobro.
+// El paso a pagado se hace a mano vía registerPayment; el formulario no fija
+// paidDate, así que un status PAID sin paidDate se degrada a INVOICED.
+function normalizePaidStatus<T extends { status?: string | null }>(
+  input: T,
+  paidDate: Date | null,
+): T {
+  if (input.status === 'PAID' && !paidDate) {
+    return { ...input, status: 'INVOICED' };
+  }
+  return input;
+}
+
 export async function list(filters: ListIncomeFilters) {
   const where: Prisma.IncomeRecordWhereInput = {
     organizationId: filters.organizationId,
@@ -78,17 +91,22 @@ export async function getById(id: string) {
 
 export async function create(input: CreateIncomeInput) {
   await assertContext(input.organizationId, input.businessUnitId, input.projectId);
-  return prisma.incomeRecord.create({ data: input });
+  // create nunca recibe paidDate (no está en el schema): un PAID se degrada a INVOICED.
+  return prisma.incomeRecord.create({ data: normalizePaidStatus(input, null) });
 }
 
 export async function update(id: string, input: UpdateIncomeInput) {
   const current = await prisma.incomeRecord.findUnique({
     where: { id },
-    select: { organizationId: true },
+    select: { organizationId: true, paidDate: true },
   });
   if (!current) throw notFound('Ingreso no encontrado');
   await assertContext(current.organizationId, input.businessUnitId, input.projectId);
-  return prisma.incomeRecord.update({ where: { id }, data: input });
+  // Si el form intenta marcar PAID y el registro no tiene cobro, se degrada a INVOICED.
+  return prisma.incomeRecord.update({
+    where: { id },
+    data: normalizePaidStatus(input, current.paidDate),
+  });
 }
 
 export async function registerPayment(id: string, input: RegisterPaymentInput) {
