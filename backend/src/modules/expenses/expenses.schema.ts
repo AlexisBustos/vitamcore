@@ -46,8 +46,18 @@ export const listExpenseQuery = z.object({
   category: z.string().optional(),
   status: expenseStatusEnum.optional(),
   isRecurring: z.enum(['true', 'false']).optional(),
+  paymentState: z.enum(['payable', 'overdue', 'paid', 'cancelled']).optional(),
+  month: z
+    .string()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Formato de mes inválido (YYYY-MM)')
+    .optional(),
 });
 
 export type CreateExpenseInput = z.infer<typeof createExpenseSchema>;
 export type UpdateExpenseInput = z.infer<typeof updateExpenseSchema>;
 export type ListExpenseFilters = z.infer<typeof listExpenseQuery>;
+
+export const registerPaymentSchema = z.object({
+  paidDate: dateInput.nullable(),
+});
+export type RegisterPaymentInput = z.infer<typeof registerPaymentSchema>;
