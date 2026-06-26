@@ -51,7 +51,7 @@ export const listIncomeQuery = z.object({
   paymentState: z.enum(['receivable', 'overdue', 'paid', 'cancelled']).optional(),
   month: z
     .string()
-    .regex(/^\d{4}-\d{2}$/, 'Formato de mes inválido (YYYY-MM)')
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Formato de mes inválido (YYYY-MM)')
     .optional(),
 });
 

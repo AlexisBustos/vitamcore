@@ -1,5 +1,4 @@
 import type { Request, Response } from 'express';
-import { z } from 'zod';
 import {
   createIncomeSchema,
   listIncomeQuery,
@@ -14,9 +13,7 @@ export async function listController(req: Request, res: Response) {
 }
 
 export async function listMonthsController(req: Request, res: Response) {
-  const { organizationId } = z
-    .object({ organizationId: z.string().optional() })
-    .parse(req.query);
+  const { organizationId } = listIncomeQuery.pick({ organizationId: true }).parse(req.query);
   res.json({ data: await service.listMonths(organizationId) });
 }
 
