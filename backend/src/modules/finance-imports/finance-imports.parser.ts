@@ -53,10 +53,6 @@ function isoDate(date: Date | null): string {
   return date?.toISOString().slice(0, 10) ?? '';
 }
 
-function parsePaid(value: unknown) {
-  return upper(value) === 'SI';
-}
-
 function buildPreview(
   rows: ParsedImportRow[],
   totals: Partial<
@@ -240,7 +236,8 @@ export function parsePurchaseRows(
         expenseAmount: amount,
         currency: 'CLP',
         category: 'Compras',
-        status: parsePaid(valueOf(row, 'PAGADO')) ? 'PAID' : 'PENDING',
+        // El libro de compras no declara pago: el cobro se registra a mano.
+        status: 'PENDING',
         expenseDate: issueDate,
         dueDate,
         sourceDocumentType: documentType,
