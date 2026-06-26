@@ -23,6 +23,7 @@ export type FinanceFilters = {
   isRecurring?: string;
   documentKind?: string;
   paymentState?: 'receivable' | 'overdue' | 'paid' | 'cancelled';
+  month?: string;
 };
 
 export type FinanceImportFilters = {
@@ -73,6 +74,16 @@ export function useIncome(filters: FinanceFilters = {}) {
     queryFn: () =>
       api
         .get<{ data: IncomeRecord[] }>(`/income${toQuery(filters)}`)
+        .then((r) => r.data),
+  });
+}
+
+export function useIncomeMonths(organizationId?: string) {
+  return useQuery({
+    queryKey: ['income', 'months', organizationId ?? 'all'],
+    queryFn: () =>
+      api
+        .get<{ data: string[] }>(`/income/months${toQuery({ organizationId })}`)
         .then((r) => r.data),
   });
 }
