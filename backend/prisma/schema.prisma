@@ -295,6 +295,7 @@ model Organization {
   financialImportBatches FinancialImportBatch[]
   bankTransactions       BankTransaction[]
   clients                Client[]
+  vendors                Vendor[]
   documents              Document[]
   strategicDecisions     StrategicDecision[]
 
@@ -451,6 +452,25 @@ model Client {
   @@map("clients")
 }
 
+/// Proveedor (razón social + RUT) consolidado por empresa.
+/// Se crea/actualiza automáticamente al importar reportes de compras.
+/// Los acumulados NO se almacenan: se calculan agregando sus ExpenseRecord.
+model Vendor {
+  id             String   @id @default(cuid())
+  organizationId String
+  rut            String
+  name           String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  expenses     ExpenseRecord[]
+
+  @@unique([organizationId, rut])
+  @@index([organizationId])
+  @@map("vendors")
+}
+
 /// Ingreso (esperado, facturado, pagado…).
 model IncomeRecord {
   id                  String               @id @default(cuid())
@@ -510,6 +530,7 @@ model ExpenseRecord {
   businessUnitId      String?
   projectId           String?
   importBatchId       String?
+  vendorId            String?
   vendorName          String?
   description         String
   amount              Int                  @default(0)
@@ -535,6 +556,7 @@ model ExpenseRecord {
   businessUnit BusinessUnit?         @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
   project      Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
   importBatch  FinancialImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  vendor       Vendor?               @relation(fields: [vendorId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([importBatchId])
@@ -543,6 +565,7 @@ model ExpenseRecord {
   @@index([dueDate])
   @@index([paidDate])
   @@index([sourceIssueDate])
+  @@index([vendorId])
   @@map("expense_records")
 }
 
