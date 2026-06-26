@@ -6,6 +6,7 @@ import { EmptyState, ErrorState, Spinner } from '@/components/ui/feedback';
 import { formatDate, formatMoney } from '@/lib/domain';
 import { getErrorMessage } from '@/lib/errors';
 import { useIncome, useRegisterPayment } from '@/hooks/useFinance';
+import { MonthFilter } from '@/components/MonthFilter';
 
 type Estado = 'receivable' | 'overdue' | 'paid' | 'cancelled';
 
@@ -22,10 +23,12 @@ export function ReceivablesTab({
   organizationId?: string;
 }) {
   const [estado, setEstado] = useState<Estado>('receivable');
+  const [month, setMonth] = useState<string | undefined>();
 
   const { data: rows = [], isLoading, isError, error } = useIncome({
     organizationId,
     paymentState: estado,
+    month,
   });
   const registrar = useRegisterPayment();
 
@@ -41,21 +44,30 @@ export function ReceivablesTab({
 
   return (
     <div className="space-y-5">
-      {/* Filtros de estado */}
-      <div className="inline-flex rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-card)] p-1 gap-1">
-        {ESTADOS.map((e) => (
-          <button
-            key={e.value}
-            onClick={() => setEstado(e.value)}
-            className={
-              estado === e.value
-                ? 'rounded-md px-4 py-1.5 text-sm font-medium bg-[var(--color-primary)] text-white transition-colors'
-                : 'rounded-md px-4 py-1.5 text-sm font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors'
-            }
-          >
-            {e.label}
-          </button>
-        ))}
+      {/* Filtros de estado + mes */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="inline-flex rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-card)] p-1 gap-1">
+          {ESTADOS.map((e) => (
+            <button
+              key={e.value}
+              onClick={() => setEstado(e.value)}
+              className={
+                estado === e.value
+                  ? 'rounded-md px-4 py-1.5 text-sm font-medium bg-[var(--color-primary)] text-white transition-colors'
+                  : 'rounded-md px-4 py-1.5 text-sm font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors'
+              }
+            >
+              {e.label}
+            </button>
+          ))}
+        </div>
+        <div className="w-48">
+          <MonthFilter
+            organizationId={organizationId}
+            value={month}
+            onChange={setMonth}
+          />
+        </div>
       </div>
 
       <Card className="overflow-hidden">
