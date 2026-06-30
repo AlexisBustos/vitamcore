@@ -146,40 +146,8 @@ export const recurrenceLabels: Record<RecurrenceFrequency, string> = {
 };
 
 // ---- Categorías de movimientos bancarios ----
-
-export type BankCategory =
-  | 'TRASPASO_INTERNO' | 'FONASA' | 'VENTAS' | 'TRANSFER_IN'
-  | 'COMBUSTIBLE' | 'CREDITOS' | 'IMPUESTOS' | 'COMISIONES'
-  | 'HONORARIOS' | 'PROVEEDORES';
-
-export const bankCategory: Record<BankCategory, Tone> = {
-  VENTAS: { label: 'Ventas / Recaudación', className: 'bg-emerald-50 text-emerald-700' },
-  FONASA: { label: 'Fonasa / Prestaciones', className: 'bg-emerald-50 text-emerald-700' },
-  TRANSFER_IN: { label: 'Transferencias recibidas', className: 'bg-sky-50 text-sky-700' },
-  HONORARIOS: { label: 'Honorarios / Sueldos', className: 'bg-amber-50 text-amber-700' },
-  PROVEEDORES: { label: 'Proveedores', className: 'bg-orange-50 text-orange-700' },
-  COMBUSTIBLE: { label: 'Combustible', className: 'bg-orange-50 text-orange-700' },
-  IMPUESTOS: { label: 'Impuestos', className: 'bg-red-50 text-red-700' },
-  CREDITOS: { label: 'Créditos / Deuda', className: 'bg-red-50 text-red-700' },
-  COMISIONES: { label: 'Comisiones bancarias', className: 'bg-slate-100 text-slate-600' },
-  TRASPASO_INTERNO: { label: 'Traspaso entre cuentas', className: 'bg-slate-100 text-slate-500' },
-};
-
-export const bankCategoryType: Record<BankCategory, 'INCOME' | 'EXPENSE' | 'NEUTRAL'> = {
-  TRASPASO_INTERNO: 'NEUTRAL',
-  FONASA: 'INCOME', VENTAS: 'INCOME', TRANSFER_IN: 'INCOME',
-  COMBUSTIBLE: 'EXPENSE', CREDITOS: 'EXPENSE', IMPUESTOS: 'EXPENSE',
-  COMISIONES: 'EXPENSE', HONORARIOS: 'EXPENSE', PROVEEDORES: 'EXPENSE',
-};
-
-/** Label de una categoría (o 'Sin categoría' si es null/desconocida). */
-export function bankCategoryLabel(c: string | null): string {
-  return c && c in bankCategory ? bankCategory[c as BankCategory].label : 'Sin categoría';
-}
-
-export const bankCategoryOptions = (Object.keys(bankCategory) as BankCategory[]).map(
-  (value) => ({ value, label: bankCategory[value].label }),
-);
+// La presentación de categorías vive ahora en BD (ver useBankCategories); aquí
+// solo queda el color por tipo (kind) para el punto indicador en la tabla.
 
 // Color sólido por tipo, pensado para el punto de la celda (visible en 2×2).
 const bankKindColor: Record<BankCategoryKind, string> = {
