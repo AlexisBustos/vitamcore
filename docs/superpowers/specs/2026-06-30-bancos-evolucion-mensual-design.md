@@ -81,8 +81,9 @@ cuenta), **por cuenta y por mes**:
 
 **Ensamblado en JS** (`service`):
 
-- Construir el rango de meses `[mesMín … mesMáx]` (continuo, sin huecos) entre el primer y el
-  último movimiento del conjunto filtrado.
+- Construir el rango de meses `[mesMín … mesMáx]` (continuo, sin huecos) tomando el **mínimo y
+  máximo de las claves de mes** que devuelven las dos consultas `$queryRaw` (ambas comparten
+  el mismo grano `YYYY-MM`); no hace falta una tercera consulta.
 - **Por cada cuenta**, recorrer los meses en orden cronológico y construir su serie de cierre:
   - Si la cuenta tiene cierre propio ese mes → ese valor.
   - Si no, **arrastrar** el cierre del mes anterior de esa cuenta (carry-forward).
@@ -112,11 +113,10 @@ type BankMonthlyPoint = {
 Todo en el módulo existente `modules/finance-imports`.
 
 ### 1. Schema (`finance-imports.schema.ts`)
-- Reutilizar `listAccountsQuery`/el `.pick` ya usado por months: el endpoint solo necesita
-  `organizationId?` y `bankAccountId?`. Agregar `listMonthlyQuery = z.object({ organizationId:
-  z.string().optional(), bankAccountId: z.string().optional() })` (o reutilizar
-  `listTransactionsQuery.pick({ organizationId: true, bankAccountId: true })`, como hace
-  `listTransactionMonthsController`). Exportar `ListMonthlyFilters`.
+- El endpoint solo necesita `organizationId?` y `bankAccountId?`. **Reutilizar**
+  `listTransactionsQuery.pick({ organizationId: true, bankAccountId: true })` en el controller,
+  idéntico a como ya lo hace `listTransactionMonthsController` (no crear un schema nuevo, para
+  no bifurcar la convención).
 
 ### 2. Service (`finance-imports.service.ts`)
 - Nueva función `listBankMonthly(filters: { organizationId?: string; bankAccountId?: string })`
@@ -165,13 +165,16 @@ Todo en el módulo existente `modules/finance-imports`.
     agregar un helper local `formatMonth` si no existe uno reutilizable).
 - **Aclaración del "Caja total"** (decisión 3): cambiar el `hint` de la `MetricCard` "Caja
   total" para incluir la fecha de la foto, p. ej. ``${n} cuenta(s) · al ${formatDate(maxLastMovementDate)}``
-  donde `maxLastMovementDate` = máximo `lastMovementDate` de las cuentas. Si no hay
-  movimientos, mantener solo el conteo.
+  donde `maxLastMovementDate` = máximo `lastMovementDate` de las cuentas. `lastMovementDate`
+  es un string ISO: comparar como fechas parseadas (o strings ISO lexicográficamente), **no**
+  con `Math.max` sobre el raw. Si no hay movimientos, mantener solo el conteo.
 
 ### 8. Formateo de mes
 - Helper `formatMonth(ym: string)` que convierte `'2026-05'` → `'May 2026'` (en español).
-  Si ya existe algo equivalente en `lib/domain.ts`, reutilizarlo; si no, agregarlo ahí
-  (junto a `formatDate`/`formatMoney`) para que sea reutilizable por otros sub-proyectos.
+  No existe en `lib/domain.ts` (solo `formatDate`/`formatMoney`): agregarlo ahí para que sea
+  reutilizable por otros sub-proyectos. Ojo: `toLocaleDateString('es-CL', { month: 'short' })`
+  devuelve el mes en **minúscula** (`'may'`); capitalizar explícitamente la inicial si se
+  quiere `'May 2026'`.
 
 ## Archivos afectados
 
@@ -208,5 +211,5 @@ Sin framework de tests; verificación = typecheck + prueba manual.
   2. Filtrar por **Banco Chile 1** muestra su serie propia (cierre de mayo = $5.715.731);
      por **Banco Chile 2**, $9.483.292.
   3. El flujo neto de cada mes cuadra con abonos − cargos.
-  4. La tarjeta "Caja total" muestra "2 cuentas · al 29 may".
+  4. La tarjeta "Caja total" muestra "2 cuenta(s) · al 29 may 2026" (formato de `formatDate`).
   5. Filtrar por Vitam Tech (sin cuentas) no rompe la pestaña.
