@@ -7,6 +7,7 @@ import { formatDate, formatMoney } from '@/lib/domain';
 import { getErrorMessage } from '@/lib/errors';
 import { useIncome, useIncomeMonths, useRegisterPayment } from '@/hooks/useFinance';
 import { MonthFilter } from '@/components/MonthFilter';
+import { ReconcileModal } from './ReconcileModal';
 
 type Estado = 'receivable' | 'overdue' | 'paid' | 'cancelled';
 
@@ -24,6 +25,7 @@ export function ReceivablesTab({
 }) {
   const [estado, setEstado] = useState<Estado>('receivable');
   const [month, setMonth] = useState<string | undefined>();
+  const [reconciling, setReconciling] = useState<typeof rows[number] | null>(null);
 
   const { data: rows = [], isLoading, isError, error } = useIncome({
     organizationId,
@@ -138,19 +140,8 @@ export function ReceivablesTab({
                           Revertir
                         </Button>
                       ) : (
-                        <Button
-                          onClick={() =>
-                            registrar.mutate({
-                              id: r.id,
-                              // Fecha LOCAL (no toISOString, que daría la fecha UTC:
-                              // de madrugada en Chile UTC-3/-4 registraría el día anterior).
-                              // 'en-CA' produce YYYY-MM-DD en la zona horaria local.
-                              paidDate: new Date().toLocaleDateString('en-CA'),
-                            })
-                          }
-                          disabled={registrar.isPending}
-                        >
-                          Marcar pagada
+                        <Button onClick={() => setReconciling(r)} disabled={registrar.isPending}>
+                          Conciliar
                         </Button>
                       )}
                     </td>
@@ -165,6 +156,35 @@ export function ReceivablesTab({
       {registrar.isError && (
         <ErrorState message={getErrorMessage(registrar.error)} />
       )}
+
+      <ReconcileModal
+        open={!!reconciling}
+        onClose={() => setReconciling(null)}
+        recordType="income"
+        record={
+          reconciling
+            ? {
+                id: reconciling.id,
+                name: reconciling.clientName ?? '—',
+                folio: reconciling.sourceFolio ?? null,
+                amount: reconciling.netAmount ?? reconciling.amount,
+              }
+            : null
+        }
+        pending={registrar.isPending}
+        onReconcile={(bankTransactionId) => {
+          if (reconciling) registrar.mutate({ id: reconciling.id, bankTransactionId });
+          setReconciling(null);
+        }}
+        onPayManual={() => {
+          if (reconciling)
+            registrar.mutate({
+              id: reconciling.id,
+              paidDate: new Date().toLocaleDateString('en-CA'),
+            });
+          setReconciling(null);
+        }}
+      />
     </div>
   );
 }
