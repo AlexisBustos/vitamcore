@@ -57,7 +57,8 @@ sub-proyecto D.
 ## Motor de sugerencias (candidatos)
 
 `listReconciliationCandidates({ recordType: 'income' | 'expense', recordId, search? })` en
-`finance-imports.service.ts` (es el lado banco):
+`finance-imports.service.ts` (es el lado banco). Que lea `incomeRecord`/`expenseRecord` desde acá
+es consistente con el módulo (ya hay precedente: `getExistingDedupeKeys` consulta income/expense).
 
 1. Cargar el registro:
    - income → `organizationId`, monto objetivo = `netAmount ?? amount`, fecha ref = `incomeDate ?? dueDate`.
@@ -65,9 +66,11 @@ sub-proyecto D.
    - 404 si no existe.
 2. Traer movimientos candidatos con Prisma `findMany` (dataset chico, ranking en JS):
    - **Misma empresa** y **dirección correcta**: income → `creditAmount > 0`; expense → `chargeAmount > 0`.
-   - Si viene `search`: filtrar además `description contains search (insensitive)` **o** monto
-     que contenga el dígito (simplemente filtrar por descripción; el monto se ve en la lista).
-   - `take: 100`, `orderBy: { transactionDate: 'desc' }`.
+   - Si viene `search`: filtrar por `description contains search (insensitive)`. (Solo por
+     descripción; el monto del movimiento es visible en la lista del modal.)
+   - Para no perder un calce exacto antiguo por el recorte de recientes, traer la **unión** de:
+     (a) movimientos con monto **exacto** al objetivo (sin tope de recencia), y (b) los 100 más
+     recientes (`orderBy: { transactionDate: 'desc' }, take: 100`). Dedupe por id.
 3. **Ranking en JS** y top 8:
    - `amount` del movimiento = `creditAmount` (income) / `chargeAmount` (expense).
    - `exact = (amount === objetivo)`.
@@ -82,17 +85,27 @@ sub-proyecto D.
 
 Extender **ambos** `registerPayment` (income y expenses) con `bankTransactionId` opcional.
 
-- `registerPaymentSchema`: agregar `bankTransactionId: z.string().optional().nullable()`.
-- Service (income; expenses espejo):
+- `registerPaymentSchema` (en income y en expenses): agregar
+  `bankTransactionId: z.string().optional().nullable()`.
+- **Precedencia**: si llegan ambos campos, **`bankTransactionId` manda** y el `paidDate` del body
+  se ignora (la fecha de pago se deriva del movimiento).
+- **Ampliar el `select` del `findUnique` actual** para incluir `organizationId` (hoy income
+  selecciona `{id, documentKind, netAmount}` y expense `{id, status}`): se necesita para validar
+  la empresa.
+- Lógica (income y expense comparten estructura, **pero NO las guardas** — ver abajo):
   - Si viene `bankTransactionId`: cargar el movimiento (`findUnique`), validar que existe, que es
-    de la **misma empresa** que la factura (`badRequest` si no) y que tiene la **dirección
+    de la **misma empresa** que el registro (`badRequest` si no) y que tiene la **dirección
     correcta** (income → `creditAmount > 0`; expense → `chargeAmount > 0`; `badRequest` si no).
     Fijar `paidByBankTransactionId = movimiento.id`, `paidDate = movimiento.transactionDate`,
     `status = PAID`.
   - Si **no** viene `bankTransactionId`: comportamiento actual — `paidDate = input.paidDate ?? null`,
     `status = paidDate ? PAID : INVOICED/PENDING`, y **`paidByBankTransactionId = null`** (revertir
     o pago manual limpian el enlace).
-  - Mantener las guardas actuales (NC no se cobra, factura anulada `netAmount===0` no se cobra).
+- **Guardas (distintas en cada módulo, mantener las que ya existen)**:
+  - **income**: NC no se cobra (`documentKind === 'CREDIT_NOTE'`), factura anulada
+    (`netAmount === 0`) no se cobra.
+  - **expense**: gasto anulado (`status === 'CANCELLED'`) no se paga. `ExpenseRecord` **no tiene
+    `netAmount`** — no replicar esa guarda.
 
 ## Frontend
 
@@ -105,8 +118,9 @@ Extender **ambos** `registerPayment` (income y expenses) con `bankTransactionId`
   `GET /finance/imports/reconciliation/candidates`, key `['finance-imports','reconcile',...]`.
   `enabled` para no consultar hasta abrir el modal.
 - Extender `useRegisterPayment`/`useRegisterExpensePayment` para aceptar
-  `{ id, paidDate?, bankTransactionId? }` (siguen invalidando `invalidateFinance`; agregar
-  invalidación de `['finance-imports']` para refrescar el saldo/uso del movimiento).
+  `{ id, paidDate?, bankTransactionId? }`. Mantener lo que ya invalidan (ambos `invalidateFinance`;
+  además `useRegisterPayment` ya invalida `['clients']` — **no quitarlo**) y **agregar**
+  `['finance-imports']` para refrescar el estado/uso del movimiento.
 
 ### Componente `ReconcileModal` (`pages/finance/ReconcileModal.tsx`, nuevo)
 Reusado por ambas pestañas, parametrizado por `recordType`:
