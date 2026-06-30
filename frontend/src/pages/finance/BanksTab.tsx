@@ -6,19 +6,29 @@ import { MetricCard } from '@/components/ui/metric';
 import { Select } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { EmptyState, ErrorState, Spinner } from '@/components/ui/feedback';
-import { formatDate, formatMoney, formatMonth } from '@/lib/domain';
+import {
+  bankCategoryOptions,
+  formatDate,
+  formatMoney,
+  formatMonth,
+} from '@/lib/domain';
 import { getErrorMessage } from '@/lib/errors';
 import {
   useBankAccounts,
   useBankMonthly,
   useBankTransactions,
   useBankTransactionMonths,
+  useSetTransactionCategory,
 } from '@/hooks/useFinance';
+import { BankCategoryBreakdown } from './BankCategoryBreakdown';
 
 export function BanksTab({ organizationId }: { organizationId?: string }) {
   const [bankAccountId, setBankAccountId] = useState('');
   const [month, setMonth] = useState<string | undefined>();
   const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('');
+
+  const setCategoryMut = useSetTransactionCategory();
 
   const accounts = useBankAccounts(organizationId);
   const months = useBankTransactionMonths({
@@ -30,6 +40,7 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
     bankAccountId: bankAccountId || undefined,
     month,
     search: search || undefined,
+    category: category || undefined,
   });
   const monthly = useBankMonthly({
     organizationId,
@@ -186,8 +197,14 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
         </Card>
       )}
 
+      <BankCategoryBreakdown
+        organizationId={organizationId}
+        bankAccountId={bankAccountId || undefined}
+        month={month}
+      />
+
       {/* Filtros */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:max-w-3xl lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:max-w-5xl lg:grid-cols-4">
         <Select
           options={accountOptions}
           placeholder="Todas las cuentas"
@@ -198,6 +215,12 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
           months={months.data ?? []}
           value={month}
           onChange={setMonth}
+        />
+        <Select
+          options={[{ value: '__none__', label: 'Sin categoría' }, ...bankCategoryOptions]}
+          placeholder="Todas las categorías"
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
         />
         <Input
           placeholder="Buscar descripción…"
@@ -227,6 +250,7 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
                     <th className="px-4 py-3 font-medium">Cuenta</th>
                   )}
                   <th className="px-4 py-3 font-medium">Canal / Doc.</th>
+                  <th className="px-4 py-3 font-medium">Categoría</th>
                   <th className="px-4 py-3 text-right font-medium">Cargo</th>
                   <th className="px-4 py-3 text-right font-medium">Abono</th>
                   <th className="px-4 py-3 text-right font-medium">Saldo</th>
@@ -251,6 +275,21 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
                         .filter(Boolean)
                         .join(' · ') || '—'}
                     </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        <Select
+                          className="h-8 min-w-[150px] text-xs"
+                          options={[{ value: '', label: 'Sin categoría' }, ...bankCategoryOptions]}
+                          value={t.category ?? ''}
+                          onChange={(e) =>
+                            setCategoryMut.mutate({ id: t.id, category: e.target.value || null })
+                          }
+                        />
+                        {t.categoryManual && (
+                          <span title="Ajustada manualmente" className="text-[var(--color-muted-foreground)]">•</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-right text-[var(--color-danger)]">
                       {t.chargeAmount ? formatMoney(t.chargeAmount) : '—'}
                     </td>
@@ -268,7 +307,7 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
                   <tr>
                     <td
                       className="px-4 py-3 font-medium text-[var(--color-muted-foreground)]"
-                      colSpan={showAccountColumn ? 4 : 3}
+                      colSpan={showAccountColumn ? 5 : 4}
                     >
                       {totals.count} movimiento(s) · neto del período{' '}
                       <span
