@@ -383,16 +383,20 @@ import {
 import type { CreateRuleInput, UpdateRuleInput } from './category-rules.schema';
 
 /// Reglas activas ordenadas por priority asc (forma que consume categorizeWith).
+/// Desempate por createdAt para que el first-match-wins sea determinista si dos
+/// reglas comparten priority (posible tras re-seed con reglas de usuario).
 export async function getActiveRules() {
   return prisma.bankCategoryRule.findMany({
     where: { active: true },
-    orderBy: { priority: 'asc' },
+    orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
     select: { categoryKey: true, matchText: true, direction: true },
   });
 }
 
 export async function listRules() {
-  return prisma.bankCategoryRule.findMany({ orderBy: { priority: 'asc' } });
+  return prisma.bankCategoryRule.findMany({
+    orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
+  });
 }
 
 async function assertCategoryExists(categoryKey: string) {
@@ -730,7 +734,9 @@ apiRouter.use('/finance/category-rules', requireAuth, financeCategoryRulesRouter
 # Vía psql tras llamar el endpoint, revisar la distribución:
 docker exec -i vitamcore-postgres psql -U postgres -d vitamcore -c "SELECT COALESCE(category,'(null)') AS categoria, count(*) FROM bank_transactions GROUP BY category ORDER BY 1;"
 ```
-Expected: **misma distribución** que el snapshot previo, salvo a lo más unos pocos movimientos que ahora calzan por la normalización sin tildes (mejora esperada). Un descalce grande indica un error de traducción de reglas: revisar antes de seguir.
+Expected: **misma distribución** que el snapshot previo, salvo a lo más unos pocos movimientos que ahora calzan por **dos ampliaciones esperadas** (ambas inherentes al modelo aprobado, no regresiones): (a) la normalización quita tildes; (b) las reglas pasan de `startsWith` a "contiene" (`includes`), así que un texto que aparezca a mitad de la descripción ahora también calza. Un descalce **grande** sí indica un error de traducción de reglas: revisar antes de seguir.
+
+**Snapshot de referencia (capturado en Chunk 1, sobre 681 movimientos):** `(null)` 24, COMBUSTIBLE 19, COMISIONES 5, CREDITOS 14, FONASA 18, HONORARIOS 255, IMPUESTOS 4, PROVEEDORES 53, TRANSFER_IN 41, TRASPASO_INTERNO 66, VENTAS 182.
 
 - [ ] **Step 8: Commit**
 ```bash
@@ -835,7 +841,7 @@ financeImportsRouter.post(
 );
 ```
 
-- [ ] **Step 6: Limpiar el categorizador** — en `finance-imports.categories.ts`, **eliminar** `BANK_CATEGORIES`, `BankCategory` (type), `BankCategoryType`, `BANK_CATEGORY_TYPE`, `Rule`, `RULES` y `categorize`. Dejar solo `RuleDirection`, `normalizeText` y `categorizeWith`.
+- [ ] **Step 6: Limpiar el categorizador** — en `finance-imports.categories.ts`, **eliminar** `BANK_CATEGORIES`, `BankCategory` (type), `BankCategoryType`, `BANK_CATEGORY_TYPE`, `Rule`, `RULES` y `categorize`. Dejar solo `RuleDirection`, `normalizeText` y `categorizeWith`. Actualizar el comentario de cabecera del archivo (hoy dice "Única fuente de verdad: la usa el import (createRow) y el backfill") para reflejar que las reglas ahora viven en BD y este archivo solo expone la normalización + la función pura de matching.
 
 - [ ] **Step 7: Actualizar el backfill** — `prisma/scripts/categorize-backfill.ts` ya no puede importar `categorize`. Reescribir su `main` para cargar reglas de BD:
 ```ts
