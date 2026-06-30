@@ -7,6 +7,7 @@ import {
   listByCategoryQuery,
   listTransactionsQuery,
   previewImportSchema,
+  reconciliationCandidatesQuery,
   setCategorySchema,
   updateBankAccountSchema,
 } from './finance-imports.schema';
@@ -80,4 +81,9 @@ export async function listMonthlyController(req: Request, res: Response) {
 
 export async function getBatchController(req: Request, res: Response) {
   res.json({ data: await service.getBatch(req.params.id) });
+}
+
+export async function reconciliationCandidatesController(req: Request, res: Response) {
+  const filters = reconciliationCandidatesQuery.parse(req.query);
+  res.json({ data: await service.listReconciliationCandidates(filters) });
 }

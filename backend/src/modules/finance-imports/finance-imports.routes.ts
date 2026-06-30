@@ -12,6 +12,7 @@ import {
   listTransactionMonthsController,
   listTransactionsController,
   previewController,
+  reconciliationCandidatesController,
   setCategoryController,
   updateAccountController,
 } from './finance-imports.controller';
@@ -51,5 +52,9 @@ financeImportsRouter.get(
 financeImportsRouter.patch(
   '/transactions/:id/category',
   asyncHandler(setCategoryController),
+);
+financeImportsRouter.get(
+  '/reconciliation/candidates',
+  asyncHandler(reconciliationCandidatesController),
 );
 financeImportsRouter.get('/transactions', asyncHandler(listTransactionsController));

@@ -71,6 +71,13 @@ export const setCategorySchema = z.object({
   category: z.enum(BANK_CATEGORIES).nullable(),
 });
 
+export const reconciliationCandidatesQuery = z.object({
+  recordType: z.enum(['income', 'expense']),
+  recordId: z.string().min(1),
+  search: z.string().trim().optional(),
+});
+export type ReconciliationCandidatesFilters = z.infer<typeof reconciliationCandidatesQuery>;
+
 export type CreateBankAccountInput = z.infer<typeof createBankAccountSchema>;
 export type UpdateBankAccountInput = z.infer<typeof updateBankAccountSchema>;
 export type PreviewImportInput = z.infer<typeof previewImportSchema>;
