@@ -3,11 +3,13 @@ import { ArrowLeft, FileText } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { MetricCard } from '@/components/ui/metric';
 import { Spinner, ErrorState, EmptyState } from '@/components/ui/feedback';
 import { formatDate, formatMoney } from '@/lib/domain';
 import { getErrorMessage } from '@/lib/errors';
 import { useVendorDetail } from '@/hooks/useVendors';
+import { useRegisterExpensePayment } from '@/hooks/useFinance';
 import type { ExpenseRecord } from '@/types/domain';
 
 type EstadoPago = 'paid' | 'overdue' | 'pending' | 'cancelled';
@@ -37,6 +39,7 @@ function estadoPago(exp: ExpenseRecord): EstadoPago {
 export function VendorDetailPage() {
   const { id } = useParams();
   const { data: vendor, isLoading, isError, error } = useVendorDetail(id);
+  const registrar = useRegisterExpensePayment();
 
   return (
     <div className="space-y-6">
@@ -97,6 +100,7 @@ export function VendorDetailPage() {
                       <th className="px-4 py-3 font-medium">Descripción</th>
                       <th className="px-4 py-3 text-right font-medium">Monto</th>
                       <th className="px-4 py-3 font-medium">Estado</th>
+                      <th className="px-4 py-3 font-medium">Acción</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--color-border)]">
@@ -122,6 +126,37 @@ export function VendorDetailPage() {
                               {ESTADO_LABEL[estado]}
                             </Badge>
                           </td>
+                          <td className="px-4 py-3">
+                            {exp.status === 'CANCELLED' ? (
+                              <span className="text-[var(--color-muted-foreground)]">
+                                —
+                              </span>
+                            ) : exp.paidDate ? (
+                              <Button
+                                variant="outline"
+                                onClick={() =>
+                                  registrar.mutate({ id: exp.id, paidDate: null })
+                                }
+                                disabled={registrar.isPending}
+                              >
+                                Revertir
+                              </Button>
+                            ) : (
+                              <Button
+                                onClick={() =>
+                                  registrar.mutate({
+                                    id: exp.id,
+                                    // Fecha LOCAL (YYYY-MM-DD); no toISOString() para
+                                    // no registrar el día anterior por desfase UTC.
+                                    paidDate: new Date().toLocaleDateString('en-CA'),
+                                  })
+                                }
+                                disabled={registrar.isPending}
+                              >
+                                Marcar pagada
+                              </Button>
+                            )}
+                          </td>
                         </tr>
                       );
                     })}
@@ -129,6 +164,10 @@ export function VendorDetailPage() {
                 </table>
               </div>
             </Card>
+          )}
+
+          {registrar.isError && (
+            <ErrorState message={getErrorMessage(registrar.error)} />
           )}
         </>
       )}
