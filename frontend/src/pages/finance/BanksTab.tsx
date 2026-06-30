@@ -1,13 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Landmark, Wallet } from 'lucide-react';
 import { MonthFilter } from '@/components/MonthFilter';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { MetricCard } from '@/components/ui/metric';
 import { Select } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { EmptyState, ErrorState, Spinner } from '@/components/ui/feedback';
 import {
-  bankCategoryOptions,
+  bankKindClassName,
   formatDate,
   formatMoney,
   formatMonth,
@@ -15,12 +16,16 @@ import {
 import { getErrorMessage } from '@/lib/errors';
 import {
   useBankAccounts,
+  useBankCategories,
   useBankMonthly,
   useBankTransactions,
   useBankTransactionMonths,
+  useBulkSetCategory,
   useSetTransactionCategory,
 } from '@/hooks/useFinance';
 import { BankCategoryBreakdown } from './BankCategoryBreakdown';
+import { CategoryRulesPanel } from './CategoryRulesPanel';
+import { CreateRuleFromMovement } from './CreateRuleFromMovement';
 
 export function BanksTab({ organizationId }: { organizationId?: string }) {
   const [bankAccountId, setBankAccountId] = useState('');
@@ -29,6 +34,17 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
   const [category, setCategory] = useState('');
 
   const setCategoryMut = useSetTransactionCategory();
+
+  const categoriesQuery = useBankCategories();
+  const categoryOptions = (categoriesQuery.data ?? [])
+    .filter((c) => c.active)
+    .map((c) => ({ value: c.key, label: c.name }));
+  const bulkSet = useBulkSetCategory();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [panelOpen, setPanelOpen] = useState(false);
+
+  // Limpia la selección al cambiar de filtros para no arrastrar ids fuera de vista.
+  useEffect(() => setSelected(new Set()), [bankAccountId, month, search, category]);
 
   const accounts = useBankAccounts(organizationId);
   const months = useBankTransactionMonths({
@@ -203,6 +219,11 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
         month={month}
       />
 
+      {/* Acciones de categorías */}
+      <div className="flex justify-end">
+        <Button variant="outline" onClick={() => setPanelOpen(true)}>Gestionar categorías y reglas</Button>
+      </div>
+
       {/* Filtros */}
       <div className="grid gap-3 sm:grid-cols-2 lg:max-w-5xl lg:grid-cols-4">
         <Select
@@ -217,7 +238,7 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
           onChange={setMonth}
         />
         <Select
-          options={[{ value: '__none__', label: 'Sin categoría' }, ...bankCategoryOptions]}
+          options={[{ value: '__none__', label: 'Sin categoría' }, ...categoryOptions]}
           placeholder="Todas las categorías"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
@@ -238,12 +259,45 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
         <EmptyState title="Sin movimientos para los filtros seleccionados" />
       )}
 
+      {selected.size > 0 && (
+        <div className="flex items-center gap-2 rounded-[var(--radius)] bg-[var(--color-muted)] px-3 py-2 text-sm">
+          <span>{selected.size} seleccionados</span>
+          <Select
+            className="h-8 w-48"
+            options={[{ value: '', label: 'Sin categoría' }, ...categoryOptions]}
+            placeholder="Asignar categoría…"
+            value=""
+            onChange={async (e) => {
+              await bulkSet.mutateAsync({ ids: [...selected], category: e.target.value || null });
+              setSelected(new Set());
+            }}
+          />
+          <Button variant="outline" onClick={() => setSelected(new Set())}>Limpiar</Button>
+        </div>
+      )}
+
       {movements.data && movements.data.transactions.length > 0 && (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-[var(--color-muted)] text-left text-xs text-[var(--color-muted-foreground)]">
                 <tr>
+                  <th className="px-2 py-3">
+                    <input
+                      type="checkbox"
+                      checked={
+                        (movements.data?.transactions.length ?? 0) > 0 &&
+                        selected.size === movements.data?.transactions.length
+                      }
+                      onChange={(e) =>
+                        setSelected(
+                          e.target.checked
+                            ? new Set((movements.data?.transactions ?? []).map((t) => t.id))
+                            : new Set(),
+                        )
+                      }
+                    />
+                  </th>
                   <th className="px-4 py-3 font-medium">Fecha</th>
                   <th className="px-4 py-3 font-medium">Descripción</th>
                   {showAccountColumn && (
@@ -259,6 +313,17 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
               <tbody className="divide-y divide-[var(--color-border)]">
                 {movements.data.transactions.map((t) => (
                   <tr key={t.id} className="hover:bg-[var(--color-muted)]/40">
+                    <td className="px-2 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(t.id)}
+                        onChange={(e) => {
+                          const next = new Set(selected);
+                          e.target.checked ? next.add(t.id) : next.delete(t.id);
+                          setSelected(next);
+                        }}
+                      />
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3 text-[var(--color-muted-foreground)]">
                       {formatDate(t.transactionDate)}
                     </td>
@@ -276,10 +341,16 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
                         .join(' · ') || '—'}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
+                      <div className="relative flex items-center gap-1">
+                        <span
+                          className={`inline-block h-2 w-2 rounded-full ${bankKindClassName(
+                            (categoriesQuery.data ?? []).find((c) => c.key === t.category)?.kind,
+                          )}`}
+                          title="Tipo de la categoría"
+                        />
                         <Select
                           className="h-8 min-w-[150px] text-xs"
-                          options={[{ value: '', label: 'Sin categoría' }, ...bankCategoryOptions]}
+                          options={[{ value: '', label: 'Sin categoría' }, ...categoryOptions]}
                           value={t.category ?? ''}
                           onChange={(e) =>
                             setCategoryMut.mutate({ id: t.id, category: e.target.value || null })
@@ -288,6 +359,12 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
                         {t.categoryManual && (
                           <span title="Ajustada manualmente" className="text-[var(--color-muted-foreground)]">•</span>
                         )}
+                        <CreateRuleFromMovement
+                          description={t.description}
+                          isCharge={t.chargeAmount > 0}
+                          pinned={t.categoryManual}
+                          categories={categoriesQuery.data ?? []}
+                        />
                       </div>
                     </td>
                     <td className="px-4 py-3 text-right text-[var(--color-danger)]">
@@ -307,7 +384,7 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
                   <tr>
                     <td
                       className="px-4 py-3 font-medium text-[var(--color-muted-foreground)]"
-                      colSpan={showAccountColumn ? 5 : 4}
+                      colSpan={showAccountColumn ? 6 : 5}
                     >
                       {totals.count} movimiento(s) · neto del período{' '}
                       <span
@@ -341,6 +418,8 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
           </div>
         </Card>
       )}
+
+      <CategoryRulesPanel open={panelOpen} onClose={() => setPanelOpen(false)} />
     </div>
   );
 }
