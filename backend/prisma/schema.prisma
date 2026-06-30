@@ -642,6 +642,8 @@ model BankTransaction {
   chargeAmount    Int      @default(0)
   creditAmount    Int      @default(0)
   balance         Int?
+  category        String?
+  categoryManual  Boolean  @default(false)
   currency        String   @default("CLP")
   rawData         Json?
   dedupeKey       String
@@ -655,6 +657,7 @@ model BankTransaction {
   @@index([organizationId])
   @@index([bankAccountId])
   @@index([transactionDate])
+  @@index([category])
   @@map("bank_transactions")
 }
 
