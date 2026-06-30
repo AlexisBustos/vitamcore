@@ -2,7 +2,7 @@
  * Resumen financiero ejecutivo (ingresos + gastos).
  * Reutilizado por la página Finanzas y por el dashboard.
  */
-import type { ExpenseStatus, IncomeStatus } from '@prisma/client';
+import { Prisma, type ExpenseStatus, type IncomeStatus } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { currentMonthRange } from '../shared/dates';
 
@@ -237,5 +237,113 @@ export async function getSummary(organizationId?: string) {
       result: v.income - v.expense,
     })),
     upcomingFinancial,
+  };
+}
+
+export async function getFinancePosition(organizationId?: string) {
+  const orgFilter = organizationId ? { organizationId } : {};
+
+  const [cashRows, pendingSales, pendingManual, pendingExpense, orgs] =
+    await Promise.all([
+      prisma.$queryRaw<{ organizationId: string; caja: bigint }[]>(Prisma.sql`
+        SELECT ba."organizationId", COALESCE(SUM(last.balance), 0)::bigint AS caja
+        FROM "bank_accounts" ba
+        LEFT JOIN LATERAL (
+          SELECT t.balance FROM "bank_transactions" t
+          WHERE t."bankAccountId" = ba.id
+          ORDER BY t."transactionDate" DESC, t."createdAt" DESC
+          LIMIT 1
+        ) last ON true
+        WHERE ba."isActive" = true ${
+          organizationId
+            ? Prisma.sql`AND ba."organizationId" = ${organizationId}`
+            : Prisma.empty
+        }
+        GROUP BY ba."organizationId"
+      `),
+      prisma.incomeRecord.groupBy({
+        by: ['organizationId'],
+        _sum: { netAmount: true },
+        where: {
+          ...orgFilter,
+          documentKind: { not: 'CREDIT_NOTE' },
+          status: { not: 'CANCELLED' },
+          paidDate: null,
+          netAmount: { gt: 0 },
+        },
+      }),
+      prisma.incomeRecord.groupBy({
+        by: ['organizationId'],
+        _sum: { amount: true },
+        where: {
+          ...orgFilter,
+          documentKind: { not: 'CREDIT_NOTE' },
+          netAmount: null,
+          status: { in: INCOME_PENDING },
+        },
+      }),
+      prisma.expenseRecord.groupBy({
+        by: ['organizationId'],
+        _sum: { amount: true },
+        where: { ...orgFilter, status: { in: EXPENSE_PENDING } },
+      }),
+      prisma.organization.findMany({ select: { id: true, name: true } }),
+    ]);
+
+  const cashByOrg = new Map<string, number>();
+  for (const r of cashRows) cashByOrg.set(r.organizationId, Number(r.caja));
+
+  const recByOrg = new Map<string, number>();
+  for (const r of pendingSales) {
+    recByOrg.set(
+      r.organizationId,
+      (recByOrg.get(r.organizationId) ?? 0) + (r._sum.netAmount ?? 0),
+    );
+  }
+  for (const r of pendingManual) {
+    recByOrg.set(
+      r.organizationId,
+      (recByOrg.get(r.organizationId) ?? 0) + (r._sum.amount ?? 0),
+    );
+  }
+
+  const payByOrg = new Map<string, number>();
+  for (const r of pendingExpense) {
+    payByOrg.set(r.organizationId, r._sum.amount ?? 0);
+  }
+
+  const orgName = (id: string) => orgs.find((o) => o.id === id)?.name ?? id;
+  const ids = new Set<string>([
+    ...cashByOrg.keys(),
+    ...recByOrg.keys(),
+    ...payByOrg.keys(),
+  ]);
+
+  const byOrganization = [...ids]
+    .map((id) => {
+      const cash = cashByOrg.get(id) ?? 0;
+      const receivable = recByOrg.get(id) ?? 0;
+      const payable = payByOrg.get(id) ?? 0;
+      return {
+        id,
+        name: orgName(id),
+        cash,
+        receivable,
+        payable,
+        position: cash + receivable - payable,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const cash = byOrganization.reduce((s, o) => s + o.cash, 0);
+  const receivable = byOrganization.reduce((s, o) => s + o.receivable, 0);
+  const payable = byOrganization.reduce((s, o) => s + o.payable, 0);
+
+  return {
+    cash,
+    receivable,
+    payable,
+    position: cash + receivable - payable,
+    byOrganization,
   };
 }
