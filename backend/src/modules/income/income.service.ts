@@ -120,24 +120,45 @@ export async function update(id: string, input: UpdateIncomeInput) {
 export async function registerPayment(id: string, input: RegisterPaymentInput) {
   const rec = await prisma.incomeRecord.findUnique({
     where: { id },
-    select: { id: true, documentKind: true, netAmount: true },
+    select: { id: true, organizationId: true, documentKind: true, netAmount: true },
   });
   if (!rec) throw notFound('Ingreso no encontrado');
   if (rec.documentKind === 'CREDIT_NOTE') {
     throw badRequest('Una nota de crédito no se cobra');
   }
-  // netAmount === 0 = factura totalmente anulada por NC. netAmount null = ingreso
-  // manual (no importado): es cobrable, por eso solo bloqueamos el 0 explícito.
   if (rec.netAmount === 0) {
     throw badRequest('Una factura anulada no se cobra');
   }
-  // Normaliza undefined → null para que un body sin paidDate revierta el cobro.
+
+  if (input.bankTransactionId) {
+    const mov = await prisma.bankTransaction.findUnique({
+      where: { id: input.bankTransactionId },
+      select: { id: true, organizationId: true, creditAmount: true, transactionDate: true },
+    });
+    if (!mov) throw notFound('Movimiento no encontrado');
+    if (mov.organizationId !== rec.organizationId) {
+      throw badRequest('El movimiento no pertenece a la empresa del ingreso');
+    }
+    if (mov.creditAmount <= 0) {
+      throw badRequest('El movimiento no es un abono');
+    }
+    return prisma.incomeRecord.update({
+      where: { id },
+      data: {
+        paidByBankTransactionId: mov.id,
+        paidDate: mov.transactionDate,
+        status: 'PAID',
+      },
+    });
+  }
+
   const paidDate = input.paidDate ?? null;
   return prisma.incomeRecord.update({
     where: { id },
     data: {
       paidDate,
       status: paidDate ? 'PAID' : 'INVOICED',
+      paidByBankTransactionId: null,
     },
   });
 }

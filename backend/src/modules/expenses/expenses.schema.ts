@@ -59,5 +59,6 @@ export type ListExpenseFilters = z.infer<typeof listExpenseQuery>;
 
 export const registerPaymentSchema = z.object({
   paidDate: dateInput.nullable(),
+  bankTransactionId: z.string().optional().nullable(),
 });
 export type RegisterPaymentInput = z.infer<typeof registerPaymentSchema>;

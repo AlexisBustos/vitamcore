@@ -57,6 +57,7 @@ export const listIncomeQuery = z.object({
 
 export const registerPaymentSchema = z.object({
   paidDate: dateInput.nullable(),
+  bankTransactionId: z.string().optional().nullable(),
 });
 
 export type CreateIncomeInput = z.infer<typeof createIncomeSchema>;

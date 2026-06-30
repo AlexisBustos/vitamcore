@@ -113,16 +113,40 @@ export async function remove(id: string) {
 export async function registerPayment(id: string, input: RegisterPaymentInput) {
   const rec = await prisma.expenseRecord.findUnique({
     where: { id },
-    select: { id: true, status: true },
+    select: { id: true, organizationId: true, status: true },
   });
   if (!rec) throw notFound('Gasto no encontrado');
   if (rec.status === 'CANCELLED') throw badRequest('Un gasto anulado no se paga');
+
+  if (input.bankTransactionId) {
+    const mov = await prisma.bankTransaction.findUnique({
+      where: { id: input.bankTransactionId },
+      select: { id: true, organizationId: true, chargeAmount: true, transactionDate: true },
+    });
+    if (!mov) throw notFound('Movimiento no encontrado');
+    if (mov.organizationId !== rec.organizationId) {
+      throw badRequest('El movimiento no pertenece a la empresa del gasto');
+    }
+    if (mov.chargeAmount <= 0) {
+      throw badRequest('El movimiento no es un cargo');
+    }
+    return prisma.expenseRecord.update({
+      where: { id },
+      data: {
+        paidByBankTransactionId: mov.id,
+        paidDate: mov.transactionDate,
+        status: 'PAID',
+      },
+    });
+  }
+
   const paidDate = input.paidDate ?? null;
   return prisma.expenseRecord.update({
     where: { id },
     data: {
       paidDate,
       status: paidDate ? 'PAID' : 'PENDING',
+      paidByBankTransactionId: null,
     },
   });
 }
