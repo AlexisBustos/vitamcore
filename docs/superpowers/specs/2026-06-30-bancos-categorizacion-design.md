@@ -85,10 +85,15 @@ y `@@index([category])`. Migración: `prisma migrate dev --name bank_transaction
 Única fuente de verdad de categorías + reglas + función de clasificación.
 
 ```ts
-export type BankCategory =
-  | 'TRASPASO_INTERNO' | 'FONASA' | 'VENTAS' | 'TRANSFER_IN'
-  | 'COMBUSTIBLE' | 'CREDITOS' | 'IMPUESTOS' | 'COMISIONES'
-  | 'HONORARIOS' | 'PROVEEDORES';
+// Tupla `const` (NO `string[]`): necesaria para que `z.enum(BANK_CATEGORIES)` typechee
+// (z.enum exige una tupla no vacía `[string, ...string[]]`).
+export const BANK_CATEGORIES = [
+  'TRASPASO_INTERNO', 'FONASA', 'VENTAS', 'TRANSFER_IN',
+  'COMBUSTIBLE', 'CREDITOS', 'IMPUESTOS', 'COMISIONES',
+  'HONORARIOS', 'PROVEEDORES',
+] as const;
+
+export type BankCategory = (typeof BANK_CATEGORIES)[number];
 
 export type BankCategoryType = 'INCOME' | 'EXPENSE' | 'NEUTRAL';
 
@@ -98,8 +103,6 @@ export const BANK_CATEGORY_TYPE: Record<BankCategory, BankCategoryType> = {
   COMBUSTIBLE: 'EXPENSE', CREDITOS: 'EXPENSE', IMPUESTOS: 'EXPENSE',
   COMISIONES: 'EXPENSE', HONORARIOS: 'EXPENSE', PROVEEDORES: 'EXPENSE',
 };
-
-export const BANK_CATEGORIES = Object.keys(BANK_CATEGORY_TYPE) as BankCategory[];
 
 // Reglas ordenadas; la primera que calza gana. `when` opcional restringe por dirección.
 type Rule = { category: BankCategory; when?: 'charge' | 'credit'; test: (d: string) => boolean };
@@ -169,7 +172,12 @@ Se corre una vez tras la migración; y de nuevo cada vez que afinemos reglas.
 
 - `finance-imports.schema.ts`: `listByCategoryQuery = listTransactionsQuery.pick({ organizationId: true, bankAccountId: true, month: true })`.
 - `finance-imports.service.ts`: `listBankByCategory(filters)` → un `$queryRaw` que agrupa por
-  `category` (mismo patrón de condiciones org/cuenta/mes que `listBankMonthly`):
+  `category`. Construir las condiciones org/cuenta como en `listBankMonthly`, **más** el mes.
+  Ojo: `listBankMonthly` **no** filtra por mes; el mes solo existe en `listBankTransactions`,
+  resuelto en JS como rango `transactionDate` `gte/lt`. Acá hay que escribir ese rango **dentro
+  del `Prisma.sql`**: si viene `filters.month` (`'YYYY-MM'`), calcular en JS
+  `start = new Date(Date.UTC(y, m-1, 1))` y `end = new Date(Date.UTC(y, m, 1))` y agregar la
+  condición `Prisma.sql\`"transactionDate" >= ${start} AND "transactionDate" < ${end}\``.
   ```sql
   SELECT category,
          SUM("creditAmount")::bigint AS credits,
@@ -223,10 +231,13 @@ Se corre una vez tras la migración; y de nuevo cada vez que afinemos reglas.
   `categoryManual` es true (ej. punto o título "ajustada manualmente").
 - **Sección "De dónde entra / a dónde va"** (nueva, estilo la de evolución, entre evolución y
   filtros): consume `useBankByCategory` con los filtros activos. Dos bloques —**Ingresos** y
-  **Egresos**— listando categorías de ese tipo con monto y **% del total del bloque**; los
-  movimientos `null` se reparten por dirección ("Sin categoría" en ingresos si tienen abono, en
-  egresos si tienen cargo). **Traspasos internos** se muestran en una línea aparte, fuera de los
-  totales de ingreso/egreso.
+  **Egresos**— listando categorías de ese tipo con monto y **% del total del bloque**. **Monto
+  mostrado por categoría**: las categorías `INCOME` muestran su `credits`; las `EXPENSE` su
+  `charges` (una categoría puede tener filas en sentido contrario —ej. una devolución— pero se
+  ignoran para el monto del bloque, que mide el flujo dominante de esa categoría). El grupo
+  `null` ("Sin categoría") se reparte por dirección: aparece en **Ingresos** con su `credits` y
+  en **Egresos** con su `charges`. **Traspasos internos** (`TRASPASO_INTERNO`, tipo NEUTRAL) se
+  muestran en una línea aparte, fuera de los totales de ingreso/egreso.
 
 ## Nota de alcance: filtro por categoría en la tabla
 
@@ -234,6 +245,12 @@ Agregar `category?` a `listTransactionsQuery` y a `ListTransactionsFilters`, y a
 `listBankTransactions` (`category: filters.category` cuando venga; un valor especial `'__none__'`
 → `category: null` para "Sin categoría"). Es el único cambio al endpoint de movimientos
 existente.
+
+**Por qué dos sentinels distintos para `null`** (intencional, no unificar): el `Select` de
+override usa `value=""` → `null` (no tiene placeholder, "" ES "Sin categoría"). El `Select` de
+filtro **sí** tiene placeholder ("Todas las categorías"), que en `ui/select.tsx` ocupa el
+`<option value="">`; por eso "Sin categoría" necesita un valor propio `'__none__'` que el
+backend traduce a `category: null`.
 
 ## Archivos afectados
 
