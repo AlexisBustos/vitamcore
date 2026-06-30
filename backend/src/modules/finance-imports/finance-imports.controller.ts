@@ -57,6 +57,13 @@ export async function listTransactionMonthsController(
   res.json({ data: await service.listBankTransactionMonths(filters) });
 }
 
+export async function listMonthlyController(req: Request, res: Response) {
+  const filters = listTransactionsQuery
+    .pick({ organizationId: true, bankAccountId: true })
+    .parse(req.query);
+  res.json({ data: await service.listBankMonthly(filters) });
+}
+
 export async function getBatchController(req: Request, res: Response) {
   res.json({ data: await service.getBatch(req.params.id) });
 }

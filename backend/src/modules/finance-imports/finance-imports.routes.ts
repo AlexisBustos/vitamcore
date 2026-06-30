@@ -7,6 +7,7 @@ import {
   getBatchController,
   listAccountsController,
   listBatchesController,
+  listMonthlyController,
   listTransactionMonthsController,
   listTransactionsController,
   previewController,
@@ -36,5 +37,9 @@ financeImportsRouter.get('/batches/:id', asyncHandler(getBatchController));
 financeImportsRouter.get(
   '/transactions/months',
   asyncHandler(listTransactionMonthsController),
+);
+financeImportsRouter.get(
+  '/transactions/monthly',
+  asyncHandler(listMonthlyController),
 );
 financeImportsRouter.get('/transactions', asyncHandler(listTransactionsController));
