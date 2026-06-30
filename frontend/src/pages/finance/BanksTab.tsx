@@ -6,10 +6,11 @@ import { MetricCard } from '@/components/ui/metric';
 import { Select } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { EmptyState, ErrorState, Spinner } from '@/components/ui/feedback';
-import { formatDate, formatMoney } from '@/lib/domain';
+import { formatDate, formatMoney, formatMonth } from '@/lib/domain';
 import { getErrorMessage } from '@/lib/errors';
 import {
   useBankAccounts,
+  useBankMonthly,
   useBankTransactions,
   useBankTransactionMonths,
 } from '@/hooks/useFinance';
@@ -30,6 +31,10 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
     month,
     search: search || undefined,
   });
+  const monthly = useBankMonthly({
+    organizationId,
+    bankAccountId: bankAccountId || undefined,
+  });
 
   const accountOptions = useMemo(
     () =>
@@ -49,6 +54,20 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
         0,
       ),
     [accounts.data],
+  );
+
+  // Fecha del último movimiento entre todas las cuentas (string ISO →
+  // comparación lexicográfica, NO Math.max sobre el raw).
+  const lastMovementDate = useMemo(() => {
+    const dates = (accounts.data ?? [])
+      .map((a) => a.lastMovementDate)
+      .filter((d): d is string => Boolean(d));
+    return dates.length ? dates.reduce((a, b) => (a > b ? a : b)) : null;
+  }, [accounts.data]);
+
+  const maxClosing = useMemo(
+    () => Math.max(0, ...(monthly.data ?? []).map((m) => m.closingBalance)),
+    [monthly.data],
   );
 
   const showAccountColumn = !bankAccountId;
@@ -74,7 +93,11 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
         <MetricCard
           title="Caja total"
           value={formatMoney(totalCash)}
-          hint={`${accounts.data.length} cuenta(s)`}
+          hint={
+            lastMovementDate
+              ? `${accounts.data.length} cuenta(s) · al ${formatDate(lastMovementDate)}`
+              : `${accounts.data.length} cuenta(s)`
+          }
           icon={Wallet}
           tone="success"
         />
@@ -92,6 +115,76 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
           />
         ))}
       </div>
+
+      {/* Evolución mensual de caja */}
+      {monthly.isLoading && <Spinner label="Cargando evolución…" />}
+      {monthly.data && monthly.data.length > 0 && (
+        <Card className="overflow-hidden">
+          <div className="border-b border-[var(--color-border)] px-4 py-3">
+            <h3 className="text-sm font-semibold text-[var(--color-foreground)]">
+              Evolución mensual
+            </h3>
+            <p className="text-xs text-[var(--color-muted-foreground)]">
+              Saldo al cierre de cada mes según las cartolas cargadas.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-[var(--color-muted)] text-left text-xs text-[var(--color-muted-foreground)]">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Mes</th>
+                  <th className="px-4 py-3 text-right font-medium">Saldo al cierre</th>
+                  <th className="px-4 py-3 text-right font-medium">Flujo neto</th>
+                  <th className="px-4 py-3 text-right font-medium">Abonos</th>
+                  <th className="px-4 py-3 text-right font-medium">Cargos</th>
+                  <th className="px-4 py-3 font-medium">Tendencia</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-border)]">
+                {monthly.data.map((m) => (
+                  <tr key={m.month} className="hover:bg-[var(--color-muted)]/40">
+                    <td className="whitespace-nowrap px-4 py-3 font-medium text-[var(--color-foreground)]">
+                      {formatMonth(m.month)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-medium">
+                      {formatMoney(m.closingBalance)}
+                    </td>
+                    <td
+                      className={
+                        m.netFlow >= 0
+                          ? 'px-4 py-3 text-right font-medium text-[var(--color-success)]'
+                          : 'px-4 py-3 text-right font-medium text-[var(--color-danger)]'
+                      }
+                    >
+                      {formatMoney(m.netFlow)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-[var(--color-success)]">
+                      {m.credits ? formatMoney(m.credits) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-[var(--color-danger)]">
+                      {m.charges ? formatMoney(m.charges) : '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="h-2 w-full min-w-[80px] overflow-hidden rounded-full bg-[var(--color-muted)]">
+                        <div
+                          className="h-full rounded-full bg-[var(--color-primary)]"
+                          style={{
+                            width: `${
+                              maxClosing > 0
+                                ? Math.max(0, Math.min(100, (m.closingBalance / maxClosing) * 100))
+                                : 0
+                            }%`,
+                          }}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {/* Filtros */}
       <div className="grid gap-3 sm:grid-cols-2 lg:max-w-3xl lg:grid-cols-3">
