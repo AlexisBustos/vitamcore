@@ -139,16 +139,18 @@ todas las no pagadas. Hay un **modo preview** (`apply:false`, no escribe) y un *
 
 Algoritmo (por dirección, dos pasadas: income/credit y expense/charge):
 1. **Facturas candidatas** (income): `paidDate = null`, `netAmount > 0` (no NC ni anuladas), de la
-   empresa; **si hay `month`**, con fecha de emisión (`sourceIssueDate ?? incomeDate`) dentro de ese
-   rango. `target = netAmount ?? amount`. (Expense: `status != CANCELLED`, `paidDate = null`,
-   `target = amount`.)
+   empresa; **si hay `month`**, con la fecha de la factura (`sourceIssueDate ?? incomeDate ?? dueDate`,
+   misma del paso 4) dentro de ese rango. `target = netAmount ?? amount`. (Expense:
+   `status != CANCELLED`, `paidDate = null`, `target = amount`.)
 2. **Movimientos candidatos**: de la empresa, dirección correcta (`creditAmount > 0` para income /
    `chargeAmount > 0` para expense), **sin enlazar** (`_count.paidIncomes === 0` resp.
    `paidExpenses === 0`).
 3. Agrupar facturas por `target` y movimientos por su monto (`creditAmount`/`chargeAmount`).
 4. Para cada monto donde **hay exactamente una factura candidata y exactamente un movimiento
-   candidato** y el movimiento está dentro de **±60 días** de la fecha de la factura
-   (`incomeDate ?? dueDate`) → es un **par inequívoco**.
+   candidato** y el movimiento está dentro de **±60 días** de la fecha de la factura → es un **par
+   inequívoco**. **Fecha de la factura** = `sourceIssueDate ?? incomeDate ?? dueDate` (income) /
+   `sourceIssueDate ?? expenseDate ?? dueDate` (expense) — la **misma** expresión usada para acotar
+   por mes en el paso 1, para no mezclar criterios de fecha dentro del algoritmo.
 5. **Aplicar** (si `apply`): por cada par, en una `$transaction`, setear en la factura/gasto
    `paidByBankTransactionId = mov.id`, `paidDate = mov.transactionDate`, `status = PAID`
    (reusando exactamente la misma escritura que `registerPayment`).
@@ -201,10 +203,17 @@ export interface AutoReconcileResult { pairs: number; linkedIncome: number; link
 - `reconciliation?` añadido a los filtros de `useBankTransactions` (viaja por `toQuery`).
 
 ### 8. Consolidado / Resumen (`ConsolidatedPosition.tsx` + `FinanceSummaryTab.tsx` + `FinancePage.tsx`)
-- **Selector de mes**: `FinancePage` gana estado `consolidatedMonth` (string | undefined) y un
-  `MonthFilter` en la cabecera del Resumen (lista de `useBankTransactionMonths(organizationId)`),
-  con "Todos los meses" = vacío. Default: el **mes más reciente con datos** (primero de la lista).
-  Se pasa como prop a `ConsolidatedPosition`.
+- **Selector de mes**: `FinancePage` gana estado `consolidatedMonth` (string | undefined). El
+  `MonthFilter` (lista de `useBankTransactionMonths(organizationId)`, "Todos los meses" = vacío) se
+  rotula como del **Cuadre** ("Cuadre del mes:") para no confundir con "Ingresos/Gastos del mes"
+  que siguen siendo del mes actual del servidor. Default = el **mes más reciente con datos**
+  (primer elemento de la lista, que viene ordenada DESC): fijarlo con un `useEffect` cuando llega la
+  lista (carga async) si `consolidatedMonth` aún es `undefined` y el usuario no eligió "Todos".
+- **Cadena de props** (ya que `ConsolidatedPosition` se renderiza **dentro** de `FinanceSummaryTab`):
+  `FinancePage` pasa `consolidatedMonth` y el callback de deep-link a `FinanceSummaryTab`, y éste los
+  **reenvía** a `ConsolidatedPosition`. El `MonthFilter` puede vivir en la cabecera de
+  `FinanceSummaryTab` actualizando el estado de `FinancePage` (lifted) para que el callback de
+  deep-link —que necesita `setTab`— viva en `FinancePage`.
 - `ConsolidatedPosition` consume `useConsolidated({ organizationId, month })` (en vez de
   `useFinancePosition`). Las 4 tarjetas de posición son foto actual; debajo agrega el bloque
   **Cuadre** (título según el mes): dos filas (Abonos / Cargos) con total · conciliado · suelto, y
