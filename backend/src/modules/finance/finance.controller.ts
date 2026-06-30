@@ -8,3 +8,8 @@ export async function summaryController(req: Request, res: Response) {
   const { organizationId } = querySchema.parse(req.query);
   res.json({ data: await service.getSummary(organizationId) });
 }
+
+export async function positionController(req: Request, res: Response) {
+  const { organizationId } = querySchema.parse(req.query);
+  res.json({ data: await service.getFinancePosition(organizationId) });
+}
