@@ -387,6 +387,7 @@ export interface BankTransaction {
   currency: string;
   category: string | null;
   categoryManual: boolean;
+  reconciled: boolean;
   createdAt: string;
   organization?: Ref;
   bankAccount?: Pick<BankAccount, 'id' | 'name' | 'accountNumber'>;
@@ -495,20 +496,37 @@ export interface FinanceSummary {
   }[];
 }
 
-export interface FinancePositionOrg {
-  id: string;
+export interface ReconciliationSummary {
+  credits: { total: number; conciliado: number; suelto: number };
+  charges: { total: number; conciliado: number; suelto: number };
+  unlinkedCount: number;
+}
+
+export interface ConsolidatedOrg {
+  organizationId: string;
   name: string;
   cash: number;
   receivable: number;
   payable: number;
   position: number;
 }
-export interface FinancePosition {
+
+export interface ConsolidatedResponse {
   cash: number;
   receivable: number;
   payable: number;
   position: number;
-  byOrganization: FinancePositionOrg[];
+  overdueReceivable: { amount: number; count: number };
+  overduePayable: { amount: number; count: number };
+  byOrganization: ConsolidatedOrg[];
+  reconciliation: ReconciliationSummary;
+}
+
+export interface AutoReconcileResult {
+  pairs: number;
+  linkedIncome: number;
+  linkedExpense: number;
+  ambiguousAmounts: number;
 }
 
 export interface SalesSummary {
