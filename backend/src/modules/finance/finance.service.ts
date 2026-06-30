@@ -9,49 +9,21 @@ import { currentMonthRange } from '../shared/dates';
 const INCOME_PENDING: IncomeStatus[] = ['EXPECTED', 'INVOICED', 'OVERDUE'];
 const EXPENSE_PENDING: ExpenseStatus[] = ['PENDING', 'OVERDUE'];
 
-export async function getSummary(organizationId?: string) {
-  const orgFilter = organizationId ? { organizationId } : {};
-  const { start, end } = currentMonthRange();
-  const now = new Date();
+type RecPay = {
+  receivable: number;
+  payable: number;
+  byOrg: Map<string, { receivable: number; payable: number }>;
+};
 
-  const [
-    monthIncome,
-    monthExpense,
-    pendingSales,      // (antes pendingIncome) — dividido en ventas + manuales
-    pendingManual,
-    pendingExpense,
-    recurringIncome,
-    recurringExpense,
-    overdueSales,      // (antes overdueIncome) — dividido en ventas + manuales
-    overdueManual,
-    overdueExpense,
-    incomeByCategory,
-    expenseByCategory,
-    incomeByOrg,
-    expenseByOrg,
-    upcomingIncome,
-    upcomingExpense,
-    collectedIncome,   // nuevo — va al final
-  ] = await Promise.all([
-    // Totales del mes (por fecha de ingreso/gasto, excluyendo cancelados).
-    prisma.incomeRecord.aggregate({
-      _sum: { amount: true },
-      where: {
-        ...orgFilter,
-        incomeDate: { gte: start, lt: end },
-        status: { not: 'CANCELLED' },
-      },
-    }),
-    prisma.expenseRecord.aggregate({
-      _sum: { amount: true },
-      where: {
-        ...orgFilter,
-        expenseDate: { gte: start, lt: end },
-        status: { not: 'CANCELLED' },
-      },
-    }),
-    // Por cobrar (ventas): neto positivo, no pagado, excluye notas de crédito.
-    prisma.incomeRecord.aggregate({
+/**
+ * Por cobrar / por pagar por empresa + totales. Única fuente de verdad,
+ * reusada por getSummary y getConsolidated (antes estaba duplicada inline).
+ */
+async function computeReceivablePayable(organizationId?: string): Promise<RecPay> {
+  const orgFilter = organizationId ? { organizationId } : {};
+  const [pendingSales, pendingManual, pendingExpense] = await Promise.all([
+    prisma.incomeRecord.groupBy({
+      by: ['organizationId'],
       _sum: { netAmount: true },
       where: {
         ...orgFilter,
@@ -61,8 +33,8 @@ export async function getSummary(organizationId?: string) {
         netAmount: { gt: 0 },
       },
     }),
-    // Por cobrar (ingresos manuales): sin neto calculado, por estado clásico.
-    prisma.incomeRecord.aggregate({
+    prisma.incomeRecord.groupBy({
+      by: ['organizationId'],
       _sum: { amount: true },
       where: {
         ...orgFilter,
@@ -71,20 +43,43 @@ export async function getSummary(organizationId?: string) {
         status: { in: INCOME_PENDING },
       },
     }),
-    prisma.expenseRecord.aggregate({
+    prisma.expenseRecord.groupBy({
+      by: ['organizationId'],
       _sum: { amount: true },
       where: { ...orgFilter, status: { in: EXPENSE_PENDING } },
     }),
-    // Recurrentes.
-    prisma.incomeRecord.aggregate({
-      _sum: { amount: true },
-      where: { ...orgFilter, isRecurring: true, status: { not: 'CANCELLED' } },
-    }),
-    prisma.expenseRecord.aggregate({
-      _sum: { amount: true },
-      where: { ...orgFilter, isRecurring: true, status: { not: 'CANCELLED' } },
-    }),
-    // Vencido (ventas): por cobrar con dueDate pasado.
+  ]);
+
+  const byOrg = new Map<string, { receivable: number; payable: number }>();
+  const bump = (id: string, key: 'receivable' | 'payable', v: number) => {
+    const cur = byOrg.get(id) ?? { receivable: 0, payable: 0 };
+    cur[key] += v;
+    byOrg.set(id, cur);
+  };
+  for (const r of pendingSales) bump(r.organizationId, 'receivable', r._sum.netAmount ?? 0);
+  for (const r of pendingManual) bump(r.organizationId, 'receivable', r._sum.amount ?? 0);
+  for (const r of pendingExpense) bump(r.organizationId, 'payable', r._sum.amount ?? 0);
+
+  let receivable = 0;
+  let payable = 0;
+  for (const v of byOrg.values()) {
+    receivable += v.receivable;
+    payable += v.payable;
+  }
+  return { receivable, payable, byOrg };
+}
+
+/**
+ * Vencidos (por cobrar / por pagar). Extraído del inline de getSummary para
+ * reusarlo en getConsolidated sin duplicarlo.
+ */
+async function computeOverdue(organizationId?: string): Promise<{
+  overdueReceivable: { amount: number; count: number };
+  overduePayable: { amount: number; count: number };
+}> {
+  const orgFilter = organizationId ? { organizationId } : {};
+  const now = new Date();
+  const [overdueSales, overdueManual, overdueExpense] = await Promise.all([
     prisma.incomeRecord.aggregate({
       _sum: { netAmount: true },
       _count: { _all: true },
@@ -97,7 +92,6 @@ export async function getSummary(organizationId?: string) {
         dueDate: { lt: now },
       },
     }),
-    // Vencido (manuales).
     prisma.incomeRecord.aggregate({
       _sum: { amount: true },
       _count: { _all: true },
@@ -114,7 +108,63 @@ export async function getSummary(organizationId?: string) {
       _count: { _all: true },
       where: { ...orgFilter, dueDate: { lt: now }, status: { in: EXPENSE_PENDING } },
     }),
-    // Desglose por categoría.
+  ]);
+  return {
+    overdueReceivable: {
+      count: overdueSales._count._all + overdueManual._count._all,
+      amount: (overdueSales._sum.netAmount ?? 0) + (overdueManual._sum.amount ?? 0),
+    },
+    overduePayable: {
+      count: overdueExpense._count._all,
+      amount: overdueExpense._sum.amount ?? 0,
+    },
+  };
+}
+
+export async function getSummary(organizationId?: string) {
+  const orgFilter = organizationId ? { organizationId } : {};
+  const { start, end } = currentMonthRange();
+  const now = new Date();
+
+  const [
+    monthIncome,
+    monthExpense,
+    recurringIncome,
+    recurringExpense,
+    incomeByCategory,
+    expenseByCategory,
+    incomeByOrg,
+    expenseByOrg,
+    upcomingIncome,
+    upcomingExpense,
+    collectedIncome,
+    recPay,
+    overdue,
+  ] = await Promise.all([
+    prisma.incomeRecord.aggregate({
+      _sum: { amount: true },
+      where: {
+        ...orgFilter,
+        incomeDate: { gte: start, lt: end },
+        status: { not: 'CANCELLED' },
+      },
+    }),
+    prisma.expenseRecord.aggregate({
+      _sum: { amount: true },
+      where: {
+        ...orgFilter,
+        expenseDate: { gte: start, lt: end },
+        status: { not: 'CANCELLED' },
+      },
+    }),
+    prisma.incomeRecord.aggregate({
+      _sum: { amount: true },
+      where: { ...orgFilter, isRecurring: true, status: { not: 'CANCELLED' } },
+    }),
+    prisma.expenseRecord.aggregate({
+      _sum: { amount: true },
+      where: { ...orgFilter, isRecurring: true, status: { not: 'CANCELLED' } },
+    }),
     prisma.incomeRecord.groupBy({
       by: ['category'],
       where: { ...orgFilter, status: { not: 'CANCELLED' } },
@@ -125,7 +175,6 @@ export async function getSummary(organizationId?: string) {
       where: { ...orgFilter, status: { not: 'CANCELLED' } },
       _sum: { amount: true },
     }),
-    // Desglose por empresa.
     prisma.incomeRecord.groupBy({
       by: ['organizationId'],
       where: { ...orgFilter, status: { not: 'CANCELLED' } },
@@ -136,7 +185,6 @@ export async function getSummary(organizationId?: string) {
       where: { ...orgFilter, status: { not: 'CANCELLED' } },
       _sum: { amount: true },
     }),
-    // Próximos vencimientos financieros.
     prisma.incomeRecord.findMany({
       where: {
         ...orgFilter,
@@ -162,11 +210,12 @@ export async function getSummary(organizationId?: string) {
         organization: { select: { id: true, name: true } },
       },
     }),
-    // Cobrado: facturas con pago registrado.
     prisma.incomeRecord.aggregate({
       _sum: { netAmount: true },
       where: { ...orgFilter, status: { not: 'CANCELLED' }, paidDate: { not: null } },
     }),
+    computeReceivablePayable(organizationId),
+    computeOverdue(organizationId),
   ]);
 
   const orgs = await prisma.organization.findMany({
@@ -177,13 +226,9 @@ export async function getSummary(organizationId?: string) {
   const monthIncomeTotal = monthIncome._sum.amount ?? 0;
   const monthExpenseTotal = monthExpense._sum.amount ?? 0;
 
-  // Combina ingresos/gastos por empresa para el desglose.
   const byOrgMap = new Map<string, { income: number; expense: number }>();
   for (const r of incomeByOrg) {
-    byOrgMap.set(r.organizationId, {
-      income: r._sum.amount ?? 0,
-      expense: 0,
-    });
+    byOrgMap.set(r.organizationId, { income: r._sum.amount ?? 0, expense: 0 });
   }
   for (const r of expenseByOrg) {
     const cur = byOrgMap.get(r.organizationId) ?? { income: 0, expense: 0 };
@@ -191,36 +236,24 @@ export async function getSummary(organizationId?: string) {
     byOrgMap.set(r.organizationId, cur);
   }
 
-  // Combina y ordena vencimientos por fecha.
   const upcomingFinancial = [
     ...upcomingIncome.map((i) => ({ ...i, kind: 'INCOME' as const })),
     ...upcomingExpense.map((e) => ({ ...e, kind: 'EXPENSE' as const })),
   ]
-    .sort(
-      (a, b) =>
-        (a.dueDate?.getTime() ?? 0) - (b.dueDate?.getTime() ?? 0),
-    )
+    .sort((a, b) => (a.dueDate?.getTime() ?? 0) - (b.dueDate?.getTime() ?? 0))
     .slice(0, 8);
 
   return {
     monthIncome: monthIncomeTotal,
     monthExpense: monthExpenseTotal,
     estimatedResult: monthIncomeTotal - monthExpenseTotal,
-    pendingIncome:
-      (pendingSales._sum.netAmount ?? 0) + (pendingManual._sum.amount ?? 0),
+    pendingIncome: recPay.receivable,
     collectedIncome: collectedIncome._sum.netAmount ?? 0,
-    pendingExpense: pendingExpense._sum.amount ?? 0,
+    pendingExpense: recPay.payable,
     recurringIncome: recurringIncome._sum.amount ?? 0,
     recurringExpense: recurringExpense._sum.amount ?? 0,
-    overdueIncome: {
-      count: overdueSales._count._all + overdueManual._count._all,
-      amount:
-        (overdueSales._sum.netAmount ?? 0) + (overdueManual._sum.amount ?? 0),
-    },
-    overdueExpense: {
-      count: overdueExpense._count._all,
-      amount: overdueExpense._sum.amount ?? 0,
-    },
+    overdueIncome: overdue.overdueReceivable,
+    overdueExpense: overdue.overduePayable,
     incomeByCategory: incomeByCategory.map((c) => ({
       category: c.category ?? 'Sin categoría',
       amount: c._sum.amount ?? 0,
