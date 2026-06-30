@@ -334,6 +334,14 @@ export interface BankTransactionsResponse {
   };
 }
 
+export interface BankMonthlyPoint {
+  month: string; // 'YYYY-MM'
+  closingBalance: number;
+  netFlow: number; // abonos − cargos
+  credits: number; // abonos
+  charges: number; // cargos
+}
+
 export interface BankTransaction {
   id: string;
   organizationId: string;

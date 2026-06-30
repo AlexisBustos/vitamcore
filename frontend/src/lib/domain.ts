@@ -196,6 +196,19 @@ export function formatDate(value: string | null | undefined): string {
   });
 }
 
+/** Formatea 'YYYY-MM' como 'May 2026' (mes capitalizado, en español). */
+export function formatMonth(ym: string): string {
+  const [y, m] = ym.split('-').map(Number);
+  const raw = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('es-CL', {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+  // Algunos builds de ICU añaden un punto al mes abreviado ('may.'); quitarlo.
+  const label = raw.replace('.', '');
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 /** ¿La fecha está vencida (anterior a hoy)? */
 export function isOverdue(value: string | null | undefined): boolean {
   if (!value) return false;
