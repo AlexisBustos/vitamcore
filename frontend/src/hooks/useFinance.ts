@@ -6,6 +6,7 @@ import {
 import { api, toQuery } from '@/lib/api';
 import type {
   BankAccount,
+  BankCategoryBreakdown,
   BankMonthlyPoint,
   BankTransactionsResponse,
   ExpenseRecord,
@@ -213,6 +214,7 @@ export type BankTransactionFilters = {
   bankAccountId?: string;
   month?: string;
   search?: string;
+  category?: string;
 };
 
 export function useBankTransactions(filters: BankTransactionFilters = {}) {
@@ -254,6 +256,35 @@ export function useBankMonthly(filters: {
           `/finance/imports/transactions/monthly${toQuery(filters)}`,
         )
         .then((r) => r.data),
+  });
+}
+
+export function useBankByCategory(filters: {
+  organizationId?: string;
+  bankAccountId?: string;
+  month?: string;
+}) {
+  return useQuery({
+    queryKey: ['finance-imports', 'by-category', filters],
+    queryFn: () =>
+      api
+        .get<{ data: BankCategoryBreakdown[] }>(
+          `/finance/imports/transactions/by-category${toQuery(filters)}`,
+        )
+        .then((r) => r.data),
+  });
+}
+
+export function useSetTransactionCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { id: string; category: string | null }) =>
+      api.patch(`/finance/imports/transactions/${payload.id}/category`, {
+        category: payload.category,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['finance-imports'] });
+    },
   });
 }
 
