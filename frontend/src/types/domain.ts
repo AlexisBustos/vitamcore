@@ -334,6 +334,13 @@ export interface BankTransactionsResponse {
   };
 }
 
+export interface BankCategoryBreakdown {
+  category: string | null;
+  credits: number;
+  charges: number;
+  count: number;
+}
+
 export interface BankMonthlyPoint {
   month: string; // 'YYYY-MM'
   closingBalance: number;
@@ -355,6 +362,8 @@ export interface BankTransaction {
   creditAmount: number;
   balance: number | null;
   currency: string;
+  category: string | null;
+  categoryManual: boolean;
   createdAt: string;
   organization?: Ref;
   bankAccount?: Pick<BankAccount, 'id' | 'name' | 'accountNumber'>;
