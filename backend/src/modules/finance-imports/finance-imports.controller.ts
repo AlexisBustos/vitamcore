@@ -4,8 +4,10 @@ import {
   createBankAccountSchema,
   listAccountsQuery,
   listBatchesQuery,
+  listByCategoryQuery,
   listTransactionsQuery,
   previewImportSchema,
+  setCategorySchema,
   updateBankAccountSchema,
 } from './finance-imports.schema';
 import * as service from './finance-imports.service';
@@ -45,6 +47,18 @@ export async function listBatchesController(req: Request, res: Response) {
 export async function listTransactionsController(req: Request, res: Response) {
   const filters = listTransactionsQuery.parse(req.query);
   res.json({ data: await service.listBankTransactions(filters) });
+}
+
+export async function listByCategoryController(req: Request, res: Response) {
+  const filters = listByCategoryQuery.parse(req.query);
+  res.json({ data: await service.listBankByCategory(filters) });
+}
+
+export async function setCategoryController(req: Request, res: Response) {
+  const input = setCategorySchema.parse(req.body);
+  res.json({
+    data: await service.setTransactionCategory(req.params.id, input.category),
+  });
 }
 
 export async function listTransactionMonthsController(

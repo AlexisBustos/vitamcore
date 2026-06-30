@@ -7,10 +7,12 @@ import {
   getBatchController,
   listAccountsController,
   listBatchesController,
+  listByCategoryController,
   listMonthlyController,
   listTransactionMonthsController,
   listTransactionsController,
   previewController,
+  setCategoryController,
   updateAccountController,
 } from './finance-imports.controller';
 
@@ -41,5 +43,13 @@ financeImportsRouter.get(
 financeImportsRouter.get(
   '/transactions/monthly',
   asyncHandler(listMonthlyController),
+);
+financeImportsRouter.get(
+  '/transactions/by-category',
+  asyncHandler(listByCategoryController),
+);
+financeImportsRouter.patch(
+  '/transactions/:id/category',
+  asyncHandler(setCategoryController),
 );
 financeImportsRouter.get('/transactions', asyncHandler(listTransactionsController));
