@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { currency, optionalShortText } from '../shared/zod';
-import { BANK_CATEGORIES } from './finance-imports.categories';
 
 export const importTypeEnum = z.enum([
   'SALES_REPORT',
@@ -68,8 +67,15 @@ export const listByCategoryQuery = listTransactionsQuery.pick({
 });
 
 export const setCategorySchema = z.object({
-  category: z.enum(BANK_CATEGORIES).nullable(),
+  category: z.string().nullable(),
 });
+
+export const bulkCategorySchema = z.object({
+  ids: z.array(z.string().min(1)).min(1),
+  category: z.string().nullable(),
+});
+
+export type BulkCategoryInput = z.infer<typeof bulkCategorySchema>;
 
 export const reconciliationCandidatesQuery = z.object({
   recordType: z.enum(['income', 'expense']),

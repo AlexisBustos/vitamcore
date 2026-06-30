@@ -8,7 +8,8 @@ import {
 import * as XLSX from 'xlsx';
 import { prisma } from '../../lib/prisma';
 import { badRequest, notFound } from '../../utils/http-error';
-import { categorize } from './finance-imports.categories';
+import { categorizeWith } from './finance-imports.categories';
+import { getActiveRules } from '../finance-categories/category-rules.service';
 import { assertOrganization } from '../shared/relations';
 import {
   parseBankRows,
@@ -182,10 +183,29 @@ export async function updateBankAccount(
   }
 }
 
+async function assertCategoryKey(category: string | null) {
+  if (category === null) return;
+  const cat = await prisma.bankCategory.findUnique({
+    where: { key: category },
+    select: { key: true },
+  });
+  if (!cat) throw badRequest('La categoría indicada no existe');
+}
+
+export async function setCategoryBulk(ids: string[], category: string | null) {
+  await assertCategoryKey(category);
+  const result = await prisma.bankTransaction.updateMany({
+    where: { id: { in: ids } },
+    data: { category, categoryManual: true },
+  });
+  return { updated: result.count };
+}
+
 export async function setTransactionCategory(
   id: string,
   category: string | null,
 ) {
+  await assertCategoryKey(category);
   const current = await prisma.bankTransaction.findUnique({
     where: { id },
     select: { id: true },
@@ -291,12 +311,14 @@ export async function confirmImport(batchId: string) {
     (row) => row.status === 'VALID' || row.status === 'WARNING',
   );
 
+  const rules = await getActiveRules();
+
   const result = await prisma.$transaction(async (tx) => {
     let inserted = 0;
     let duplicated = rows.filter((row) => row.status === 'DUPLICATE').length;
 
     for (const row of rowsToInsert) {
-      const created = await createRow(tx, batch, row);
+      const created = await createRow(tx, batch, row, rules);
       if (created) inserted += 1;
       else duplicated += 1;
     }
@@ -692,6 +714,7 @@ async function createRow(
     type: FinancialImportType;
   },
   row: StoredPreviewRow,
+  rules: { categoryKey: string; matchText: string; direction: 'CHARGE' | 'CREDIT' | 'ANY' }[],
 ) {
   try {
     if (batch.type === FinancialImportType.SALES_REPORT) {
@@ -774,7 +797,8 @@ async function createRow(
         documentNumber: stringOrNull(row.data.documentNumber),
         chargeAmount: numberOrDefault(row.data.chargeAmount),
         creditAmount: numberOrDefault(row.data.creditAmount),
-        category: categorize(
+        category: categorizeWith(
+          rules,
           stringOrDefault(row.data.description, 'Movimiento importado'),
           numberOrDefault(row.data.chargeAmount) > 0,
         ),

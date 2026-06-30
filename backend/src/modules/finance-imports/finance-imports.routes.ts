@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { asyncHandler } from '../../utils/async-handler';
 import {
+  bulkCategoryController,
   confirmController,
   createAccountController,
   getBatchController,
@@ -48,6 +49,10 @@ financeImportsRouter.get(
 financeImportsRouter.get(
   '/transactions/by-category',
   asyncHandler(listByCategoryController),
+);
+financeImportsRouter.post(
+  '/transactions/bulk-category',
+  asyncHandler(bulkCategoryController),
 );
 financeImportsRouter.patch(
   '/transactions/:id/category',

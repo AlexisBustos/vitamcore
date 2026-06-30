@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import {
+  bulkCategorySchema,
   confirmImportSchema,
   createBankAccountSchema,
   listAccountsQuery,
@@ -60,6 +61,11 @@ export async function setCategoryController(req: Request, res: Response) {
   res.json({
     data: await service.setTransactionCategory(req.params.id, input.category),
   });
+}
+
+export async function bulkCategoryController(req: Request, res: Response) {
+  const input = bulkCategorySchema.parse(req.body);
+  res.json({ data: await service.setCategoryBulk(input.ids, input.category) });
 }
 
 export async function listTransactionMonthsController(
