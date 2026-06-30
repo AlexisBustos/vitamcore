@@ -19,6 +19,7 @@ import {
 import type {
   CreateBankAccountInput,
   ListBatchesFilters,
+  ListTransactionsFilters,
   UpdateBankAccountInput,
   PreviewImportInput,
 } from './finance-imports.schema';
@@ -40,7 +41,7 @@ const refs = {
 };
 
 export async function listBankAccounts(filters: { organizationId?: string }) {
-  return prisma.bankAccount.findMany({
+  const accounts = await prisma.bankAccount.findMany({
     where: {
       organizationId: filters.organizationId,
       isActive: true,
@@ -48,6 +49,88 @@ export async function listBankAccounts(filters: { organizationId?: string }) {
     orderBy: [{ organizationId: 'asc' }, { name: 'asc' }],
     include: { organization: { select: { id: true, name: true } } },
   });
+
+  if (accounts.length === 0) return [];
+
+  // Saldo actual = balance del último movimiento de cada cuenta (la cartola
+  // trae saldo corrido, no se recalcula). Desempate por createdAt para
+  // movimientos del mismo día (respeta el orden de filas de la cartola).
+  const balances = await prisma.$queryRaw<
+    {
+      bankAccountId: string;
+      currentBalance: number | null;
+      lastMovementDate: Date | null;
+      movementCount: bigint;
+    }[]
+  >(Prisma.sql`
+    SELECT DISTINCT ON (t."bankAccountId")
+      t."bankAccountId",
+      t.balance AS "currentBalance",
+      t."transactionDate" AS "lastMovementDate",
+      count(*) OVER (PARTITION BY t."bankAccountId") AS "movementCount"
+    FROM "bank_transactions" t
+    WHERE t."bankAccountId" IN (${Prisma.join(accounts.map((a) => a.id))})
+    ORDER BY t."bankAccountId", t."transactionDate" DESC, t."createdAt" DESC
+  `);
+
+  const byAccount = new Map(balances.map((b) => [b.bankAccountId, b]));
+  return accounts.map((account) => {
+    const stats = byAccount.get(account.id);
+    return {
+      ...account,
+      currentBalance: stats?.currentBalance ?? null,
+      lastMovementDate: stats?.lastMovementDate ?? null,
+      movementCount: stats ? Number(stats.movementCount) : 0,
+    };
+  });
+}
+
+export async function listBankTransactions(filters: ListTransactionsFilters) {
+  const where: Prisma.BankTransactionWhereInput = {
+    organizationId: filters.organizationId,
+    bankAccountId: filters.bankAccountId,
+  };
+
+  if (filters.month) {
+    const [y, m] = filters.month.split('-').map(Number);
+    where.transactionDate = {
+      gte: new Date(Date.UTC(y, m - 1, 1)),
+      lt: new Date(Date.UTC(y, m, 1)),
+    };
+  }
+
+  if (filters.search) {
+    where.description = { contains: filters.search, mode: 'insensitive' };
+  }
+
+  const transactions = await prisma.bankTransaction.findMany({
+    where,
+    orderBy: [{ transactionDate: 'desc' }, { createdAt: 'desc' }],
+    take: 300,
+    include: { bankAccount: refs.bankAccount },
+  });
+
+  const totals = transactions.reduce(
+    (acc, t) => {
+      acc.charges += t.chargeAmount;
+      acc.credits += t.creditAmount;
+      return acc;
+    },
+    { charges: 0, credits: 0 },
+  );
+
+  return {
+    transactions,
+    totals: {
+      count: transactions.length,
+      charges: totals.charges,
+      credits: totals.credits,
+      net: totals.credits - totals.charges,
+      // En orden descendente: el primero es el saldo final, el último el inicial.
+      endingBalance: transactions[0]?.balance ?? null,
+      startingBalance: transactions[transactions.length - 1]?.balance ?? null,
+    },
+  };
 }
 
 export async function createBankAccount(input: CreateBankAccountInput) {
@@ -222,6 +305,26 @@ export async function confirmImport(batchId: string) {
   });
 
   return result;
+}
+
+export async function listBankTransactionMonths(filters: {
+  organizationId?: string;
+  bankAccountId?: string;
+}) {
+  const conditions = [Prisma.sql`1 = 1`];
+  if (filters.organizationId) {
+    conditions.push(Prisma.sql`"organizationId" = ${filters.organizationId}`);
+  }
+  if (filters.bankAccountId) {
+    conditions.push(Prisma.sql`"bankAccountId" = ${filters.bankAccountId}`);
+  }
+  const rows = await prisma.$queryRaw<{ mes: string }[]>(Prisma.sql`
+    SELECT DISTINCT to_char(date_trunc('month', "transactionDate"), 'YYYY-MM') AS mes
+    FROM "bank_transactions"
+    WHERE ${Prisma.join(conditions, ' AND ')}
+    ORDER BY mes DESC
+  `);
+  return rows.map((r) => r.mes);
 }
 
 export async function listBatches(filters: ListBatchesFilters) {

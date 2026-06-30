@@ -49,9 +49,20 @@ export const listBatchesQuery = z.object({
   type: importTypeEnum.optional(),
 });
 
+export const listTransactionsQuery = z.object({
+  organizationId: z.string().optional(),
+  bankAccountId: z.string().optional(),
+  month: z
+    .string()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Formato de mes inválido (YYYY-MM)')
+    .optional(),
+  search: z.string().trim().max(255).optional(),
+});
+
 export type CreateBankAccountInput = z.infer<typeof createBankAccountSchema>;
 export type UpdateBankAccountInput = z.infer<typeof updateBankAccountSchema>;
 export type PreviewImportInput = z.infer<typeof previewImportSchema>;
 export type ConfirmImportInput = z.infer<typeof confirmImportSchema>;
 export type ListAccountsFilters = z.infer<typeof listAccountsQuery>;
 export type ListBatchesFilters = z.infer<typeof listBatchesQuery>;
+export type ListTransactionsFilters = z.infer<typeof listTransactionsQuery>;

@@ -316,6 +316,22 @@ export interface BankAccount {
   createdAt: string;
   updatedAt: string;
   organization?: Ref;
+  // Derivados del último movimiento de la cartola (listBankAccounts).
+  currentBalance?: number | null;
+  lastMovementDate?: string | null;
+  movementCount?: number;
+}
+
+export interface BankTransactionsResponse {
+  transactions: BankTransaction[];
+  totals: {
+    count: number;
+    charges: number;
+    credits: number;
+    net: number;
+    endingBalance: number | null;
+    startingBalance: number | null;
+  };
 }
 
 export interface BankTransaction {

@@ -6,6 +6,7 @@ import {
 import { api, toQuery } from '@/lib/api';
 import type {
   BankAccount,
+  BankTransactionsResponse,
   ExpenseRecord,
   FinancialImportBatch,
   FinancialImportType,
@@ -203,6 +204,40 @@ export function useUpdateBankAccount() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['finance-imports'] });
     },
+  });
+}
+
+export type BankTransactionFilters = {
+  organizationId?: string;
+  bankAccountId?: string;
+  month?: string;
+  search?: string;
+};
+
+export function useBankTransactions(filters: BankTransactionFilters = {}) {
+  return useQuery({
+    queryKey: ['finance-imports', 'transactions', filters],
+    queryFn: () =>
+      api
+        .get<{ data: BankTransactionsResponse }>(
+          `/finance/imports/transactions${toQuery(filters)}`,
+        )
+        .then((r) => r.data),
+  });
+}
+
+export function useBankTransactionMonths(filters: {
+  organizationId?: string;
+  bankAccountId?: string;
+}) {
+  return useQuery({
+    queryKey: ['finance-imports', 'transaction-months', filters],
+    queryFn: () =>
+      api
+        .get<{ data: string[] }>(
+          `/finance/imports/transactions/months${toQuery(filters)}`,
+        )
+        .then((r) => r.data),
   });
 }
 

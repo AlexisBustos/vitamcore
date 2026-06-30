@@ -4,6 +4,7 @@ import {
   createBankAccountSchema,
   listAccountsQuery,
   listBatchesQuery,
+  listTransactionsQuery,
   previewImportSchema,
   updateBankAccountSchema,
 } from './finance-imports.schema';
@@ -39,6 +40,21 @@ export async function confirmController(req: Request, res: Response) {
 export async function listBatchesController(req: Request, res: Response) {
   const filters = listBatchesQuery.parse(req.query);
   res.json({ data: await service.listBatches(filters) });
+}
+
+export async function listTransactionsController(req: Request, res: Response) {
+  const filters = listTransactionsQuery.parse(req.query);
+  res.json({ data: await service.listBankTransactions(filters) });
+}
+
+export async function listTransactionMonthsController(
+  req: Request,
+  res: Response,
+) {
+  const filters = listTransactionsQuery
+    .pick({ organizationId: true, bankAccountId: true })
+    .parse(req.query);
+  res.json({ data: await service.listBankTransactionMonths(filters) });
 }
 
 export async function getBatchController(req: Request, res: Response) {

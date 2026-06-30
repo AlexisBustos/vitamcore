@@ -8,8 +8,16 @@ import { ExpensesTab } from './ExpensesTab';
 import { FinanceImportsTab } from './FinanceImportsTab';
 import { ReceivablesTab } from './ReceivablesTab';
 import { PayablesTab } from './PayablesTab';
+import { BanksTab } from './BanksTab';
 
-type Tab = 'summary' | 'income' | 'expenses' | 'imports' | 'receivables' | 'payables';
+type Tab =
+  | 'summary'
+  | 'income'
+  | 'expenses'
+  | 'imports'
+  | 'receivables'
+  | 'payables'
+  | 'banks';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'summary', label: 'Resumen' },
@@ -17,6 +25,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'income', label: 'Ingresos' },
   { id: 'expenses', label: 'Gastos' },
   { id: 'payables', label: 'Cuentas por pagar' },
+  { id: 'banks', label: 'Bancos' },
   { id: 'imports', label: 'Importaciones' },
 ];
 
@@ -64,6 +73,7 @@ export function FinancePage() {
       {tab === 'income' && <IncomeTab organizationId={organizationId} />}
       {tab === 'expenses' && <ExpensesTab organizationId={organizationId} />}
       {tab === 'payables' && <PayablesTab organizationId={organizationId} />}
+      {tab === 'banks' && <BanksTab organizationId={organizationId} />}
       {tab === 'imports' && (
         <FinanceImportsTab organizationId={organizationId} />
       )}
