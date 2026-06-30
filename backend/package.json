@@ -12,6 +12,7 @@
     "prisma:migrate": "prisma migrate dev --name init",
     "prisma:seed": "prisma db seed",
     "prisma:categorize": "tsx prisma/scripts/categorize-backfill.ts",
+    "prisma:seed-categories": "tsx prisma/scripts/seed-categories.ts",
     "prisma:studio": "prisma studio"
   },
   "prisma": {
