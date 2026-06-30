@@ -1,13 +1,9 @@
 import { useMemo } from 'react';
 import { Card } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/feedback';
-import {
-  bankCategoryLabel,
-  bankCategoryType,
-  formatMoney,
-  type BankCategory,
-} from '@/lib/domain';
-import { useBankByCategory } from '@/hooks/useFinance';
+import { formatMoney } from '@/lib/domain';
+import { useBankByCategory, useBankCategories } from '@/hooks/useFinance';
+import type { BankCategoryKind } from '@/types/domain';
 
 type Row = { key: string; label: string; amount: number };
 
@@ -21,27 +17,32 @@ export function BankCategoryBreakdown({
   month?: string;
 }) {
   const query = useBankByCategory({ organizationId, bankAccountId, month });
+  const categories = useBankCategories();
 
   const { ingresos, egresos, traspasos, totalIn, totalOut } = useMemo(() => {
     const data = query.data ?? [];
+    // Mapa key → { name, kind }; incluye inactivas (el hook trae todas).
+    const meta = new Map<string, { name: string; kind: BankCategoryKind }>();
+    for (const c of categories.data ?? []) meta.set(c.key, { name: c.name, kind: c.kind });
+
     const ingresos: Row[] = [];
     const egresos: Row[] = [];
     let traspasos = 0;
     for (const r of data) {
-      if (r.category === 'TRASPASO_INTERNO') {
-        traspasos += r.credits + r.charges;
-        continue;
-      }
       if (r.category === null) {
         if (r.credits > 0) ingresos.push({ key: 'null-in', label: 'Sin categoría', amount: r.credits });
         if (r.charges > 0) egresos.push({ key: 'null-out', label: 'Sin categoría', amount: r.charges });
         continue;
       }
-      const type = bankCategoryType[r.category as BankCategory];
-      if (type === 'INCOME') {
-        ingresos.push({ key: r.category, label: bankCategoryLabel(r.category), amount: r.credits });
-      } else if (type === 'EXPENSE') {
-        egresos.push({ key: r.category, label: bankCategoryLabel(r.category), amount: r.charges });
+      const info = meta.get(r.category);
+      const label = info?.name ?? r.category; // fallback al key crudo
+      const kind = info?.kind ?? 'NEUTRAL';
+      if (kind === 'NEUTRAL') {
+        traspasos += r.credits + r.charges;
+      } else if (kind === 'INCOME') {
+        ingresos.push({ key: r.category, label, amount: r.credits });
+      } else {
+        egresos.push({ key: r.category, label, amount: r.charges });
       }
     }
     ingresos.sort((a, b) => b.amount - a.amount);
@@ -49,9 +50,11 @@ export function BankCategoryBreakdown({
     const totalIn = ingresos.reduce((s, r) => s + r.amount, 0);
     const totalOut = egresos.reduce((s, r) => s + r.amount, 0);
     return { ingresos, egresos, traspasos, totalIn, totalOut };
-  }, [query.data]);
+  }, [query.data, categories.data]);
 
-  if (query.isLoading) return <Spinner label="Cargando desglose…" />;
+  // Esperar también a las categorías: sin su meta, todo caería al fallback
+  // NEUTRAL y se contaría como traspaso por un frame.
+  if (query.isLoading || categories.isLoading) return <Spinner label="Cargando desglose…" />;
   if (!query.data || query.data.length === 0) return null;
 
   return (
