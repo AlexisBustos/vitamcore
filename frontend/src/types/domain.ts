@@ -474,6 +474,22 @@ export interface FinanceSummary {
   }[];
 }
 
+export interface FinancePositionOrg {
+  id: string;
+  name: string;
+  cash: number;
+  receivable: number;
+  payable: number;
+  position: number;
+}
+export interface FinancePosition {
+  cash: number;
+  receivable: number;
+  payable: number;
+  position: number;
+  byOrganization: FinancePositionOrg[];
+}
+
 export interface SalesSummary {
   openCount: number;
   wonCount: number;

@@ -12,6 +12,7 @@ import type {
   ExpenseRecord,
   FinancialImportBatch,
   FinancialImportType,
+  FinancePosition,
   FinanceSummary,
   IncomeRecord,
   ReconciliationCandidate,
@@ -66,6 +67,18 @@ export function useFinanceSummary(organizationId?: string) {
       api
         .get<{ data: FinanceSummary }>(
           `/finance/summary${toQuery({ organizationId })}`,
+        )
+        .then((r) => r.data),
+  });
+}
+
+export function useFinancePosition(organizationId?: string) {
+  return useQuery({
+    queryKey: ['finance', 'position', organizationId ?? 'all'],
+    queryFn: () =>
+      api
+        .get<{ data: FinancePosition }>(
+          `/finance/position${toQuery({ organizationId })}`,
         )
         .then((r) => r.data),
   });
