@@ -6,6 +6,7 @@ import {
 import { api, toQuery } from '@/lib/api';
 import type {
   BankAccount,
+  BankMonthlyPoint,
   BankTransactionsResponse,
   ExpenseRecord,
   FinancialImportBatch,
@@ -236,6 +237,21 @@ export function useBankTransactionMonths(filters: {
       api
         .get<{ data: string[] }>(
           `/finance/imports/transactions/months${toQuery(filters)}`,
+        )
+        .then((r) => r.data),
+  });
+}
+
+export function useBankMonthly(filters: {
+  organizationId?: string;
+  bankAccountId?: string;
+}) {
+  return useQuery({
+    queryKey: ['finance-imports', 'monthly', filters],
+    queryFn: () =>
+      api
+        .get<{ data: BankMonthlyPoint[] }>(
+          `/finance/imports/transactions/monthly${toQuery(filters)}`,
         )
         .then((r) => r.data),
   });
