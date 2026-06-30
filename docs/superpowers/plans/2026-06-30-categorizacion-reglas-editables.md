@@ -922,15 +922,16 @@ cd /c/Workspace/Code/vitamcore && git add frontend/src/types/domain.ts && git co
 ```ts
 import type { BankCategoryKind } from '@/types/domain';
 
-const bankKindTone: Record<BankCategoryKind, Tone> = {
-  INCOME: { label: 'Ingreso', className: 'bg-emerald-50 text-emerald-700' },
-  EXPENSE: { label: 'Egreso', className: 'bg-red-50 text-red-700' },
-  NEUTRAL: { label: 'Neutro', className: 'bg-slate-100 text-slate-500' },
+// Color sólido por tipo, pensado para el punto de la celda (visible en 2×2).
+const bankKindColor: Record<BankCategoryKind, string> = {
+  INCOME: 'bg-emerald-500',
+  EXPENSE: 'bg-red-500',
+  NEUTRAL: 'bg-slate-400',
 };
 
-/** Clase de color del badge de categoría según su tipo (kind). */
+/** Clase de color (bg) según el tipo de la categoría (kind). */
 export function bankKindClassName(kind: BankCategoryKind | undefined): string {
-  return (kind ? bankKindTone[kind] : bankKindTone.NEUTRAL).className;
+  return kind ? bankKindColor[kind] : bankKindColor.NEUTRAL;
 }
 ```
 (Si `Tone` no está exportado, no importa: se usa solo dentro del archivo.)
@@ -1521,7 +1522,7 @@ y el override inline mantiene `''` → null:
 options={[{ value: '', label: 'Sin categoría' }, ...categoryOptions]}
 ```
 
-- [ ] **Step 4: Botón "Gestionar"** — en la cabecera de la pestaña (junto al título o filtros):
+- [ ] **Step 4: Botón "Gestionar"** — encima del grid de filtros (≈ `BanksTab.tsx:207`), alineado a la derecha:
 ```tsx
 <Button variant="outline" onClick={() => setPanelOpen(true)}>Gestionar categorías y reglas</Button>
 {/* … al final del return … */}
