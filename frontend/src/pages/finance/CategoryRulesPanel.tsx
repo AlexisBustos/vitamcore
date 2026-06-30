@@ -109,7 +109,7 @@ export function CategoryRulesPanel({ open, onClose }: { open: boolean; onClose: 
       <section>
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-sm font-semibold">Reglas (orden = prioridad)</h3>
-          <Button variant="outline" onClick={() => run(async () => { const r = await reapply.mutateAsync(); setNotice(`Reaplicadas: ${(r as { data: { updated: number } }).data?.updated ?? 0} movimientos actualizados.`); })}>
+          <Button variant="outline" onClick={() => run(async () => { const r = await reapply.mutateAsync(); setNotice(`Reaplicadas: ${r.data?.updated ?? 0} movimientos actualizados.`); })}>
             Reaplicar reglas ahora
           </Button>
         </div>
