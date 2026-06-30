@@ -343,6 +343,27 @@ export interface BankCategoryBreakdown {
   count: number;
 }
 
+export type BankCategoryKind = 'INCOME' | 'EXPENSE' | 'NEUTRAL';
+export type RuleDirection = 'CHARGE' | 'CREDIT' | 'ANY';
+
+export interface BankCategory {
+  id: string;
+  key: string;
+  name: string;
+  kind: BankCategoryKind;
+  active: boolean;
+  sortOrder: number;
+}
+
+export interface BankCategoryRule {
+  id: string;
+  categoryKey: string;
+  matchText: string;
+  direction: RuleDirection;
+  priority: number;
+  active: boolean;
+}
+
 export interface BankMonthlyPoint {
   month: string; // 'YYYY-MM'
   closingBalance: number;
