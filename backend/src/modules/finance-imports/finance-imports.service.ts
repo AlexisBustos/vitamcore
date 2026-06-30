@@ -8,6 +8,7 @@ import {
 import * as XLSX from 'xlsx';
 import { prisma } from '../../lib/prisma';
 import { badRequest, notFound } from '../../utils/http-error';
+import { categorize } from './finance-imports.categories';
 import { assertOrganization } from '../shared/relations';
 import {
   parseBankRows,
@@ -714,6 +715,10 @@ async function createRow(
         documentNumber: stringOrNull(row.data.documentNumber),
         chargeAmount: numberOrDefault(row.data.chargeAmount),
         creditAmount: numberOrDefault(row.data.creditAmount),
+        category: categorize(
+          stringOrDefault(row.data.description, 'Movimiento importado'),
+          numberOrDefault(row.data.chargeAmount) > 0,
+        ),
         balance: numberOrNull(row.data.balance),
         currency: stringOrDefault(row.data.currency, 'CLP'),
         dedupeKey: row.dedupeKey,
