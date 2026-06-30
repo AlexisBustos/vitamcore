@@ -242,6 +242,18 @@ enum ReportType {
   CUSTOM
 }
 
+enum BankCategoryKind {
+  INCOME
+  EXPENSE
+  NEUTRAL
+}
+
+enum RuleDirection {
+  CHARGE
+  CREDIT
+  ANY
+}
+
 // ---------------------------------------------------------
 // Modelos base (Sprint 0)
 // ---------------------------------------------------------
@@ -473,45 +485,45 @@ model Vendor {
 
 /// Ingreso (esperado, facturado, pagado…).
 model IncomeRecord {
-  id                  String               @id @default(cuid())
-  organizationId      String
-  businessUnitId      String?
-  projectId           String?
-  importBatchId       String?
-  clientId            String?
-  documentKind        DocumentKind         @default(SALE)
-  netAmount           Int?                 // neto por cobrar de la factura tras NC; null en NC
-  paidDate            DateTime?            // fecha de cobro; null = por cobrar
-  paidByBankTransactionId String?          // movimiento bancario conciliado
-  creditsIncomeId     String?              // en una NC: factura que anula
-  clientName          String?
-  description         String
-  amount              Int                  @default(0)
-  currency            String               @default("CLP")
-  category            String?
-  status              IncomeStatus         @default(EXPECTED)
-  incomeDate          DateTime?
-  dueDate             DateTime?
-  isRecurring         Boolean              @default(false)
-  recurrenceFrequency RecurrenceFrequency?
-  sourceDocumentType  String?
-  sourceFolio         String?
-  sourceRut           String?
-  sourceIssueDate     DateTime?
-  sourceDedupeKey     String?              @unique
-  rawData             Json?
-  notes               String?
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  id                      String               @id @default(cuid())
+  organizationId          String
+  businessUnitId          String?
+  projectId               String?
+  importBatchId           String?
+  clientId                String?
+  documentKind            DocumentKind         @default(SALE)
+  netAmount               Int? // neto por cobrar de la factura tras NC; null en NC
+  paidDate                DateTime? // fecha de cobro; null = por cobrar
+  paidByBankTransactionId String? // movimiento bancario conciliado
+  creditsIncomeId         String? // en una NC: factura que anula
+  clientName              String?
+  description             String
+  amount                  Int                  @default(0)
+  currency                String               @default("CLP")
+  category                String?
+  status                  IncomeStatus         @default(EXPECTED)
+  incomeDate              DateTime?
+  dueDate                 DateTime?
+  isRecurring             Boolean              @default(false)
+  recurrenceFrequency     RecurrenceFrequency?
+  sourceDocumentType      String?
+  sourceFolio             String?
+  sourceRut               String?
+  sourceIssueDate         DateTime?
+  sourceDedupeKey         String?              @unique
+  rawData                 Json?
+  notes                   String?
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
 
-  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit?         @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
-  project      Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  importBatch  FinancialImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
-  client        Client?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  creditsIncome IncomeRecord?         @relation("CreditNotes", fields: [creditsIncomeId], references: [id], onDelete: SetNull)
-  creditedBy    IncomeRecord[]        @relation("CreditNotes")
-  paidByBankTransaction BankTransaction? @relation("IncomePayments", fields: [paidByBankTransactionId], references: [id], onDelete: SetNull)
+  organization          Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit          BusinessUnit?         @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  project               Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  importBatch           FinancialImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  client                Client?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  creditsIncome         IncomeRecord?         @relation("CreditNotes", fields: [creditsIncomeId], references: [id], onDelete: SetNull)
+  creditedBy            IncomeRecord[]        @relation("CreditNotes")
+  paidByBankTransaction BankTransaction?      @relation("IncomePayments", fields: [paidByBankTransactionId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([importBatchId])
@@ -528,40 +540,40 @@ model IncomeRecord {
 
 /// Gasto (pendiente, pagado…).
 model ExpenseRecord {
-  id                  String               @id @default(cuid())
-  organizationId      String
-  businessUnitId      String?
-  projectId           String?
-  importBatchId       String?
-  vendorId            String?
-  vendorName          String?
-  description         String
-  amount              Int                  @default(0)
-  currency            String               @default("CLP")
-  category            String?
-  status              ExpenseStatus        @default(PENDING)
-  paidDate            DateTime?
-  paidByBankTransactionId String?          // movimiento bancario conciliado
-  expenseDate         DateTime?
-  dueDate             DateTime?
-  isRecurring         Boolean              @default(false)
-  recurrenceFrequency RecurrenceFrequency?
-  sourceDocumentType  String?
-  sourceFolio         String?
-  sourceRut           String?
-  sourceIssueDate     DateTime?
-  sourceDedupeKey     String?              @unique
-  rawData             Json?
-  notes               String?
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  id                      String               @id @default(cuid())
+  organizationId          String
+  businessUnitId          String?
+  projectId               String?
+  importBatchId           String?
+  vendorId                String?
+  vendorName              String?
+  description             String
+  amount                  Int                  @default(0)
+  currency                String               @default("CLP")
+  category                String?
+  status                  ExpenseStatus        @default(PENDING)
+  paidDate                DateTime?
+  paidByBankTransactionId String? // movimiento bancario conciliado
+  expenseDate             DateTime?
+  dueDate                 DateTime?
+  isRecurring             Boolean              @default(false)
+  recurrenceFrequency     RecurrenceFrequency?
+  sourceDocumentType      String?
+  sourceFolio             String?
+  sourceRut               String?
+  sourceIssueDate         DateTime?
+  sourceDedupeKey         String?              @unique
+  rawData                 Json?
+  notes                   String?
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
 
-  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit?         @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
-  project      Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  importBatch  FinancialImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
-  vendor       Vendor?               @relation(fields: [vendorId], references: [id], onDelete: SetNull)
-  paidByBankTransaction BankTransaction? @relation("ExpensePayments", fields: [paidByBankTransactionId], references: [id], onDelete: SetNull)
+  organization          Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit          BusinessUnit?         @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  project               Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  importBatch           FinancialImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  vendor                Vendor?               @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  paidByBankTransaction BankTransaction?      @relation("ExpensePayments", fields: [paidByBankTransactionId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([importBatchId])
@@ -829,4 +841,35 @@ model ExecutiveReport {
   @@index([reportType])
   @@index([organizationId])
   @@map("executive_reports")
+}
+
+model BankCategory {
+  id        String           @id @default(cuid())
+  key       String           @unique
+  name      String
+  kind      BankCategoryKind
+  active    Boolean          @default(true)
+  sortOrder Int              @default(0)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  rules BankCategoryRule[]
+
+  @@map("bank_categories")
+}
+
+model BankCategoryRule {
+  id          String        @id @default(cuid())
+  categoryKey String
+  category    BankCategory  @relation(fields: [categoryKey], references: [key], onDelete: Cascade)
+  matchText   String
+  direction   RuleDirection @default(ANY)
+  priority    Int           @default(0)
+  active      Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([categoryKey, matchText, direction])
+  @@index([active, priority])
+  @@map("bank_category_rules")
 }
