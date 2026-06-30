@@ -97,7 +97,12 @@ export function FinancePage() {
         {TABS.map((t) => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
+            onClick={() => {
+              // Clic manual en una pestaña limpia el filtro forzado del deep-link
+              // (si el usuario entra a Bancos por su cuenta, no se le impone "Suelto").
+              setBanksInitialFilter(undefined);
+              setTab(t.id);
+            }}
             className={cn(
               'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
               tab === t.id
