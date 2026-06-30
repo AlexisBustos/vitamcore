@@ -58,6 +58,7 @@ export const listTransactionsQuery = z.object({
     .optional(),
   search: z.string().trim().max(255).optional(),
   category: z.string().optional(),
+  reconciliation: z.enum(['linked', 'unlinked']).optional(),
 });
 
 export const listByCategoryQuery = listTransactionsQuery.pick({

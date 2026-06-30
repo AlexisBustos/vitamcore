@@ -109,11 +109,22 @@ export async function listBankTransactions(filters: ListTransactionsFilters) {
     where.category = filters.category === '__none__' ? null : filters.category;
   }
 
+  // Conciliado = referenciado por alguna factura/gasto vía paidByBankTransactionId.
+  if (filters.reconciliation === 'linked') {
+    where.OR = [{ paidIncomes: { some: {} } }, { paidExpenses: { some: {} } }];
+  } else if (filters.reconciliation === 'unlinked') {
+    where.paidIncomes = { none: {} };
+    where.paidExpenses = { none: {} };
+  }
+
   const transactions = await prisma.bankTransaction.findMany({
     where,
     orderBy: [{ transactionDate: 'desc' }, { createdAt: 'desc' }],
     take: 300,
-    include: { bankAccount: refs.bankAccount },
+    include: {
+      bankAccount: refs.bankAccount,
+      _count: { select: { paidIncomes: true, paidExpenses: true } },
+    },
   });
 
   const totals = transactions.reduce(
@@ -125,16 +136,20 @@ export async function listBankTransactions(filters: ListTransactionsFilters) {
     { charges: 0, credits: 0 },
   );
 
+  const rows = transactions.map(({ _count, ...t }) => ({
+    ...t,
+    reconciled: _count.paidIncomes > 0 || _count.paidExpenses > 0,
+  }));
+
   return {
-    transactions,
+    transactions: rows,
     totals: {
-      count: transactions.length,
+      count: rows.length,
       charges: totals.charges,
       credits: totals.credits,
       net: totals.credits - totals.charges,
-      // En orden descendente: el primero es el saldo final, el último el inicial.
-      endingBalance: transactions[0]?.balance ?? null,
-      startingBalance: transactions[transactions.length - 1]?.balance ?? null,
+      endingBalance: rows[0]?.balance ?? null,
+      startingBalance: rows[rows.length - 1]?.balance ?? null,
     },
   };
 }
