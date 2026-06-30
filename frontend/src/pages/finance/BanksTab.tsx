@@ -27,11 +27,25 @@ import { BankCategoryBreakdown } from './BankCategoryBreakdown';
 import { CategoryRulesPanel } from './CategoryRulesPanel';
 import { CreateRuleFromMovement } from './CreateRuleFromMovement';
 
-export function BanksTab({ organizationId }: { organizationId?: string }) {
+export function BanksTab({
+  organizationId,
+  initialReconciliation,
+}: {
+  organizationId?: string;
+  initialReconciliation?: 'linked' | 'unlinked';
+}) {
   const [bankAccountId, setBankAccountId] = useState('');
   const [month, setMonth] = useState<string | undefined>();
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
+  const [reconciliation, setReconciliation] = useState<'' | 'linked' | 'unlinked'>(
+    initialReconciliation ?? '',
+  );
+
+  // Refleja el deep-link desde el Cuadre ("revisar" → Suelto).
+  useEffect(() => {
+    if (initialReconciliation) setReconciliation(initialReconciliation);
+  }, [initialReconciliation]);
 
   const setCategoryMut = useSetTransactionCategory();
 
@@ -44,7 +58,7 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
   const [panelOpen, setPanelOpen] = useState(false);
 
   // Limpia la selección al cambiar de filtros para no arrastrar ids fuera de vista.
-  useEffect(() => setSelected(new Set()), [bankAccountId, month, search, category]);
+  useEffect(() => setSelected(new Set()), [bankAccountId, month, search, category, reconciliation]);
 
   const accounts = useBankAccounts(organizationId);
   const months = useBankTransactionMonths({
@@ -57,6 +71,7 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
     month,
     search: search || undefined,
     category: category || undefined,
+    reconciliation: reconciliation || undefined,
   });
   const monthly = useBankMonthly({
     organizationId,
@@ -225,7 +240,7 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
       </div>
 
       {/* Filtros */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:max-w-5xl lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:max-w-6xl lg:grid-cols-5">
         <Select
           options={accountOptions}
           placeholder="Todas las cuentas"
@@ -242,6 +257,17 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
           placeholder="Todas las categorías"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
+        />
+        <Select
+          options={[
+            { value: 'linked', label: 'Conciliado' },
+            { value: 'unlinked', label: 'Suelto' },
+          ]}
+          placeholder="Toda conciliación"
+          value={reconciliation}
+          onChange={(e) =>
+            setReconciliation(e.target.value as '' | 'linked' | 'unlinked')
+          }
         />
         <Input
           placeholder="Buscar descripción…"
@@ -312,6 +338,7 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
                   )}
                   <th className="px-4 py-3 font-medium">Canal / Doc.</th>
                   <th className="px-4 py-3 font-medium">Categoría</th>
+                  <th className="px-4 py-3 font-medium">Conciliación</th>
                   <th className="px-4 py-3 text-right font-medium">Cargo</th>
                   <th className="px-4 py-3 text-right font-medium">Abono</th>
                   <th className="px-4 py-3 text-right font-medium">Saldo</th>
@@ -374,6 +401,17 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
                         />
                       </div>
                     </td>
+                    <td className="px-4 py-3">
+                      {t.reconciled ? (
+                        <span className="inline-flex items-center rounded-full bg-[var(--color-success)]/10 px-2 py-0.5 text-xs font-medium text-[var(--color-success)]">
+                          Conciliado
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-xs font-medium text-[var(--color-muted-foreground)]">
+                          Suelto
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-right text-[var(--color-danger)]">
                       {t.chargeAmount ? formatMoney(t.chargeAmount) : '—'}
                     </td>
@@ -391,7 +429,7 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
                   <tr>
                     <td
                       className="px-4 py-3 font-medium text-[var(--color-muted-foreground)]"
-                      colSpan={showAccountColumn ? 6 : 5}
+                      colSpan={showAccountColumn ? 7 : 6}
                     >
                       {totals.count} movimiento(s) · neto del período{' '}
                       <span

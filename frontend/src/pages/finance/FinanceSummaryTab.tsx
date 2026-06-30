@@ -2,7 +2,6 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   CalendarClock,
-  CheckCircle2,
   Repeat,
   Wallet,
 } from 'lucide-react';
@@ -14,7 +13,17 @@ import { getErrorMessage } from '@/lib/errors';
 import { useFinanceSummary } from '@/hooks/useFinance';
 import { ConsolidatedPosition } from './ConsolidatedPosition';
 
-export function FinanceSummaryTab({ organizationId }: { organizationId?: string }) {
+export function FinanceSummaryTab({
+  organizationId,
+  consolidatedMonth,
+  onReviewUnlinked,
+  onAutoReconcile,
+}: {
+  organizationId?: string;
+  consolidatedMonth?: string;
+  onReviewUnlinked: () => void;
+  onAutoReconcile: () => void;
+}) {
   const { data, isLoading, isError, error } = useFinanceSummary(organizationId);
 
   if (isLoading) return <Spinner />;
@@ -22,7 +31,12 @@ export function FinanceSummaryTab({ organizationId }: { organizationId?: string 
 
   return (
     <div className="space-y-6">
-      <ConsolidatedPosition organizationId={organizationId} />
+      <ConsolidatedPosition
+        organizationId={organizationId}
+        month={consolidatedMonth}
+        onReviewUnlinked={onReviewUnlinked}
+        onAutoReconcile={onAutoReconcile}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <MetricCard
@@ -42,23 +56,6 @@ export function FinanceSummaryTab({ organizationId }: { organizationId?: string 
           value={formatMoney(data.estimatedResult)}
           icon={Wallet}
           tone={data.estimatedResult >= 0 ? 'success' : 'danger'}
-        />
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <MetricCard
-          title="Por cobrar"
-          value={formatMoney(data.pendingIncome)}
-        />
-        <MetricCard
-          title="Cobrado"
-          value={formatMoney(data.collectedIncome)}
-          icon={CheckCircle2}
-          tone="success"
-        />
-        <MetricCard
-          title="Gastos pendientes"
-          value={formatMoney(data.pendingExpense)}
         />
       </div>
 
