@@ -14,7 +14,8 @@ import type {
   ExpenseRecord,
   FinancialImportBatch,
   FinancialImportType,
-  FinancePosition,
+  ConsolidatedResponse,
+  AutoReconcileResult,
   FinanceSummary,
   IncomeRecord,
   ReconciliationCandidate,
@@ -74,13 +75,13 @@ export function useFinanceSummary(organizationId?: string) {
   });
 }
 
-export function useFinancePosition(organizationId?: string) {
+export function useConsolidated(filters: { organizationId?: string; month?: string }) {
   return useQuery({
-    queryKey: ['finance', 'position', organizationId ?? 'all'],
+    queryKey: ['finance', 'consolidated', filters],
     queryFn: () =>
       api
-        .get<{ data: FinancePosition }>(
-          `/finance/position${toQuery({ organizationId })}`,
+        .get<{ data: ConsolidatedResponse }>(
+          `/finance/consolidated${toQuery(filters)}`,
         )
         .then((r) => r.data),
   });
@@ -249,6 +250,7 @@ export type BankTransactionFilters = {
   month?: string;
   search?: string;
   category?: string;
+  reconciliation?: 'linked' | 'unlinked';
 };
 
 export function useBankTransactions(filters: BankTransactionFilters = {}) {
@@ -490,6 +492,33 @@ export function useConfirmFinanceImport() {
       invalidateFinance(qc);
       qc.invalidateQueries({ queryKey: ['finance-imports'] });
       qc.invalidateQueries({ queryKey: ['clients'] });
+    },
+  });
+}
+
+export function useAutoReconcile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: {
+      organizationId: string;
+      month?: string;
+      apply: boolean;
+    }) =>
+      api
+        .post<{ data: AutoReconcileResult }>(
+          '/finance/reconciliation/auto',
+          payload,
+        )
+        .then((r) => r.data),
+    // Solo el modo aplicar muta datos; el preview no invalida nada. Marca
+    // facturas/gastos como PAID, así que invalida también clients (fichas de
+    // cobranza) igual que useRegisterPayment.
+    onSuccess: (_data, vars) => {
+      if (vars.apply) {
+        invalidateFinance(qc);
+        qc.invalidateQueries({ queryKey: ['finance-imports'] });
+        qc.invalidateQueries({ queryKey: ['clients'] });
+      }
     },
   });
 }
