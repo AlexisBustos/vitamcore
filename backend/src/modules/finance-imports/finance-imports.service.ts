@@ -104,6 +104,10 @@ export async function listBankTransactions(filters: ListTransactionsFilters) {
     where.description = { contains: filters.search, mode: 'insensitive' };
   }
 
+  if (filters.category) {
+    where.category = filters.category === '__none__' ? null : filters.category;
+  }
+
   const transactions = await prisma.bankTransaction.findMany({
     where,
     orderBy: [{ transactionDate: 'desc' }, { createdAt: 'desc' }],
@@ -176,6 +180,22 @@ export async function updateBankAccount(
     }
     throw error;
   }
+}
+
+export async function setTransactionCategory(
+  id: string,
+  category: string | null,
+) {
+  const current = await prisma.bankTransaction.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+  if (!current) throw notFound('Movimiento no encontrado');
+  return prisma.bankTransaction.update({
+    where: { id },
+    data: { category, categoryManual: true },
+    include: { bankAccount: refs.bankAccount },
+  });
 }
 
 export async function previewImport(input: PreviewImportInput, file?: UploadFile) {
@@ -433,6 +453,45 @@ export async function listBankMonthly(filters: {
   });
 
   return result.reverse();
+}
+
+export async function listBankByCategory(filters: {
+  organizationId?: string;
+  bankAccountId?: string;
+  month?: string;
+}) {
+  const conditions = [Prisma.sql`1 = 1`];
+  if (filters.organizationId) {
+    conditions.push(Prisma.sql`"organizationId" = ${filters.organizationId}`);
+  }
+  if (filters.bankAccountId) {
+    conditions.push(Prisma.sql`"bankAccountId" = ${filters.bankAccountId}`);
+  }
+  if (filters.month) {
+    const [y, m] = filters.month.split('-').map(Number);
+    const start = new Date(Date.UTC(y, m - 1, 1));
+    const end = new Date(Date.UTC(y, m, 1));
+    conditions.push(
+      Prisma.sql`"transactionDate" >= ${start} AND "transactionDate" < ${end}`,
+    );
+  }
+  const rows = await prisma.$queryRaw<
+    { category: string | null; credits: bigint; charges: bigint; count: bigint }[]
+  >(Prisma.sql`
+    SELECT category,
+           SUM("creditAmount")::bigint AS credits,
+           SUM("chargeAmount")::bigint AS charges,
+           count(*)::bigint AS count
+    FROM "bank_transactions"
+    WHERE ${Prisma.join(conditions, ' AND ')}
+    GROUP BY category
+  `);
+  return rows.map((r) => ({
+    category: r.category,
+    credits: Number(r.credits),
+    charges: Number(r.charges),
+    count: Number(r.count),
+  }));
 }
 
 export async function listBatches(filters: ListBatchesFilters) {
