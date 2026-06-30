@@ -79,6 +79,12 @@ export function ReconcileModal({
                   <span className="text-xs text-[var(--color-muted-foreground)]">
                     {formatDate(c.transactionDate)} · {formatMoney(c.amount)}
                   </span>
+                  {record && !c.exact && (
+                    <span className="mt-0.5 block text-xs text-[var(--color-warning)]">
+                      ⚠ movimiento {formatMoney(c.amount)} ≠ factura{' '}
+                      {formatMoney(record.amount)}
+                    </span>
+                  )}
                 </div>
                 <Button onClick={() => onReconcile(c.id)} disabled={pending}>
                   Conciliar
