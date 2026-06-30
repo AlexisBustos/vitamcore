@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -31,52 +32,57 @@ export function CreateRuleFromMovement({
 
   const activeCats = categories.filter((c) => c.active);
 
+  // Resetea el estado al abrir para que reabrir no muestre valores viejos.
+  function abrir() {
+    setMatchText(description);
+    setDirection(isCharge ? 'CHARGE' : 'ANY');
+    setCategoryKey('');
+    setOpen(true);
+  }
+
   async function crear() {
     if (!categoryKey) return;
     await saveRule.mutateAsync({ categoryKey, matchText, direction });
     setOpen(false);
   }
 
-  if (!open) {
-    return (
+  return (
+    <>
       <button
         type="button"
         title="Crear regla desde este movimiento"
         className="text-xs text-[var(--color-primary)] hover:underline"
-        onClick={() => setOpen(true)}
+        onClick={abrir}
       >
         + regla
       </button>
-    );
-  }
-
-  return (
-    <div className="absolute z-20 mt-1 w-80 rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-lg">
-      <p className="mb-2 text-xs text-[var(--color-muted-foreground)]">
-        Cuando la descripción <strong>contenga</strong>:
-      </p>
-      <Input value={matchText} onChange={(e) => setMatchText(e.target.value)} className="font-mono text-xs" />
-      <div className="mt-2 grid grid-cols-2 gap-2">
-        <Select options={DIRECTIONS} value={direction} onChange={(e) => setDirection(e.target.value)} />
-        <Select
-          options={activeCats.map((c) => ({ value: c.key, label: c.name }))}
-          placeholder="Categoría…"
-          value={categoryKey}
-          onChange={(e) => setCategoryKey(e.target.value)}
-        />
-      </div>
-      <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
-        Calza con ~{preview.data?.count ?? '…'} movimientos
-      </p>
-      {pinned && (
-        <p className="mt-1 text-xs text-[var(--color-warning)]">
-          Este movimiento está ajustado a mano; la regla no lo tocará.
+      <Modal open={open} onClose={() => setOpen(false)} title="Crear regla desde el movimiento">
+        <p className="mb-2 text-xs text-[var(--color-muted-foreground)]">
+          Cuando la descripción <strong>contenga</strong>:
         </p>
-      )}
-      <div className="mt-3 flex justify-end gap-2">
-        <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-        <Button onClick={crear} disabled={!categoryKey || saveRule.isPending}>Crear regla</Button>
-      </div>
-    </div>
+        <Input value={matchText} onChange={(e) => setMatchText(e.target.value)} className="font-mono text-xs" />
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <Select options={DIRECTIONS} value={direction} onChange={(e) => setDirection(e.target.value)} />
+          <Select
+            options={activeCats.map((c) => ({ value: c.key, label: c.name }))}
+            placeholder="Categoría…"
+            value={categoryKey}
+            onChange={(e) => setCategoryKey(e.target.value)}
+          />
+        </div>
+        <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+          Calza con ~{preview.data?.count ?? '…'} movimientos
+        </p>
+        {pinned && (
+          <p className="mt-1 text-xs text-[var(--color-warning)]">
+            Este movimiento está ajustado a mano; la regla no lo tocará.
+          </p>
+        )}
+        <div className="mt-3 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+          <Button onClick={crear} disabled={!categoryKey || saveRule.isPending}>Crear regla</Button>
+        </div>
+      </Modal>
+    </>
   );
 }
