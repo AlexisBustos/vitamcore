@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { currency, optionalShortText } from '../shared/zod';
+import { BANK_CATEGORIES } from './finance-imports.categories';
 
 export const importTypeEnum = z.enum([
   'SALES_REPORT',
@@ -57,6 +58,17 @@ export const listTransactionsQuery = z.object({
     .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Formato de mes inválido (YYYY-MM)')
     .optional(),
   search: z.string().trim().max(255).optional(),
+  category: z.string().optional(),
+});
+
+export const listByCategoryQuery = listTransactionsQuery.pick({
+  organizationId: true,
+  bankAccountId: true,
+  month: true,
+});
+
+export const setCategorySchema = z.object({
+  category: z.enum(BANK_CATEGORIES).nullable(),
 });
 
 export type CreateBankAccountInput = z.infer<typeof createBankAccountSchema>;
@@ -66,3 +78,5 @@ export type ConfirmImportInput = z.infer<typeof confirmImportSchema>;
 export type ListAccountsFilters = z.infer<typeof listAccountsQuery>;
 export type ListBatchesFilters = z.infer<typeof listBatchesQuery>;
 export type ListTransactionsFilters = z.infer<typeof listTransactionsQuery>;
+export type ListByCategoryFilters = z.infer<typeof listByCategoryQuery>;
+export type SetCategoryInput = z.infer<typeof setCategorySchema>;
