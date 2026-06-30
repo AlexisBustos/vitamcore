@@ -45,8 +45,10 @@ como bloque destacado arriba de la pestaña **Resumen** de Finanzas. Junta por p
 Todo en el módulo `finance` (mismo patrón routes → controller → service).
 
 ### 1. Service — `getFinancePosition(organizationId?)` (`finance.service.ts`)
-Agregar `import { Prisma } from '@prisma/client';` (hoy solo importa tipos). Reusar las constantes
-`INCOME_PENDING`/`EXPENSE_PENDING` ya presentes.
+Necesita el namespace `Prisma` (hoy el archivo solo hace `import type { ExpenseStatus, IncomeStatus }`):
+fusionar en `import { Prisma, type ExpenseStatus, type IncomeStatus } from '@prisma/client';`.
+Reusar las constantes `INCOME_PENDING`/`EXPENSE_PENDING` ya presentes. La query de caja tipa la
+fila como `{ organizationId: string; caja: bigint }[]` y mapea con `Number(row.caja)`.
 
 - **Caja por empresa** (`$queryRaw`, último saldo por cuenta sumado por empresa):
   ```sql
@@ -113,9 +115,11 @@ export interface FinancePosition {
 
 ### 5. Componente (`pages/finance/ConsolidatedPosition.tsx`, nuevo)
 - Usa `useFinancePosition(organizationId)`.
-- **4 `MetricCard`**: Caja · Por cobrar · Por pagar · **Posición** (esta resaltada, `tone` por
-  signo: `position >= 0 ? 'success' : 'danger'`). Un subtítulo con la fórmula
-  "Posición = Caja + Por cobrar − Por pagar".
+- **4 `MetricCard`**: Caja · Por cobrar · Por pagar · **Posición**. La tarjeta Posición lleva un
+  `icon` (ej. `Scale`/`Wallet` de lucide) con `tone={position >= 0 ? 'success' : 'danger'}` —
+  ojo: `MetricCard` aplica el `tone` **solo al color del ícono** (no resalta la tarjeta ni el
+  número), así que el signo se lee por el color del ícono. Cada tarjeta puede usar el `hint` para
+  la fórmula; ej. en Posición: hint "Caja + Por cobrar − Por pagar".
 - **Tabla por empresa**: Empresa · Caja · Por cobrar · Por pagar · Posición (reusar estilo de la
   tabla "Resultado por empresa" del Resumen). Solo se muestra si `byOrganization.length > 1`
   (con una empresa, las tarjetas ya lo dicen todo).
@@ -143,7 +147,8 @@ export interface FinancePosition {
   evita null en el total (un null individual lo trataría Postgres como 0 en `SUM`). Hoy no ocurre
   (0 movimientos sin saldo).
 - **bigint de `SUM(...)::bigint`** → `Number()` (igual que en `listBankMonthly`).
-- **Posición negativa**: válida (más por pagar + poca caja que por cobrar); la tarjeta va en rojo.
+- **Posición negativa**: válida (más por pagar + poca caja que por cobrar); el **ícono** de la
+  tarjeta Posición va en rojo (`tone='danger'`).
 - **Doble conteo**: evitado por diseño — por cobrar filtra `paidDate: null`; la caja ya refleja lo
   cobrado.
 
