@@ -66,12 +66,31 @@ Patrón del proyecto: `routes → controller (Zod .parse) → service (Prisma)`,
 errores vía `utils/http-error.ts`. Todo bajo el módulo `finance` salvo lo de la lista de
 movimientos, que vive en `finance-imports`.
 
-### 1. Helper compartido de devengado (`finance.service.ts`)
+### 0. Semántica del "mes" (resuelve la ambigüedad de alcance)
 
-Extraer la lógica duplicada de por-cobrar/por-pagar (hoy repetida en `getSummary` y
-`getFinancePosition`) a un helper privado `computeReceivablePayable(organizationId?)` que devuelve
-`{ receivable, payable, byOrganization }`. Lo reusan `getSummary`, `getConsolidated` y (si se
-mantiene) `getFinancePosition`. **No cambia los números**, solo elimina duplicación.
+Hay dos naturalezas distintas y NO deben confundirse:
+- **Posición** (caja, por cobrar, por pagar, posición): es una **foto al día de hoy** (saldos y
+  saldos pendientes). **No se filtra por mes** — siempre es el snapshot actual, como el
+  `getFinancePosition` de hoy.
+- **Cuadre y auto-conciliación**: sí son **por mes** (o "todos"). El Consolidado gana un **selector
+  de mes** (componente `MonthFilter` ya existente + lista de meses de `useBankTransactionMonths`),
+  con opción **"Todos los meses"** (valor vacío). Ese mes alimenta el bloque Cuadre y el modal de
+  auto-conciliación; **no** afecta las tarjetas de posición.
+
+Por eso `getConsolidated` recibe `month?` opcional: las tarjetas de posición lo ignoran; solo el
+sub-objeto `reconciliation` (cuadre) se calcula para ese mes (o todos si se omite). El título del
+bloque se adapta ("Cuadre de mayo" / "Cuadre — todos los meses").
+
+### 1. Helpers compartidos (`finance.service.ts`)
+
+Extraer a helpers privados la lógica hoy **duplicada/inline**:
+- `computeReceivablePayable(organizationId?)` → `{ receivable, payable, byOrganization }` (hoy
+  repetido idéntico en `getSummary` y `getFinancePosition`).
+- `computeOverdue(organizationId?)` → `{ overdueReceivable:{amount,count}, overduePayable:{amount,count} }`
+  (hoy **inline** dentro de `getSummary`; `getConsolidated` lo necesita, así que se extrae para no
+  duplicarlo).
+
+Los reusan `getSummary` y `getConsolidated`. **No cambian los números**, solo eliminan duplicación.
 
 ### 2. Cuadre del mes (`getReconciliationSummary`)
 
@@ -100,21 +119,28 @@ el cuadre. Devuelve:
 }
 ```
 - `cash` por empresa: el saldo bancario corrido (LATERAL último `balance` por cuenta), igual que el
-  `getFinancePosition` actual.
-- `receivable`/`payable`: del helper §1 (sin doble cálculo).
-- `overdue*`: reusar las agregaciones de vencidos que ya tiene `getSummary`.
-- Rutas: `GET /finance/consolidated`. Mantener `GET /finance/summary` para las pestañas de detalle.
-  Eliminar `GET /finance/position` y `getFinancePosition` (lo absorbe `getConsolidated`).
+  `getFinancePosition` actual. **No** se filtra por mes (foto actual).
+- `receivable`/`payable`: del helper `computeReceivablePayable` (§1). **No** se filtra por mes.
+- `overdue*`: del helper `computeOverdue` (§1). **No** se filtra por mes.
+- `reconciliation`: del §2, **sí** filtrado por el `month` recibido (o todos si se omite).
+- Rutas: `GET /finance/consolidated` (query `organizationId?`, `month?`). Mantener
+  `GET /finance/summary` para las pestañas de detalle. Eliminar `GET /finance/position` y
+  `getFinancePosition` (lo absorbe `getConsolidated`). **Barrer** lo que quede sin uso tras
+  removerlo: tipos `FinancePosition`/`FinancePositionOrg` (`types/domain.ts`) y, si aplica, el
+  import de `Prisma` en `finance.service.ts`, para que el typecheck quede limpio.
 
 ### 4. Auto-conciliación (`autoReconcile`)
 
-`autoReconcile({ organizationId, month })` → enlaza los pares **inequívocos** y devuelve el conteo.
-Hay un **modo preview** (no escribe) y un **modo aplicar**, controlados por un flag `apply`:
+`autoReconcile({ organizationId, month?, apply })` → enlaza los pares **inequívocos** y devuelve el
+conteo. `organizationId` es **requerido** (la auto-conciliación corre por empresa). `month` es
+**opcional**: si viene, acota las facturas candidatas a ese mes; si se omite ("todos"), considera
+todas las no pagadas. Hay un **modo preview** (`apply:false`, no escribe) y un **modo aplicar**
+(`apply:true`):
 
 Algoritmo (por dirección, dos pasadas: income/credit y expense/charge):
 1. **Facturas candidatas** (income): `paidDate = null`, `netAmount > 0` (no NC ni anuladas), de la
-   empresa, con fecha de emisión en el mes elegido (`sourceIssueDate ?? incomeDate` dentro del
-   rango). `target = netAmount ?? amount`. (Expense: `status != CANCELLED`, `paidDate = null`,
+   empresa; **si hay `month`**, con fecha de emisión (`sourceIssueDate ?? incomeDate`) dentro de ese
+   rango. `target = netAmount ?? amount`. (Expense: `status != CANCELLED`, `paidDate = null`,
    `target = amount`.)
 2. **Movimientos candidatos**: de la empresa, dirección correcta (`creditAmount > 0` para income /
    `chargeAmount > 0` para expense), **sin enlazar** (`_count.paidIncomes === 0` resp.
@@ -168,27 +194,40 @@ export interface AutoReconcileResult { pairs: number; linkedIncome: number; link
 ### 7. Hooks (`hooks/useFinance.ts`)
 - `useConsolidated(filters: { organizationId?; month? })` → `GET /finance/consolidated`, key
   `['finance','consolidated', filters]`. **Reemplaza** `useFinancePosition`.
-- `useAutoReconcile()` → `POST /finance/reconciliation/auto`. En `onSuccess` (modo aplicar) invalida
-  `['finance']`, `['finance-imports']`, `['income']`, `['expenses']` (reusar el patrón de
-  `invalidateFinance`). El preview se hace con `apply:false` y no invalida.
+- `useAutoReconcile()` → `POST /finance/reconciliation/auto`. En `onSuccess` del modo **aplicar**:
+  llamar `invalidateFinance(qc)` **y además** `qc.invalidateQueries({ queryKey: ['finance-imports'] })`
+  (mismo patrón que `useRegisterPayment`, que invalida finance + finance-imports + clients). El
+  **preview** (`apply:false`) NO invalida.
 - `reconciliation?` añadido a los filtros de `useBankTransactions` (viaja por `toQuery`).
 
-### 8. Consolidado / Resumen (`ConsolidatedPosition.tsx` + `FinanceSummaryTab.tsx`)
-- `ConsolidatedPosition` pasa a consumir `useConsolidated` (en vez de `useFinancePosition`) y, bajo
-  las 4 tarjetas de posición, agrega el bloque **Cuadre del mes**: dos filas (Abonos / Cargos) con
-  total · conciliado · suelto, y una línea "⚠ N movimientos sin enlazar" con un botón **[revisar]**
-  que navega a la pestaña Bancos con el filtro `unlinked` activo (vía estado del `FinancePage`).
-- Botón **[Auto-conciliar exactos]**: abre `AutoReconcileModal` (§9).
+### 8. Consolidado / Resumen (`ConsolidatedPosition.tsx` + `FinanceSummaryTab.tsx` + `FinancePage.tsx`)
+- **Selector de mes**: `FinancePage` gana estado `consolidatedMonth` (string | undefined) y un
+  `MonthFilter` en la cabecera del Resumen (lista de `useBankTransactionMonths(organizationId)`),
+  con "Todos los meses" = vacío. Default: el **mes más reciente con datos** (primero de la lista).
+  Se pasa como prop a `ConsolidatedPosition`.
+- `ConsolidatedPosition` consume `useConsolidated({ organizationId, month })` (en vez de
+  `useFinancePosition`). Las 4 tarjetas de posición son foto actual; debajo agrega el bloque
+  **Cuadre** (título según el mes): dos filas (Abonos / Cargos) con total · conciliado · suelto, y
+  una línea "⚠ N movimientos sin enlazar" con botón **[revisar]**.
+- **Deep-link [revisar]**: `FinancePage` expone una función que hace `setTab('banks')` y fija un
+  estado `banksInitialFilter = 'unlinked'`, pasado a `BanksTab` como prop nueva
+  `initialReconciliation?: 'linked' | 'unlinked'` (que `BanksTab` usa como valor inicial de su
+  filtro local de conciliación). `ConsolidatedPosition` recibe esa función por prop y la llama
+  desde [revisar].
+- Botón **[Auto-conciliar exactos]**: abre `AutoReconcileModal` (§9) con la empresa + el mes
+  seleccionado.
 - `FinanceSummaryTab` deja de mostrar "Por cobrar/Cobrado/Gastos pendientes" duplicados (ya viven
   en el bloque de posición); conserva resultado del mes, por empresa, vencidos, categorías y
   próximos vencimientos.
 
 ### 9. Modal de auto-conciliación (`AutoReconcileModal.tsx`, nuevo)
-- Al abrir, llama `useAutoReconcile` en modo **preview** (`apply:false`) con la empresa+mes activos
-  y muestra: *"Se enlazarán N pares exactos; M montos quedan ambiguos para revisar a mano."*
+- Recibe `organizationId` y `month` (el seleccionado en el Consolidado; puede ser "todos" = sin
+  mes). Al abrir, llama `useAutoReconcile` en modo **preview** (`apply:false`) y muestra: *"Se
+  enlazarán N pares exactos; M montos quedan ambiguos para revisar a mano."*
 - Botón **Confirmar** → llama en modo **aplicar** (`apply:true`); al éxito muestra el conteo
-  enlazado y cierra; las tablas/posición se refrescan por invalidación.
-- Requiere una empresa seleccionada (si el filtro global es "todas", pedir elegir una).
+  enlazado y cierra; las tablas/posición se refrescan por invalidación. Deshabilitado si N = 0.
+- Requiere una empresa seleccionada (si el filtro global es "todas", el botón Auto-conciliar del
+  Consolidado pide elegir una empresa primero).
 
 ### 10. Bancos: estado de conciliación (`BanksTab.tsx`)
 - Columna **Conciliación**: badge "Conciliado" (verde) / "Suelto" (gris) según `t.reconciled`.
@@ -213,10 +252,15 @@ export interface AutoReconcileResult { pairs: number; linkedIncome: number; link
 (`reconciled` + filtro en `listBankTransactions`), `finance-imports.schema.ts` (filtro
 `reconciliation`).
 
-**Frontend**: `types/domain.ts`, `hooks/useFinance.ts`, `pages/finance/ConsolidatedPosition.tsx`,
-`pages/finance/FinanceSummaryTab.tsx`, `pages/finance/FinancePage.tsx` (deep-link a Bancos),
-`pages/finance/AutoReconcileModal.tsx` (nuevo), `pages/finance/BanksTab.tsx`,
-`pages/finance/ExpensesTab.tsx`, `pages/finance/ReconcileModal.tsx`.
+**Frontend**: `types/domain.ts` (tipos nuevos + `reconciled` en `BankTransaction`; barrer
+`FinancePosition`/`FinancePositionOrg` sin uso), `hooks/useFinance.ts` (`useConsolidated`,
+`useAutoReconcile`, filtro `reconciliation`; quitar `useFinancePosition`),
+`pages/finance/ConsolidatedPosition.tsx` (cuadre + auto-conciliar + prop de mes y de deep-link),
+`pages/finance/FinanceSummaryTab.tsx` (quitar duplicados), `pages/finance/FinancePage.tsx` (selector
+de mes `consolidatedMonth`, deep-link a Bancos vía `banksInitialFilter`),
+`pages/finance/AutoReconcileModal.tsx` (nuevo), `pages/finance/BanksTab.tsx` (columna + filtro de
+conciliación + prop `initialReconciliation`), `pages/finance/ExpensesTab.tsx` (columna Proveedor),
+`pages/finance/ReconcileModal.tsx` (aviso de monto).
 
 ## Manejo de errores y casos borde
 
