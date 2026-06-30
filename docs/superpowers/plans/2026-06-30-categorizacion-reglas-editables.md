@@ -99,12 +99,14 @@ model BankCategoryRule {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
+  @@unique([categoryKey, matchText, direction])
   @@index([active, priority])
-  @@index([categoryKey])
   @@map("bank_category_rules")
 }
 ```
 (No se toca `BankTransaction`: sigue con `category String?` + `categoryManual`. La relación es por valor, no FK.)
+
+> **Por qué el `@@unique([categoryKey, matchText, direction])`:** da a cada regla una **identidad estable** independiente de `priority`. El seed hace `upsert` sobre esa clave (idempotente, no borra nada), y `priority` queda como puro orden de evaluación, libre de reordenar sin invariantes frágiles. También evita reglas duplicadas (el service traduce `P2002` a `badRequest`).
 
 - [ ] **Step 2b: Verificar el formato** — `cd /c/Workspace/Code/vitamcore/backend && npx prisma format`. Expected: sin errores; el archivo queda alineado.
 
@@ -226,21 +228,25 @@ async function main() {
     });
   }
 
-  // Reglas: idempotencia por (categoryKey, matchText, direction). Como no hay
-  // unique compuesto, se limpian las reglas seed y se recrean. Las reglas
-  // creadas luego por el CEO desde la UI tendrán priority >= 100 (ver service),
-  // así que borrar por priority < 100 no las toca.
-  await prisma.bankCategoryRule.deleteMany({ where: { priority: { lt: 100 } } });
+  // Reglas: idempotentes por el unique compuesto (categoryKey, matchText,
+  // direction). upsert NO borra nada → re-ejecutar el seed nunca toca las
+  // reglas creadas por el CEO. En `update` se deja {} para no pisar priority/
+  // active si el CEO ya las ajustó; en `create` priority = índice (las del seed
+  // quedan primero por su orden bajo; priority no es único, los empates son
+  // inofensivos).
   let priority = 0;
   for (const r of RULES) {
-    await prisma.bankCategoryRule.create({
-      data: {
-        categoryKey: r.categoryKey,
-        matchText: normalizeText(r.matchText), // preserva ' iva' (normalizeText no trimea)
-        direction: r.direction,
-        priority,
-        active: true,
+    const matchText = normalizeText(r.matchText); // preserva ' iva' (no trimea)
+    await prisma.bankCategoryRule.upsert({
+      where: {
+        categoryKey_matchText_direction: {
+          categoryKey: r.categoryKey,
+          matchText,
+          direction: r.direction,
+        },
       },
+      update: {},
+      create: { categoryKey: r.categoryKey, matchText, direction: r.direction, priority, active: true },
     });
     priority += 1;
   }
@@ -255,7 +261,7 @@ main()
   .finally(() => prisma.$disconnect());
 ```
 
-> **Decisión de prioridad seed vs usuario:** las reglas del seed ocupan `priority` 0..17. Las reglas creadas por el CEO desde la UI nacen con `priority = max(priority)+1` (ver `createRule`, Task 5), por lo que quedan **después** de las del seed. El seed re-ejecutable borra solo `priority < 100` para no tocar reglas del usuario; ninguna regla de usuario debe bajar de 100 — para garantizarlo, `createRule` arranca la numeración de usuario en `max(100, maxPriority+1)`.
+> **Decisión de prioridad seed vs usuario:** las reglas del seed ocupan `priority` 0..17 (orden de evaluación original). Las reglas creadas por el CEO nacen con `priority = max(priority)+1` (ver `createRule`, Task 5), quedando **después**. La idempotencia del seed **no depende de `priority`** sino del unique `(categoryKey, matchText, direction)`: re-ejecutar el seed hace `upsert` y nunca borra reglas del usuario, así que `reorderRules` puede reescribir `priority` libremente sin riesgo.
 
 - [ ] **Step 2: Agregar el script npm** — en `backend/package.json`, dentro de `"scripts"`:
 ```json
@@ -272,7 +278,7 @@ Expected: imprime `Sembradas 10 categorías y 18 reglas.`
 ```bash
 docker exec -i vitamcore-postgres psql -U postgres -d vitamcore -c "SELECT COALESCE(category,'(null)') AS categoria, count(*) FROM bank_transactions GROUP BY category ORDER BY 1;"
 ```
-Expected: anotar los conteos (referencia de paridad para el chunk 2, donde `reapplyRules` debe reproducirlos).
+Expected: anotar los conteos (referencia de paridad para el chunk 2). **Nota:** `normalizeText` agrega quitado de tildes que el `categorize` viejo no hacía, así que tras reaplicar la distribución debe ser **igual salvo, a lo más, unos pocos movimientos** con descripciones acentuadas que ahora calzan (mejora esperada, no regresión). Un descalce grande sí es un error a investigar.
 
 - [ ] **Step 5: Commit**
 ```bash
@@ -366,6 +372,7 @@ cd /c/Workspace/Code/vitamcore && git add backend/src/modules/finance-categories
 
 - [ ] **Step 1: `category-rules.service.ts`** (incluye `getActiveRules`, `reapplyRules`, `previewRule` porque las reglas son el corazón):
 ```ts
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { badRequest, notFound } from '../../utils/http-error';
 import {
@@ -397,40 +404,45 @@ async function assertCategoryExists(categoryKey: string) {
 }
 
 /// Recalcula la categoría de los movimientos NO fijados a mano con las reglas
-/// vigentes. Idempotente; persiste solo los que cambian. Devuelve cuántos.
+/// vigentes. Idempotente; persiste solo los que cambian, en una transacción.
+/// Devuelve cuántos cambiaron.
 export async function reapplyRules() {
   const rules = await getActiveRules();
   const txs = await prisma.bankTransaction.findMany({
     where: { categoryManual: false },
     select: { id: true, description: true, chargeAmount: true, category: true },
   });
-  let updated = 0;
+  const ops = [];
   for (const t of txs) {
     const next = categorizeWith(rules, t.description, t.chargeAmount > 0);
     if (next !== t.category) {
-      await prisma.bankTransaction.update({
-        where: { id: t.id },
-        data: { category: next },
-      });
-      updated += 1;
+      ops.push(prisma.bankTransaction.update({ where: { id: t.id }, data: { category: next } }));
     }
   }
-  return { updated };
+  if (ops.length > 0) await prisma.$transaction(ops);
+  return { updated: ops.length };
 }
 
 export async function createRule(input: CreateRuleInput) {
   await assertCategoryExists(input.categoryKey);
   const max = await prisma.bankCategoryRule.aggregate({ _max: { priority: true } });
-  // Reglas de usuario arrancan en >= 100 para no chocar con el rango del seed.
-  const priority = Math.max(100, (max._max.priority ?? -1) + 1);
-  const rule = await prisma.bankCategoryRule.create({
-    data: {
-      categoryKey: input.categoryKey,
-      matchText: normalizeText(input.matchText), // no trimea: preserva centinelas de espacio
-      direction: (input.direction ?? 'ANY') as RuleDirection,
-      priority,
-    },
-  });
+  const priority = (max._max.priority ?? -1) + 1; // se agrega al final
+  let rule;
+  try {
+    rule = await prisma.bankCategoryRule.create({
+      data: {
+        categoryKey: input.categoryKey,
+        matchText: normalizeText(input.matchText), // no trimea: preserva centinelas de espacio
+        direction: (input.direction ?? 'ANY') as RuleDirection,
+        priority,
+      },
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      throw badRequest('Ya existe una regla con ese texto y dirección');
+    }
+    throw e;
+  }
   const { updated } = await reapplyRules();
   return { rule, recategorized: updated };
 }
@@ -439,15 +451,23 @@ export async function updateRule(id: string, input: UpdateRuleInput) {
   const current = await prisma.bankCategoryRule.findUnique({ where: { id } });
   if (!current) throw notFound('Regla no encontrada');
   if (input.categoryKey) await assertCategoryExists(input.categoryKey);
-  const rule = await prisma.bankCategoryRule.update({
-    where: { id },
-    data: {
-      categoryKey: input.categoryKey,
-      matchText: input.matchText !== undefined ? normalizeText(input.matchText) : undefined,
-      direction: input.direction as RuleDirection | undefined,
-      active: input.active,
-    },
-  });
+  let rule;
+  try {
+    rule = await prisma.bankCategoryRule.update({
+      where: { id },
+      data: {
+        categoryKey: input.categoryKey,
+        matchText: input.matchText !== undefined ? normalizeText(input.matchText) : undefined,
+        direction: input.direction as RuleDirection | undefined,
+        active: input.active,
+      },
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      throw badRequest('Ya existe una regla con ese texto y dirección');
+    }
+    throw e;
+  }
   const { updated } = await reapplyRules();
   return { rule, recategorized: updated };
 }
@@ -461,17 +481,12 @@ export async function deleteRule(id: string) {
 }
 
 export async function reorderRules(ids: string[]) {
-  // Reescribe priority según el orden recibido, preservando el offset base de
-  // cada regla (seed < 100 mantiene su rango; usuario >= 100 mantiene el suyo).
-  // Simplicidad: respeta el rango de la primera regla de la lista como base.
-  const rules = await prisma.bankCategoryRule.findMany({
-    where: { id: { in: ids } },
-    select: { id: true, priority: true },
-  });
-  const base = Math.min(...rules.map((r) => r.priority));
+  // `priority` es puro orden de evaluación (sin bandas): se reescribe 0..n-1
+  // según el orden recibido. La idempotencia del seed no depende de priority
+  // (usa el unique compuesto), así que renumerar libremente es seguro.
   await prisma.$transaction(
     ids.map((id, i) =>
-      prisma.bankCategoryRule.update({ where: { id }, data: { priority: base + i } }),
+      prisma.bankCategoryRule.update({ where: { id }, data: { priority: i } }),
     ),
   );
   const { updated } = await reapplyRules();
@@ -715,7 +730,7 @@ apiRouter.use('/finance/category-rules', requireAuth, financeCategoryRulesRouter
 # Vía psql tras llamar el endpoint, revisar la distribución:
 docker exec -i vitamcore-postgres psql -U postgres -d vitamcore -c "SELECT COALESCE(category,'(null)') AS categoria, count(*) FROM bank_transactions GROUP BY category ORDER BY 1;"
 ```
-Expected: **misma distribución** que el snapshot previo (paridad startsWith→contains confirmada). Si difiere, revisar la regla afectada antes de seguir.
+Expected: **misma distribución** que el snapshot previo, salvo a lo más unos pocos movimientos que ahora calzan por la normalización sin tildes (mejora esperada). Un descalce grande indica un error de traducción de reglas: revisar antes de seguir.
 
 - [ ] **Step 8: Commit**
 ```bash
@@ -1117,7 +1132,9 @@ export function BankCategoryBreakdown({
     return { ingresos, egresos, traspasos, totalIn, totalOut };
   }, [query.data, categories.data]);
 
-  if (query.isLoading) return <Spinner label="Cargando desglose…" />;
+  // Esperar también a las categorías: sin su meta, todo caería al fallback
+  // NEUTRAL y se contaría como traspaso por un frame.
+  if (query.isLoading || categories.isLoading) return <Spinner label="Cargando desglose…" />;
   if (!query.data || query.data.length === 0) return null;
 
   return (
@@ -1343,9 +1360,11 @@ export function CategoryRulesPanel({ open, onClose }: { open: boolean; onClose: 
   const [newCat, setNewCat] = useState({ name: '', kind: 'EXPENSE' });
   const [newRule, setNewRule] = useState({ matchText: '', direction: 'ANY', categoryKey: '' });
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   async function run(fn: () => Promise<unknown>) {
     setError(null);
+    setNotice(null);
     try {
       await fn();
     } catch (e) {
@@ -1359,6 +1378,11 @@ export function CategoryRulesPanel({ open, onClose }: { open: boolean; onClose: 
   return (
     <Modal open={open} onClose={onClose} title="Categorías y reglas">
       {error && <ErrorState message={error} />}
+      {notice && (
+        <p className="rounded-[var(--radius)] bg-[var(--color-success)]/10 px-3 py-2 text-sm text-[var(--color-success)]">
+          {notice}
+        </p>
+      )}
 
       {/* CATEGORÍAS */}
       <section className="mb-6">
@@ -1405,7 +1429,7 @@ export function CategoryRulesPanel({ open, onClose }: { open: boolean; onClose: 
       <section>
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-sm font-semibold">Reglas (orden = prioridad)</h3>
-          <Button variant="outline" onClick={() => run(async () => { const r = await reapply.mutateAsync(); setError(`Reaplicadas: ${(r as { data: { updated: number } }).data?.updated ?? 0} movimientos actualizados.`); })}>
+          <Button variant="outline" onClick={() => run(async () => { const r = await reapply.mutateAsync(); setNotice(`Reaplicadas: ${(r as { data: { updated: number } }).data?.updated ?? 0} movimientos actualizados.`); })}>
             Reaplicar reglas ahora
           </Button>
         </div>
@@ -1468,24 +1492,24 @@ cd /c/Workspace/Code/vitamcore && git add frontend/src/pages/finance/CategoryRul
 **Files:**
 - Modify: `frontend/src/pages/finance/BanksTab.tsx`
 
-- [ ] **Step 1: Imports** — agregar:
-```ts
-import { useBankCategories, useBulkSetCategory, useSetTransactionCategory } from '@/hooks/useFinance';
-import { CategoryRulesPanel } from './CategoryRulesPanel';
-import { CreateRuleFromMovement } from './CreateRuleFromMovement';
-```
-y **quitar** el import de `bankCategoryOptions` desde `@/lib/domain` (se reemplaza por el hook).
+- [ ] **Step 1: Imports** — el archivo **ya importa** `useSetTransactionCategory` (línea 21) y `Spinner`/etc. **NO** re-importarlos. Solo:
+  - Agregar `useBankCategories` y `useBulkSetCategory` a la **lista existente** de imports de `@/hooks/useFinance` (la que ya trae `useSetTransactionCategory`).
+  - Agregar `import { bankKindClassName } from '@/lib/domain';` (y **quitar** `bankCategoryOptions` del import de `@/lib/domain`, líneas 9-14).
+  - Agregar `import { CategoryRulesPanel } from './CategoryRulesPanel';` y `import { CreateRuleFromMovement } from './CreateRuleFromMovement';`.
+  - Agregar `import { useEffect } from 'react';` a la línea 1 (`import { useEffect, useMemo, useState } from 'react';`).
 
-- [ ] **Step 2: Estado y datos** — junto a los `useState`/hooks existentes:
+- [ ] **Step 2: Estado y datos** — el archivo **ya declara** `const setCategoryMut = useSetTransactionCategory();` (línea 31). **NO** redeclararlo. Agregar junto a los `useState`/hooks existentes solo lo nuevo:
 ```ts
 const categoriesQuery = useBankCategories();
 const categoryOptions = (categoriesQuery.data ?? [])
   .filter((c) => c.active)
   .map((c) => ({ value: c.key, label: c.name }));
-const setCategoryMut = useSetTransactionCategory();
 const bulkSet = useBulkSetCategory();
 const [selected, setSelected] = useState<Set<string>>(new Set());
 const [panelOpen, setPanelOpen] = useState(false);
+
+// Limpia la selección al cambiar de filtros para no arrastrar ids fuera de vista.
+useEffect(() => setSelected(new Set()), [bankAccountId, month, search, category]);
 ```
 
 - [ ] **Step 3: Reemplazar `bankCategoryOptions`** — en el `Select` de filtro de categoría y en el `Select` inline de la celda, usar `categoryOptions` en vez de `bankCategoryOptions`. El filtro mantiene el sentinel `__none__`:
@@ -1504,17 +1528,26 @@ options={[{ value: '', label: 'Sin categoría' }, ...categoryOptions]}
 <CategoryRulesPanel open={panelOpen} onClose={() => setPanelOpen(false)} />
 ```
 
-- [ ] **Step 5: Columna de selección** — en el `<thead>`, una `<th>` inicial con un checkbox "seleccionar todo (filtrado)":
+- [ ] **Step 5: Columna de selección** — el array de filas es `movements.data.transactions` (ver `BanksTab.tsx:260`). En el `<thead>`, una `<th>` inicial con un checkbox "seleccionar todo (filtrado)":
 ```tsx
 <th className="px-2 py-3">
   <input
     type="checkbox"
-    checked={transactions.length > 0 && selected.size === transactions.length}
-    onChange={(e) => setSelected(e.target.checked ? new Set(transactions.map((t) => t.id)) : new Set())}
+    checked={
+      (movements.data?.transactions.length ?? 0) > 0 &&
+      selected.size === movements.data?.transactions.length
+    }
+    onChange={(e) =>
+      setSelected(
+        e.target.checked
+          ? new Set((movements.data?.transactions ?? []).map((t) => t.id))
+          : new Set(),
+      )
+    }
   />
 </th>
 ```
-(`transactions` = el array que ya itera el `<tbody>`; usar el nombre real de la variable en el archivo.) En cada fila, una `<td>` con su checkbox:
+En cada fila, una `<td>` con su checkbox:
 ```tsx
 <td className="px-2 py-3">
   <input
@@ -1550,7 +1583,16 @@ options={[{ value: '', label: 'Sin categoría' }, ...categoryOptions]}
 )}
 ```
 
-- [ ] **Step 7: Acción crear-regla por fila** — en la celda de categoría, junto al `Select` inline y al marcador `•`, agregar (el contenedor de la celda debe ser `relative` para posicionar el popover):
+- [ ] **Step 7: Punto de color por kind + acción crear-regla por fila** — la celda de categoría hoy es un `<div className="flex items-center gap-1">` con el `Select` y el marcador `•` (ver `BanksTab.tsx:278-291`). Cambiar ese div a `className="relative flex items-center gap-1"` (el `relative` posiciona el popover). Dentro, **antes** del `Select`, un punto de color según el kind de la categoría del movimiento (consumidor de `bankKindClassName`):
+```tsx
+<span
+  className={`inline-block h-2 w-2 rounded-full ${bankKindClassName(
+    (categoriesQuery.data ?? []).find((c) => c.key === t.category)?.kind,
+  )}`}
+  title="Tipo de la categoría"
+/>
+```
+y **después** del marcador `•`, la acción de crear regla:
 ```tsx
 <CreateRuleFromMovement
   description={t.description}
