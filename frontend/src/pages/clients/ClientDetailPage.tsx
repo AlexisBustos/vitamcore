@@ -1,9 +1,12 @@
+import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, FileText } from 'lucide-react';
+import { ArrowLeft, FileText, Search } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { MetricCard } from '@/components/ui/metric';
 import { Spinner, ErrorState, EmptyState } from '@/components/ui/feedback';
 import { formatDate, formatMoney } from '@/lib/domain';
@@ -28,6 +31,13 @@ const ESTADO_CLASS: Record<EstadoCobro, string> = {
   cancelled: 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]',
 };
 
+const ESTADO_OPTIONS: { value: EstadoCobro; label: string }[] = [
+  { value: 'paid', label: 'Pagada' },
+  { value: 'overdue', label: 'Vencida' },
+  { value: 'receivable', label: 'Por cobrar' },
+  { value: 'cancelled', label: 'Anulada' },
+];
+
 // Estado de cobro derivado, alineado con income.service.ts (paymentState):
 // anulada = netAmount 0; pagada = tiene paidDate; vencida = dueDate pasado sin pago.
 function estadoCobro(inc: IncomeRecord): EstadoCobro {
@@ -41,6 +51,24 @@ export function ClientDetailPage() {
   const { id } = useParams();
   const { data: client, isLoading, isError, error } = useClientDetail(id);
   const registrar = useRegisterPayment();
+
+  const [folio, setFolio] = useState('');
+  const [estadoFiltro, setEstadoFiltro] = useState<EstadoCobro | ''>('');
+
+  // Filtrado en cliente sobre los documentos ya cargados. El filtro de estado
+  // solo aplica a facturas; las notas de crédito no tienen estado de cobro, así
+  // que se ocultan cuando hay un estado seleccionado.
+  const documentos = useMemo(() => {
+    const q = folio.trim().toLowerCase();
+    return (client?.incomes ?? []).filter((inc) => {
+      if (q && !(inc.sourceFolio ?? '').toLowerCase().includes(q)) return false;
+      if (estadoFiltro) {
+        if (inc.documentKind === 'CREDIT_NOTE') return false;
+        if (estadoCobro(inc) !== estadoFiltro) return false;
+      }
+      return true;
+    });
+  }, [client?.incomes, folio, estadoFiltro]);
 
   return (
     <div className="space-y-6">
@@ -89,12 +117,41 @@ export function ClientDetailPage() {
             </EmptyState>
           ) : (
             <Card className="overflow-hidden">
-              <div className="flex items-center gap-2 border-b border-[var(--color-border)] px-5 py-4">
-                <FileText className="h-5 w-5 text-[var(--color-primary)]" />
-                <h2 className="text-base font-semibold text-[var(--color-foreground)]">
-                  Documentos ({client.incomes.length})
-                </h2>
+              <div className="flex flex-wrap items-center gap-3 border-b border-[var(--color-border)] px-5 py-4">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-[var(--color-primary)]" />
+                  <h2 className="text-base font-semibold text-[var(--color-foreground)]">
+                    Documentos ({documentos.length})
+                  </h2>
+                </div>
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-muted-foreground)]" />
+                    <Input
+                      value={folio}
+                      onChange={(e) => setFolio(e.target.value)}
+                      placeholder="Buscar por folio…"
+                      className="w-48 pl-9"
+                    />
+                  </div>
+                  <Select
+                    value={estadoFiltro}
+                    onChange={(e) =>
+                      setEstadoFiltro(e.target.value as EstadoCobro | '')
+                    }
+                    options={ESTADO_OPTIONS}
+                    placeholder="Todos los estados"
+                    className="w-44"
+                  />
+                </div>
               </div>
+              {documentos.length === 0 ? (
+                <div className="px-5 py-10">
+                  <EmptyState title="Sin resultados">
+                    Ningún documento coincide con los filtros aplicados.
+                  </EmptyState>
+                </div>
+              ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-[var(--color-muted)] text-left text-xs text-[var(--color-muted-foreground)]">
@@ -110,7 +167,7 @@ export function ClientDetailPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--color-border)]">
-                    {client.incomes.map((inc) => {
+                    {documentos.map((inc) => {
                       const esNC = inc.documentKind === 'CREDIT_NOTE';
                       const estado = esNC ? null : estadoCobro(inc);
                       return (
@@ -180,6 +237,7 @@ export function ClientDetailPage() {
                   </tbody>
                 </table>
               </div>
+              )}
             </Card>
           )}
 
