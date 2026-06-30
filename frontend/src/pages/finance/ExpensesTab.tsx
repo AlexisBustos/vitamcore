@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Pencil, Plus, Repeat, Trash2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -79,6 +80,7 @@ export function ExpensesTab({ organizationId }: { organizationId?: string }) {
               <thead className="bg-[var(--color-muted)] text-left text-xs text-[var(--color-muted-foreground)]">
                 <tr>
                   <th className="px-4 py-3 font-medium">Descripción</th>
+                  <th className="px-4 py-3 font-medium">Proveedor</th>
                   <th className="px-4 py-3 font-medium">Empresa</th>
                   <th className="px-4 py-3 font-medium">Categoría</th>
                   <th className="px-4 py-3 text-right font-medium">Monto</th>
@@ -97,6 +99,18 @@ export function ExpensesTab({ organizationId }: { organizationId?: string }) {
                           <Repeat className="h-3.5 w-3.5 text-[var(--color-muted-foreground)]" />
                         )}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
+                      {r.vendorId ? (
+                        <Link
+                          to={`/proveedores/${r.vendorId}`}
+                          className="hover:text-[var(--color-primary)] hover:underline"
+                        >
+                          {r.vendorName ?? '—'}
+                        </Link>
+                      ) : (
+                        (r.vendorName ?? '—')
+                      )}
                     </td>
                     <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
                       {r.organization?.name ?? '—'}
