@@ -264,12 +264,19 @@ export function BanksTab({ organizationId }: { organizationId?: string }) {
           <span>{selected.size} seleccionados</span>
           <Select
             className="h-8 w-48"
-            options={[{ value: '', label: 'Sin categoría' }, ...categoryOptions]}
+            options={[{ value: '__none__', label: 'Sin categoría' }, ...categoryOptions]}
             placeholder="Asignar categoría…"
             value=""
             onChange={async (e) => {
-              await bulkSet.mutateAsync({ ids: [...selected], category: e.target.value || null });
-              setSelected(new Set());
+              const raw = e.target.value;
+              if (raw === '') return; // sigue sin selección
+              const category = raw === '__none__' ? null : raw;
+              try {
+                await bulkSet.mutateAsync({ ids: [...selected], category });
+                setSelected(new Set());
+              } catch {
+                // Mantiene la selección intacta si la asignación falla.
+              }
             }}
           />
           <Button variant="outline" onClick={() => setSelected(new Set())}>Limpiar</Button>
