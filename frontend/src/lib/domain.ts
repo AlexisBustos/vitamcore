@@ -3,6 +3,7 @@
  * Centraliza la presentación para mantener consistencia visual.
  */
 import type {
+  BankCategoryKind,
   DecisionStatus,
   DocumentStatus,
   DocumentType,
@@ -179,6 +180,18 @@ export function bankCategoryLabel(c: string | null): string {
 export const bankCategoryOptions = (Object.keys(bankCategory) as BankCategory[]).map(
   (value) => ({ value, label: bankCategory[value].label }),
 );
+
+// Color sólido por tipo, pensado para el punto de la celda (visible en 2×2).
+const bankKindColor: Record<BankCategoryKind, string> = {
+  INCOME: 'bg-emerald-500',
+  EXPENSE: 'bg-red-500',
+  NEUTRAL: 'bg-slate-400',
+};
+
+/** Clase de color (bg) según el tipo de la categoría (kind). */
+export function bankKindClassName(kind: BankCategoryKind | undefined): string {
+  return kind ? bankKindColor[kind] : bankKindColor.NEUTRAL;
+}
 
 // Opciones listas para selects (value + label).
 export const projectStatusOptions = toOptions(projectStatus);
