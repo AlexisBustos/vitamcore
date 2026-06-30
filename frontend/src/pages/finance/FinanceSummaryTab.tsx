@@ -12,6 +12,7 @@ import { Spinner, ErrorState, EmptyState } from '@/components/ui/feedback';
 import { formatDate, formatMoney } from '@/lib/domain';
 import { getErrorMessage } from '@/lib/errors';
 import { useFinanceSummary } from '@/hooks/useFinance';
+import { ConsolidatedPosition } from './ConsolidatedPosition';
 
 export function FinanceSummaryTab({ organizationId }: { organizationId?: string }) {
   const { data, isLoading, isError, error } = useFinanceSummary(organizationId);
@@ -21,6 +22,8 @@ export function FinanceSummaryTab({ organizationId }: { organizationId?: string 
 
   return (
     <div className="space-y-6">
+      <ConsolidatedPosition organizationId={organizationId} />
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <MetricCard
           title="Ingresos del mes"
