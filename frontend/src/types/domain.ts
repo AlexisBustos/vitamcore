@@ -217,6 +217,7 @@ export interface IncomeRecord extends ContextRefs {
   notes: string | null;
   netAmount: number | null;
   paidDate: string | null;
+  paidByBankTransactionId: string | null;
   creditsIncomeId: string | null;
   sourceFolio: string | null;
   sourceIssueDate: string | null;
@@ -237,6 +238,7 @@ export interface ExpenseRecord extends ContextRefs {
   status: ExpenseStatus;
   vendorId: string | null;
   paidDate: string | null;
+  paidByBankTransactionId: string | null;
   sourceFolio: string | null;
   sourceIssueDate: string | null;
   expenseDate: string | null;
@@ -367,6 +369,14 @@ export interface BankTransaction {
   createdAt: string;
   organization?: Ref;
   bankAccount?: Pick<BankAccount, 'id' | 'name' | 'accountNumber'>;
+}
+
+export interface ReconciliationCandidate {
+  id: string;
+  transactionDate: string;
+  description: string;
+  amount: number;
+  exact: boolean;
 }
 
 export interface FinancialImportBatch {

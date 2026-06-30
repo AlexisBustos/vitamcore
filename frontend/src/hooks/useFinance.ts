@@ -14,6 +14,7 @@ import type {
   FinancialImportType,
   FinanceSummary,
   IncomeRecord,
+  ReconciliationCandidate,
   SalesImportSummary,
 } from '@/types/domain';
 
@@ -113,11 +114,19 @@ export function useDeleteIncome() {
 export function useRegisterPayment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { id: string; paidDate: string | null }) =>
-      api.patch(`/income/${payload.id}/payment`, { paidDate: payload.paidDate }),
+    mutationFn: (payload: {
+      id: string;
+      paidDate?: string | null;
+      bankTransactionId?: string | null;
+    }) =>
+      api.patch(`/income/${payload.id}/payment`, {
+        paidDate: payload.paidDate ?? null,
+        bankTransactionId: payload.bankTransactionId ?? null,
+      }),
     onSuccess: () => {
       invalidateFinance(qc);
       qc.invalidateQueries({ queryKey: ['clients'] });
+      qc.invalidateQueries({ queryKey: ['finance-imports'] });
     },
   });
 }
@@ -165,9 +174,19 @@ export function useDeleteExpense() {
 export function useRegisterExpensePayment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { id: string; paidDate: string | null }) =>
-      api.patch(`/expenses/${payload.id}/payment`, { paidDate: payload.paidDate }),
-    onSuccess: () => invalidateFinance(qc),
+    mutationFn: (payload: {
+      id: string;
+      paidDate?: string | null;
+      bankTransactionId?: string | null;
+    }) =>
+      api.patch(`/expenses/${payload.id}/payment`, {
+        paidDate: payload.paidDate ?? null,
+        bankTransactionId: payload.bankTransactionId ?? null,
+      }),
+    onSuccess: () => {
+      invalidateFinance(qc);
+      qc.invalidateQueries({ queryKey: ['finance-imports'] });
+    },
   });
 }
 
@@ -285,6 +304,22 @@ export function useSetTransactionCategory() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['finance-imports'] });
     },
+  });
+}
+
+export function useReconciliationCandidates(
+  filters: { recordType: 'income' | 'expense'; recordId: string; search?: string },
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['finance-imports', 'reconcile', filters],
+    enabled,
+    queryFn: () =>
+      api
+        .get<{ data: ReconciliationCandidate[] }>(
+          `/finance/imports/reconciliation/candidates${toQuery(filters)}`,
+        )
+        .then((r) => r.data),
   });
 }
 
