@@ -138,8 +138,9 @@ para no migrar datos.
   > positivos. Por eso `normalizeText` **no trimea**: un espacio inicial/final en `matchText` es un
   > centinela de borde de palabra significativo. La descripción tampoco se trimea, así
   > `includes(' iva')` calza "pago iva" (hay espacio antes) y no "privada". En la UI, el campo de
-  > texto de la regla **no** auto-trimea (o, si lo hace por comodidad, deja explícito al usuario
-  > que los espacios son intencionales); el seed inserta `' iva'` con su espacio.
+  > texto de la regla **no** auto-trimea el `matchText` (decisión explícita, dado lo crítico del
+  > centinela); muestra los espacios al usuario (placeholder o monospace) para que un espacio
+  > inicial/final sea visible e intencional. El seed inserta `' iva'` con su espacio.
 - `categorizeWith(rules, description, isCharge): string | null` — función **pura** que recibe las
   reglas ya cargadas:
   ```ts
@@ -311,7 +312,8 @@ vez de los `Record` hardcodeados:
    pequeño) abre un **popover** prellenado con la descripción del movimiento:
    > Cuando la descripción contenga **[texto editable]** y sea **[cargo ▾ / abono ▾ / cualquiera]**
    > → **[categoría ▾]**
-   > *Calza con N movimientos* (vía `useRulePreview`, debounced) · **[Crear regla]**
+   > *Calza con ~N movimientos* (vía `useRulePreview`, debounced; `~` porque ignora prioridad) ·
+   > **[Crear regla]**
 
    Al confirmar: `useSaveRule()` crea la regla (que reaplica en backend) → la tabla y el desglose
    se refrescan solos. Si el movimiento origen estaba fijado a mano, el popover avisa que la regla
@@ -336,8 +338,8 @@ Modal con dos secciones (reusa `components/ui/modal.tsx`, `input`, `select`, `bu
 1. **Migración Prisma** (`prisma migrate dev --name bank_categories_rules`): crea
    `bank_categories`, `bank_category_rules`, los enums `BankCategoryKind` y `RuleDirection`.
    Regenerar cliente.
-2. **Seed idempotente** (en `prisma/seed.ts` o script dedicado `prisma/scripts/seed-categories.ts`,
-   re-ejecutable con `upsert`):
+2. **Seed idempotente** en `prisma/scripts/seed-categories.ts` (script dedicado, re-ejecutable con
+   `upsert`; expuesto como `npm run prisma:seed-categories`):
    - Inserta las **10 categorías** actuales (`key`, `name` humano, `kind` desde el `BANK_CATEGORY_TYPE`
      actual, `sortOrder` según el orden de evaluación de hoy).
    - Traduce las **reglas hardcodeadas** de `RULES` al modelo nuevo, preservando el **orden** como
@@ -370,14 +372,14 @@ Modal con dos secciones (reusa `components/ui/modal.tsx`, `input`, `select`, `bu
 ## Archivos afectados
 
 **Backend**: `schema.prisma` (+2 modelos, +2 enums, migración), `finance-imports.categories.ts`
-(refactor: helpers `normalizeText`/`categorizeWith`, sin `RULES`/enum hardcodeados), nuevos
-`finance/categories.{routes,controller,service,schema}.ts` y
-`finance/category-rules.{routes,controller,service,schema}.ts` (o un submódulo
-`finance-categories/`), `finance-imports.service.ts` (import usa reglas de BD; +`setCategoryBulk`),
+(refactor: helpers `normalizeText`/`categorizeWith`, sin `RULES`/enum hardcodeados), nuevo
+submódulo `modules/finance-categories/` con `categories.{routes,controller,service,schema}.ts` y
+`category-rules.{routes,controller,service,schema}.ts`, `finance-imports.service.ts` (import usa
+reglas de BD; +`setCategoryBulk`),
 `finance-imports.{routes,controller,schema}.ts` (bulk endpoint; validación de `category` contra
-tabla), `routes/index.ts` (montar nuevas rutas), `prisma/seed.ts` o
-`prisma/scripts/seed-categories.ts`. El script `categorize-backfill.ts` se mantiene como utilidad
-de dev (ahora lee reglas de BD).
+tabla), `routes/index.ts` (montar nuevas rutas), `prisma/scripts/seed-categories.ts` (nuevo) +
+`package.json` (script `prisma:seed-categories`). El script `categorize-backfill.ts` se mantiene
+como utilidad de dev (ahora lee reglas de BD).
 
 **Frontend**: `types/domain.ts`, `hooks/useFinance.ts`, `lib/domain.ts` (badge por `kind`, quitar
 `Record` fijo `bankCategory`/`bankCategoryType`/`bankCategoryOptions`), `pages/finance/BanksTab.tsx`
@@ -428,8 +430,8 @@ Sin framework de tests; verificación = typecheck + prueba manual.
   1. Tras seed + reaplicar, el desglose por categoría **cuadra con el de antes** (paridad de
      conteos por categoría sobre los 5 meses).
   2. Crear categoría nueva (ej. "Arriendo", tipo EXPENSE) → aparece en los selects.
-  3. Crear regla "contiene `arriendo` → Arriendo": el popover muestra "calza con N", al confirmar
-     esos N quedan categorizados al instante (sin tocar los fijados a mano).
+  3. Crear regla "contiene `arriendo` → Arriendo": el popover muestra "calza con ~N", al confirmar
+     esos movimientos quedan categorizados al instante (sin tocar los fijados a mano).
   4. Editar el texto de una regla → recategoriza; reordenar dos reglas que compiten cambia el
      resultado según prioridad.
   5. Seleccionar 3 movimientos sueltos y asignarles categoría en bloque → quedan fijados.
