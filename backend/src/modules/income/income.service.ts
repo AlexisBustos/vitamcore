@@ -126,6 +126,8 @@ export async function registerPayment(id: string, input: RegisterPaymentInput) {
   if (rec.documentKind === 'CREDIT_NOTE') {
     throw badRequest('Una nota de crédito no se cobra');
   }
+  // netAmount === 0 = factura totalmente anulada por NC. netAmount null = ingreso
+  // manual (no importado): es cobrable, por eso solo bloqueamos el 0 explícito.
   if (rec.netAmount === 0) {
     throw badRequest('Una factura anulada no se cobra');
   }
