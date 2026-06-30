@@ -127,9 +127,19 @@ para no migrar datos.
 
 `finance-imports.categories.ts` deja de exponer el enum y el array `RULES` hardcodeados. Pasa a:
 
-- `normalizeText(s: string): string` — `trim().toLowerCase()` + quitar diacríticos
-  (`normalize('NFD').replace(/\p{Diacritic}/gu, '')`). **Helper único** reusado por el
-  categorizador, el import y el conteo de coincidencias.
+- `normalizeText(s: string): string` — `toLowerCase()` + quitar diacríticos
+  (`normalize('NFD').replace(/\p{Diacritic}/gu, '')`) + colapsar espacios internos múltiples a uno
+  (`replace(/\s+/g, ' ')`). **NO hace `trim()`** (ver nota crítica abajo). **Helper único** reusado
+  por el categorizador, el import y el conteo de coincidencias.
+
+  > **Crítico — el espacio como centinela de borde de palabra:** la regla `IMPUESTOS` usa
+  > `matchText = ' iva'` (espacio inicial **deliberado**) para no calzar con "privada", "activa",
+  > "motiva". Si `normalizeText` hiciera `trim()`, `' iva'` → `'iva'` y volverían los falsos
+  > positivos. Por eso `normalizeText` **no trimea**: un espacio inicial/final en `matchText` es un
+  > centinela de borde de palabra significativo. La descripción tampoco se trimea, así
+  > `includes(' iva')` calza "pago iva" (hay espacio antes) y no "privada". En la UI, el campo de
+  > texto de la regla **no** auto-trimea (o, si lo hace por comodidad, deja explícito al usuario
+  > que los espacios son intencionales); el seed inserta `' iva'` con su espacio.
 - `categorizeWith(rules, description, isCharge): string | null` — función **pura** que recibe las
   reglas ya cargadas:
   ```ts
@@ -153,6 +163,15 @@ para no migrar datos.
 
 `matchText` se **almacena ya normalizado** (al crear/editar la regla se pasa por `normalizeText`),
 así la comparación en caliente es solo `includes`.
+
+### Integración con `createRow` (import)
+
+`createRow(tx, batch, row)` se invoca por fila dentro del `prisma.$transaction` de `confirmImport`
+y hoy llama a `categorize()` directamente. El cambio: **añadir un parámetro `rules` a la firma**
+`createRow(tx, batch, row, rules)`, cargar las reglas activas **una sola vez al inicio de
+`confirmImport`** (antes del `$transaction`) y pasarlas a cada `createRow`. La rama banco usa
+`categorizeWith(rules, descripción, chargeAmount > 0)` en vez de `categorize(...)`. Así no se
+consultan reglas por fila.
 
 ## Backend — endpoints
 
@@ -187,8 +206,16 @@ Sigue el patrón del proyecto: `routes → controller (Zod .parse) → service (
   (en lote / transacción). Devuelve `{ data: { updated: <n> } }`. **Reemplaza** el script
   `prisma:categorize` para el uso operativo (el script se mantiene como utilidad de dev).
 - `GET /finance/category-rules/preview?matchText=…&direction=…` → `previewRule(...)`: cuenta
-  cuántos movimientos **no fijados** calzarían (para el "calza con N movimientos" del popover).
-  No escribe nada.
+  cuántos movimientos **no fijados** (`categoryManual = false`) calzarían con **esa sola regla**
+  (su `matchText` + `direction`), para el "calza con N movimientos" del popover. No escribe nada.
+  - **Cómo se calcula:** trae a JS las descripciones de los movimientos no fijados y aplica
+    `normalizeText` + `includes(matchText)` + chequeo de dirección — **la misma normalización que
+    `reapply`**, evitando depender de `unaccent` en SQL (las `description` se guardan crudas en BD;
+    Postgres no normaliza tildes sin la extensión). Son cientos de filas: aceptable.
+  - **Semántica (importante para no confundir al usuario):** N es "cuántos movimientos contienen
+    este texto", **ignorando la prioridad** de otras reglas. Tras reaplicar, el resultado real puede
+    ser menor si una regla de mayor prioridad reclama algunos. El popover lo rotula como
+    aproximación ("calza con ~N") para no prometer exactitud.
 
 ### Bulk manual (selección múltiple)
 
@@ -196,12 +223,19 @@ Sigue el patrón del proyecto: `routes → controller (Zod .parse) → service (
   Asigna `category` (un `key` válido o `null`) a los movimientos indicados y marca
   `categoryManual = true` en todos (es una decisión explícita del usuario sobre filas concretas).
   Valida que `category`, si no es `null`, exista. Devuelve `{ data: { updated: <n> } }`.
+  **Orden de rutas:** registrar `POST /transactions/bulk-category` y el resto de subrutas de dos
+  segmentos (`/transactions/monthly`, `/transactions/by-category`) **antes** de las rutas con
+  `:id` (`PATCH /transactions/:id/category`), siguiendo el cuidado del spec previo, para que
+  `bulk-category` no se interprete como un `:id`.
 
 ### Cambios a endpoints existentes
 
 - `setTransactionCategory` (PATCH `/transactions/:id/category`): sin cambios de comportamiento
   (sigue fijando `categoryManual = true`); solo se valida el `category` contra la tabla
-  `BankCategory` en vez del enum.
+  `BankCategory` en vez del enum. En `finance-imports.schema.ts`, `setCategorySchema` pasa de
+  `z.enum([...BANK_CATEGORIES]).nullable()` a `z.string().nullable()` (la existencia del `key` se
+  valida en el service contra la tabla); se quita el `import { BANK_CATEGORIES }`. El mismo
+  `z.string().nullable()` aplica al `category` del bulk.
 - `createRow` (rama banco del import): en vez de `categorize(desc, isCharge)` con reglas
   hardcodeadas, usa `categorizeWith(rulesCargadas, desc, isCharge)` con las reglas traídas una vez
   al inicio de la importación.
@@ -228,8 +262,17 @@ export interface BankCategoryRule {
 
 ### Hooks (`hooks/useFinance.ts`)
 
-- `useBankCategories()` → `GET /finance/categories`, key `['finance', 'categories']`. Provee las
-  opciones para todos los `Select` (reemplaza `bankCategoryOptions` hardcodeado de `lib/domain.ts`).
+- `useBankCategories()` → `GET /finance/categories?includeInactive=true`, key
+  `['finance', 'categories']`. **Trae todas (activas e inactivas)** porque los badges y el desglose
+  necesitan el `name`/`kind` de categorías inactivas que aún tienen movimientos asignados. Los
+  `Select` de elección (override inline, bulk, destino de regla, alta de movimiento) **filtran a
+  `active` en el componente**; los badges y el breakdown usan el set completo. Reemplaza
+  `bankCategoryOptions` hardcodeado de `lib/domain.ts`.
+  - **Mapeo de un `category` (key) sin categoría en el set** (caso degenerado, ej. dato viejo):
+    fallback a mostrar el `key` crudo como label y `kind = NEUTRAL`, para no romper el render.
+  - **Filtro "Sin categoría"**: se preserva el centinela `'__none__'` del spec previo en el `Select`
+    de filtro (con placeholder "Todas las categorías" → `''`), mientras el `Select` de override
+    sigue usando `''` → `null`. No unificar (misma razón documentada en el spec previo).
 - `useSaveCategory()` / `useDeleteCategory()` → POST/PATCH/DELETE; invalidan
   `['finance', 'categories']` y `['finance-imports']` (los badges/desglose dependen de los nombres).
 - `useCategoryRules()` → `GET /finance/category-rules`, key `['finance', 'category-rules']`.
@@ -246,6 +289,19 @@ export interface BankCategoryRule {
 > en runtime. Para los colores del badge, en vez de un `Tone` por categoría (imposible de
 > mantener fijo si el catálogo es editable), se usa un color por **`kind`** (INCOME = verde,
 > EXPENSE = rojo/ámbar, NEUTRAL = gris). Se elimina la dependencia del `Record` fijo.
+
+### UI — desglose por categoría (`pages/finance/BankCategoryBreakdown.tsx`, reescritura)
+
+Este componente **ya existe** y renderiza la sección "De dónde entra / a dónde va". Hoy depende
+directamente de `bankCategoryType[r.category]` y `bankCategoryLabel` (los dos artefactos que este
+spec elimina). **Hay que reescribirlo** para derivar `kind` y `name` de `useBankCategories()` en
+vez de los `Record` hardcodeados:
+- Construir un mapa `key → { name, kind }` desde el hook (incluyendo inactivas, ver nota del hook).
+- Ubicar cada fila del desglose (`{ category, credits, charges, count }`) en Ingresos/Egresos según
+  el `kind` de su categoría; `null` ("Sin categoría") se reparte por dirección como antes;
+  `NEUTRAL` (traspasos internos) en su línea aparte.
+- Es la **verificación #1** del spec ("el desglose cuadra con el de antes"), así que su reescritura
+  no es opcional: sin ella rompe el typecheck.
 
 ### UI — pestaña Bancos (`pages/finance/BanksTab.tsx`)
 
@@ -297,7 +353,7 @@ Modal con dos secciones (reusa `components/ui/modal.tsx`, `input`, `select`, `bu
      | `traspaso de:` | ANY | TRANSFER_IN | después de TRASPASO_INTERNO |
      | `copec` | ANY | COMBUSTIBLE | |
      | `pago de credito` | ANY | CREDITOS | |
-     | `sii` / `tesoreria` / `ppm` / ` iva` / `impto` | ANY | IMPUESTOS | una regla por término |
+     | `sii` / `tesoreria` / `ppm` / ` iva` / `impto` | ANY | IMPUESTOS | una regla por término; `' iva'` con espacio inicial deliberado (centinela de borde de palabra, ver normalizeText) |
      | `comision` / `mantencion` / `impuesto cheques` | ANY | COMISIONES | una regla por término |
      | `traspaso a:` | ANY | HONORARIOS | después de TRASPASO_INTERNO |
      | `pago:` | CHARGE | PROVEEDORES | direccional; un `pago:` abono cae a null |
@@ -324,11 +380,22 @@ tabla), `routes/index.ts` (montar nuevas rutas), `prisma/seed.ts` o
 de dev (ahora lee reglas de BD).
 
 **Frontend**: `types/domain.ts`, `hooks/useFinance.ts`, `lib/domain.ts` (badge por `kind`, quitar
-`Record` fijo), `pages/finance/BanksTab.tsx` (crear-regla, bulk, botón gestionar), nuevo
-`pages/finance/CategoryRulesPanel.tsx`.
+`Record` fijo `bankCategory`/`bankCategoryType`/`bankCategoryOptions`), `pages/finance/BanksTab.tsx`
+(crear-regla, bulk, botón gestionar), `pages/finance/BankCategoryBreakdown.tsx` (**reescritura**:
+deriva `kind`/`name` de `useBankCategories()`), nuevo `pages/finance/CategoryRulesPanel.tsx`.
+
+> **Importante para el seed y el script `categorize-backfill.ts`:** como el refactor borra
+> `BANK_CATEGORIES` / `BANK_CATEGORY_TYPE` / `RULES` de `finance-imports.categories.ts`, ni el seed
+> ni el backfill pueden importarlos. El seed lleva los 10 `kind` y las reglas traducidas
+> **inline** (es su rol: poblar la BD). El backfill, tras el refactor, carga reglas **desde la BD**
+> (como `reapply`).
 
 ## Manejo de errores y casos borde
 
+- **`categoryKey` por valor**: como la relación `BankCategoryRule.categoryKey → BankCategory.key`
+  es por valor, un `categoryKey` inexistente daría `P2003` de Prisma; el service lo intercepta
+  antes con validación explícita (`badRequest`). Lo mismo aplica al `category` del bulk y del
+  override.
 - **Crear regla con `categoryKey` inexistente** → `badRequest`.
 - **Borrar categoría en uso** (movimientos o reglas) → `badRequest` (sugerir desactivar).
 - **Renombrar categoría**: cambia `name`, no `key`; los movimientos y reglas siguen válidos (apuntan
