@@ -11,6 +11,7 @@ import { badRequest, notFound } from '../../utils/http-error';
 import { categorizeWith } from './finance-imports.categories';
 import { getActiveRules } from '../finance-categories/category-rules.service';
 import { assertOrganization } from '../shared/relations';
+import { resolveParty } from '../shared/parties';
 import { buildOwnAccounts, isInternalTransfer } from '../shared/internal-transfer';
 import {
   parseBankRows,
@@ -747,7 +748,10 @@ async function createRow(
       const clientName = stringOrNull(row.data.clientName);
       const rut = stringOrNull(row.data.sourceRut);
       const clientId = rut
-        ? await upsertClient(tx, batch.organizationId, rut, clientName)
+        ? await resolveParty(
+            { model: 'client', organizationId: batch.organizationId, rut, name: clientName },
+            tx,
+          )
         : null;
       const kind = documentKindOf(row.data.documentKind);
       await tx.incomeRecord.create({
@@ -785,7 +789,10 @@ async function createRow(
       const vendorName = stringOrNull(row.data.vendorName);
       const rut = stringOrNull(row.data.sourceRut);
       const vendorId = rut
-        ? await upsertVendor(tx, batch.organizationId, rut, vendorName)
+        ? await resolveParty(
+            { model: 'vendor', organizationId: batch.organizationId, rut, name: vendorName },
+            tx,
+          )
         : null;
       await tx.expenseRecord.create({
         data: {
@@ -844,38 +851,6 @@ async function createRow(
     }
     throw error;
   }
-}
-
-/// Crea el cliente si no existe (por empresa + RUT) o actualiza su razón
-/// social si cambió. Devuelve el id del cliente para vincularlo al ingreso.
-async function upsertClient(
-  tx: Prisma.TransactionClient,
-  organizationId: string,
-  rut: string,
-  name: string | null,
-) {
-  const client = await tx.client.upsert({
-    where: { organizationId_rut: { organizationId, rut } },
-    create: { organizationId, rut, name: name ?? rut },
-    update: name ? { name } : {},
-    select: { id: true },
-  });
-  return client.id;
-}
-
-async function upsertVendor(
-  tx: Prisma.TransactionClient,
-  organizationId: string,
-  rut: string,
-  name: string | null,
-) {
-  const vendor = await tx.vendor.upsert({
-    where: { organizationId_rut: { organizationId, rut } },
-    create: { organizationId, rut, name: name ?? rut },
-    update: name ? { name } : {},
-    select: { id: true },
-  });
-  return vendor.id;
 }
 
 function documentKindOf(value: Prisma.JsonValue | undefined): DocumentKind {
