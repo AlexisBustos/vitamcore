@@ -2,125 +2,16 @@
  * Resumen financiero ejecutivo (ingresos + gastos).
  * Reutilizado por la página Finanzas y por el dashboard.
  */
-import { Prisma, type ExpenseStatus, type IncomeStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { currentMonthRange } from '../shared/dates';
 import { buildOwnAccounts, isInternalTransfer } from '../shared/internal-transfer';
-
-const INCOME_PENDING: IncomeStatus[] = ['EXPECTED', 'INVOICED', 'OVERDUE'];
-const EXPENSE_PENDING: ExpenseStatus[] = ['PENDING', 'OVERDUE'];
-
-type RecPay = {
-  receivable: number;
-  payable: number;
-  byOrg: Map<string, { receivable: number; payable: number }>;
-};
-
-/**
- * Por cobrar / por pagar por empresa + totales. Única fuente de verdad,
- * reusada por getSummary y getConsolidated (antes estaba duplicada inline).
- */
-async function computeReceivablePayable(organizationId?: string): Promise<RecPay> {
-  const orgFilter = organizationId ? { organizationId } : {};
-  const [pendingSales, pendingManual, pendingExpense] = await Promise.all([
-    prisma.incomeRecord.groupBy({
-      by: ['organizationId'],
-      _sum: { netAmount: true },
-      where: {
-        ...orgFilter,
-        documentKind: { not: 'CREDIT_NOTE' },
-        status: { not: 'CANCELLED' },
-        paidDate: null,
-        netAmount: { gt: 0 },
-      },
-    }),
-    prisma.incomeRecord.groupBy({
-      by: ['organizationId'],
-      _sum: { amount: true },
-      where: {
-        ...orgFilter,
-        documentKind: { not: 'CREDIT_NOTE' },
-        netAmount: null,
-        status: { in: INCOME_PENDING },
-      },
-    }),
-    prisma.expenseRecord.groupBy({
-      by: ['organizationId'],
-      _sum: { amount: true },
-      where: { ...orgFilter, status: { in: EXPENSE_PENDING } },
-    }),
-  ]);
-
-  const byOrg = new Map<string, { receivable: number; payable: number }>();
-  const bump = (id: string, key: 'receivable' | 'payable', v: number) => {
-    const cur = byOrg.get(id) ?? { receivable: 0, payable: 0 };
-    cur[key] += v;
-    byOrg.set(id, cur);
-  };
-  for (const r of pendingSales) bump(r.organizationId, 'receivable', r._sum.netAmount ?? 0);
-  for (const r of pendingManual) bump(r.organizationId, 'receivable', r._sum.amount ?? 0);
-  for (const r of pendingExpense) bump(r.organizationId, 'payable', r._sum.amount ?? 0);
-
-  let receivable = 0;
-  let payable = 0;
-  for (const v of byOrg.values()) {
-    receivable += v.receivable;
-    payable += v.payable;
-  }
-  return { receivable, payable, byOrg };
-}
-
-/**
- * Vencidos (por cobrar / por pagar). Extraído del inline de getSummary para
- * reusarlo en getConsolidated sin duplicarlo.
- */
-async function computeOverdue(organizationId?: string): Promise<{
-  overdueReceivable: { amount: number; count: number };
-  overduePayable: { amount: number; count: number };
-}> {
-  const orgFilter = organizationId ? { organizationId } : {};
-  const now = new Date();
-  const [overdueSales, overdueManual, overdueExpense] = await Promise.all([
-    prisma.incomeRecord.aggregate({
-      _sum: { netAmount: true },
-      _count: { _all: true },
-      where: {
-        ...orgFilter,
-        documentKind: { not: 'CREDIT_NOTE' },
-        status: { not: 'CANCELLED' },
-        paidDate: null,
-        netAmount: { gt: 0 },
-        dueDate: { lt: now },
-      },
-    }),
-    prisma.incomeRecord.aggregate({
-      _sum: { amount: true },
-      _count: { _all: true },
-      where: {
-        ...orgFilter,
-        documentKind: { not: 'CREDIT_NOTE' },
-        netAmount: null,
-        status: { in: INCOME_PENDING },
-        dueDate: { lt: now },
-      },
-    }),
-    prisma.expenseRecord.aggregate({
-      _sum: { amount: true },
-      _count: { _all: true },
-      where: { ...orgFilter, dueDate: { lt: now }, status: { in: EXPENSE_PENDING } },
-    }),
-  ]);
-  return {
-    overdueReceivable: {
-      count: overdueSales._count._all + overdueManual._count._all,
-      amount: (overdueSales._sum.netAmount ?? 0) + (overdueManual._sum.amount ?? 0),
-    },
-    overduePayable: {
-      count: overdueExpense._count._all,
-      amount: overdueExpense._sum.amount ?? 0,
-    },
-  };
-}
+import {
+  computeReceivablePayable,
+  computeOverdue,
+  INCOME_PENDING,
+  EXPENSE_PENDING,
+} from './finance-shared';
 
 export async function getSummary(organizationId?: string) {
   const orgFilter = organizationId ? { organizationId } : {};
