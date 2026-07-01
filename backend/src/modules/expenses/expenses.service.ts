@@ -6,6 +6,12 @@ import { prisma } from '../../lib/prisma';
 import { badRequest, notFound } from '../../utils/http-error';
 import { assertContext } from '../shared/relations';
 import { resolveVendorId } from '../shared/parties';
+import {
+  reconcilePaidStatus,
+  monthRange,
+  listMonths as ledgerListMonths,
+  PAYABLE_EXPENSE_STATUSES,
+} from '../shared/ledger';
 import type {
   CreateExpenseInput,
   ListExpenseFilters,
@@ -19,28 +25,6 @@ const refs = {
   project: { select: { id: true, name: true } },
 };
 
-// Estados de un gasto aún por pagar.
-const PAYABLE_STATUSES = ['PENDING', 'OVERDUE'] as const;
-
-// Invariante de pago: PAID ⇔ hay paidDate. El formulario no envía paidDate, así
-// que reconciliamos el par (status, paidDate): al marcar PAID sin fecha le
-// asignamos la fecha de pago (hoy) y, al sacar de PAID, la limpiamos para no
-// dejar un registro incoherente. El pago contra un movimiento bancario sigue
-// pasando por registerPayment (fija además paidByBankTransactionId).
-function reconcilePaidStatus<T extends { status?: string | null }>(
-  input: T,
-  currentPaidDate: Date | null,
-): T & { paidDate?: Date | null; paidByBankTransactionId?: string | null } {
-  // status undefined = el update no toca el estado; no tocamos la fecha de pago.
-  if (input.status === undefined) return input;
-  if (input.status === 'PAID') {
-    // Respeta la fecha de pago existente; si no hay, marca pagado hoy.
-    return { ...input, paidDate: currentPaidDate ?? new Date() };
-  }
-  // Cualquier otro estado no está pagado: limpia el rastro de pago.
-  return { ...input, paidDate: null, paidByBankTransactionId: null };
-}
-
 export async function list(filters: ListExpenseFilters) {
   const where: Prisma.ExpenseRecordWhereInput = {
     organizationId: filters.organizationId,
@@ -53,10 +37,10 @@ export async function list(filters: ListExpenseFilters) {
 
   if (filters.paymentState === 'payable') {
     where.paidDate = null;
-    where.status = { in: [...PAYABLE_STATUSES] };
+    where.status = { in: [...PAYABLE_EXPENSE_STATUSES] };
   } else if (filters.paymentState === 'overdue') {
     where.paidDate = null;
-    where.status = { in: [...PAYABLE_STATUSES] };
+    where.status = { in: [...PAYABLE_EXPENSE_STATUSES] };
     where.dueDate = { lt: new Date() };
   } else if (filters.paymentState === 'paid') {
     where.paidDate = { not: null };
@@ -65,13 +49,7 @@ export async function list(filters: ListExpenseFilters) {
     where.status = 'CANCELLED';
   }
 
-  if (filters.month) {
-    const [y, m] = filters.month.split('-').map(Number);
-    where.expenseDate = {
-      gte: new Date(Date.UTC(y, m - 1, 1)),
-      lt: new Date(Date.UTC(y, m, 1)),
-    };
-  }
+  if (filters.month) where.expenseDate = monthRange(filters.month);
 
   return prisma.expenseRecord.findMany({
     where,
@@ -178,14 +156,5 @@ export async function registerPayment(id: string, input: RegisterPaymentInput) {
 
 /// Meses (YYYY-MM) que tienen gastos, ordenados descendente. Alimenta el filtro por mes.
 export async function listMonths(organizationId?: string): Promise<string[]> {
-  const orgClause = organizationId
-    ? Prisma.sql`AND "organizationId" = ${organizationId}`
-    : Prisma.empty;
-  const rows = await prisma.$queryRaw<{ mes: string }[]>(Prisma.sql`
-    SELECT DISTINCT to_char(date_trunc('month', "expenseDate"), 'YYYY-MM') AS mes
-    FROM "expense_records"
-    WHERE "expenseDate" IS NOT NULL ${orgClause}
-    ORDER BY mes DESC
-  `);
-  return rows.map((r) => r.mes);
+  return ledgerListMonths('expense', organizationId);
 }
