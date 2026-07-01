@@ -1,9 +1,13 @@
 import { DocumentKind, IncomeStatus } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
-import { notFound } from '../../utils/http-error';
+import {
+  buildPartyWhere,
+  orgRef,
+  partyDocumentsDetailArgs,
+  partyListOrderBy,
+  requireParty,
+} from '../shared/party-stats';
 import type { ListClientsFilters } from './clients.schema';
-
-const orgRef = { select: { id: true, name: true } };
 
 // Campos mínimos de cada ingreso necesarios para calcular acumulados.
 const statsSelect = {
@@ -73,18 +77,8 @@ function computeStats(incomes: IncomeStatsRow[]) {
 
 export async function listClients(filters: ListClientsFilters) {
   const clients = await prisma.client.findMany({
-    where: {
-      organizationId: filters.organizationId,
-      ...(filters.search
-        ? {
-            OR: [
-              { name: { contains: filters.search, mode: 'insensitive' } },
-              { rut: { contains: filters.search, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
-    },
-    orderBy: [{ organizationId: 'asc' }, { name: 'asc' }],
+    where: buildPartyWhere(filters.organizationId, filters.search),
+    orderBy: partyListOrderBy(),
     include: {
       organization: orgRef,
       incomes: { select: statsSelect },
@@ -98,17 +92,16 @@ export async function listClients(filters: ListClientsFilters) {
 }
 
 export async function getClient(id: string) {
-  const client = await prisma.client.findUnique({
-    where: { id },
-    include: {
-      organization: orgRef,
-      incomes: {
-        orderBy: [{ sourceIssueDate: 'desc' }, { createdAt: 'desc' }],
-        take: 300,
+  const client = requireParty(
+    await prisma.client.findUnique({
+      where: { id },
+      include: {
+        organization: orgRef,
+        incomes: partyDocumentsDetailArgs(),
       },
-    },
-  });
-  if (!client) throw notFound('Cliente no encontrado');
+    }),
+    'Cliente no encontrado',
+  );
 
   return {
     ...client,

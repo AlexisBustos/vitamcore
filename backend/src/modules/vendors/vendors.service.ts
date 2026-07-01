@@ -1,9 +1,13 @@
 import { ExpenseStatus } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
-import { notFound } from '../../utils/http-error';
+import {
+  buildPartyWhere,
+  orgRef,
+  partyDocumentsDetailArgs,
+  partyListOrderBy,
+  requireParty,
+} from '../shared/party-stats';
 import type { ListVendorsFilters } from './vendors.schema';
-
-const orgRef = { select: { id: true, name: true } };
 
 // Campos mínimos de cada gasto necesarios para calcular acumulados.
 const statsSelect = {
@@ -52,18 +56,8 @@ function computeStats(expenses: ExpenseStatsRow[]) {
 
 export async function listVendors(filters: ListVendorsFilters) {
   const vendors = await prisma.vendor.findMany({
-    where: {
-      organizationId: filters.organizationId,
-      ...(filters.search
-        ? {
-            OR: [
-              { name: { contains: filters.search, mode: 'insensitive' } },
-              { rut: { contains: filters.search, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
-    },
-    orderBy: [{ organizationId: 'asc' }, { name: 'asc' }],
+    where: buildPartyWhere(filters.organizationId, filters.search),
+    orderBy: partyListOrderBy(),
     include: {
       organization: orgRef,
       expenses: { select: statsSelect },
@@ -77,17 +71,16 @@ export async function listVendors(filters: ListVendorsFilters) {
 }
 
 export async function getVendor(id: string) {
-  const vendor = await prisma.vendor.findUnique({
-    where: { id },
-    include: {
-      organization: orgRef,
-      expenses: {
-        orderBy: [{ sourceIssueDate: 'desc' }, { createdAt: 'desc' }],
-        take: 300,
+  const vendor = requireParty(
+    await prisma.vendor.findUnique({
+      where: { id },
+      include: {
+        organization: orgRef,
+        expenses: partyDocumentsDetailArgs(),
       },
-    },
-  });
-  if (!vendor) throw notFound('Proveedor no encontrado');
+    }),
+    'Proveedor no encontrado',
+  );
 
   return {
     ...vendor,
