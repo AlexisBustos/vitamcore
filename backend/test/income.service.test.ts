@@ -1,6 +1,12 @@
 import { beforeEach, afterAll, describe, expect, test } from 'vitest';
 import { resetDb, disconnect } from './db';
-import { makeOrg, makeIncome } from './fixtures';
+import {
+  makeOrg,
+  makeIncome,
+  makeBankAccount,
+  makeImportBatch,
+  makeBankTransaction,
+} from './fixtures';
 import * as income from '../src/modules/income/income.service';
 
 beforeEach(resetDb);
@@ -132,6 +138,76 @@ describe('income.registerPayment', () => {
     const updated = await income.registerPayment(rec.id, { paidDate } as never);
     expect(updated.status).toBe('PAID');
     expect(updated.paidDate?.toISOString()).toBe(paidDate.toISOString());
+  });
+
+  test('sin paidDate deja status INVOICED y paidDate null', async () => {
+    const org = await makeOrg();
+    const rec = await makeIncome(org.id, { status: 'PAID', netAmount: 100000, paidDate: new Date('2026-06-01') });
+    const updated = await income.registerPayment(rec.id, { paidDate: null } as never);
+    expect(updated.status).toBe('INVOICED');
+    expect(updated.paidDate).toBeNull();
+    expect(updated.paidByBankTransactionId).toBeNull();
+  });
+
+  test('rechaza una nota de crédito', async () => {
+    const org = await makeOrg();
+    const nc = await makeIncome(org.id, { documentKind: 'CREDIT_NOTE', amount: -20000, netAmount: null });
+    await expect(
+      income.registerPayment(nc.id, { paidDate: new Date('2026-07-10') } as never),
+    ).rejects.toThrow('Una nota de crédito no se cobra');
+  });
+
+  test('rechaza una factura anulada (netAmount === 0)', async () => {
+    const org = await makeOrg();
+    const anulada = await makeIncome(org.id, { status: 'INVOICED', netAmount: 0 });
+    await expect(
+      income.registerPayment(anulada.id, { paidDate: new Date('2026-07-10') } as never),
+    ).rejects.toThrow('Una factura anulada no se cobra');
+  });
+
+  test('rama bancaria: concilia contra el movimiento y copia su fecha', async () => {
+    const org = await makeOrg();
+    const rec = await makeIncome(org.id, { status: 'INVOICED', netAmount: 100000, paidDate: null });
+    const account = await makeBankAccount(org.id);
+    const batch = await makeImportBatch(org.id);
+    const transactionDate = new Date('2026-07-05');
+    const mov = await makeBankTransaction(
+      { organizationId: org.id, bankAccountId: account.id, importBatchId: batch.id },
+      { creditAmount: 100000, transactionDate },
+    );
+    const updated = await income.registerPayment(rec.id, { bankTransactionId: mov.id } as never);
+    expect(updated.status).toBe('PAID');
+    expect(updated.paidByBankTransactionId).toBe(mov.id);
+    expect(updated.paidDate?.toISOString()).toBe(transactionDate.toISOString());
+  });
+
+  test('rama bancaria: rechaza un movimiento de otra empresa', async () => {
+    const org = await makeOrg();
+    const otra = await makeOrg('Otra Empresa');
+    const rec = await makeIncome(org.id, { status: 'INVOICED', netAmount: 100000, paidDate: null });
+    const account = await makeBankAccount(otra.id);
+    const batch = await makeImportBatch(otra.id);
+    const mov = await makeBankTransaction(
+      { organizationId: otra.id, bankAccountId: account.id, importBatchId: batch.id },
+      { creditAmount: 100000 },
+    );
+    await expect(
+      income.registerPayment(rec.id, { bankTransactionId: mov.id } as never),
+    ).rejects.toThrow('El movimiento no pertenece a la empresa del ingreso');
+  });
+
+  test('rama bancaria: rechaza un movimiento que no es un abono (creditAmount <= 0)', async () => {
+    const org = await makeOrg();
+    const rec = await makeIncome(org.id, { status: 'INVOICED', netAmount: 100000, paidDate: null });
+    const account = await makeBankAccount(org.id);
+    const batch = await makeImportBatch(org.id);
+    const mov = await makeBankTransaction(
+      { organizationId: org.id, bankAccountId: account.id, importBatchId: batch.id },
+      { creditAmount: 0, chargeAmount: 50000 },
+    );
+    await expect(
+      income.registerPayment(rec.id, { bankTransactionId: mov.id } as never),
+    ).rejects.toThrow('El movimiento no es un abono');
   });
 });
 
