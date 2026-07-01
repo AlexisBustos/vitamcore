@@ -625,6 +625,10 @@ git commit -m "test: caracterización de finance.service (resumen + conciliació
 - Create: `backend/test/finance-imports.service.test.ts`
 - Reference (leer en detalle): `backend/src/modules/finance-imports/finance-imports.service.ts`, `finance-imports.parser.ts`
 
+- [ ] **Step 0: Recaracterizar el parser puro** (restituye cobertura de un test legado eliminado)
+
+Crear `backend/test/finance-imports.parser.test.ts` (Vitest, sin BD) para las funciones puras de `finance-imports.parser.ts`: `normalizeMoney` (montos chilenos: número, `'1.681.790'`, `'$ 25.450'`, `'-25.000'`), `normalizeRut` (quita puntos, mantiene guion), `normalizeDate` (`dd-mm-yyyy` y `Date`, `''`→null), y `parseSalesRows`/`parsePurchaseRows`/`parseBankRows` con una fila de ejemplo cada una. IMPORTANTE: leer el parser y assertar el comportamiento ACTUAL — en particular `data.status` es `'INVOICED'` para ventas y `'PENDING'` para compras (por diseño: el libro no declara pago), y `row.status` (VALID/WARNING/ERROR) puede no ser VALID según las validaciones actuales. NO assumir las expectativas del test legado (que esperaba `PAID`), estaban obsoletas.
+
 - [ ] **Step 1: Leer `createRow` para fijar la forma de `StoredPreviewRow`**
 
 Leer `createRow` (`finance-imports.service.ts:734+`) y anotar qué claves de `row.data` lee para cada tipo (`SALES_REPORT`: `clientName`, `sourceRut`, `documentKind`, `amount`, `currency`, `description`, `category`…; `PURCHASE_REPORT`: `vendorName`, `sourceRut`, `amount`, `currency`, `description`…) y que usa `row.dedupeKey`. Nota clave: `serializeRows`/`deserializeRows` son **privados y asimétricos** (serialize convierte `Date`→ISO string; deserialize es solo un cast), así que NO se testean por identidad ni por import directo. Se ejercitan **a través de `confirmImport`**, que llama internamente a `deserializeRows(batch.previewData)`.
