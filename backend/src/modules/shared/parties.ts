@@ -32,6 +32,9 @@ export async function resolveParty(
   const { model, organizationId } = args;
   const rut = args.rut?.trim();
   const name = args.name?.trim();
+  // Cast seguro: Client y Vendor comparten la forma que usamos aquí
+  // (organizationId, rut, name y la clave única organizationId_rut), pero sus
+  // delegates de Prisma no unifican en el type system. Se tratan como el de client.
   const delegate = (model === 'client' ? db.client : db.vendor) as typeof prisma.client;
 
   // Camino import: hay RUT -> upsert por (org, rut). Idéntico a upsertClient/upsertVendor.
