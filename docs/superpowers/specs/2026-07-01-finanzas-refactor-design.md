@@ -3,7 +3,7 @@
 **Fecha:** 2026-07-01
 **Estado:** Aprobado (diseño)
 **Rama sugerida:** `refactor/finanzas`
-**Alcance:** refactorización interna del dominio Finanzas (backend + frontend). **Refactor puro: sin cambios de comportamiento, sin schema/migraciones, sin features nuevas.**
+**Alcance:** refactorización interna del dominio Finanzas (backend + frontend). **Refactor puro: sin cambios de comportamiento, sin schema/migraciones, sin features nuevas** — con **una única corrección menor declarada** (asimetría de invalidación de `clients`/`vendors`, ver Fase 3).
 
 ## Contexto y problema
 
@@ -72,7 +72,13 @@ Cada fase es incremental y verificable de forma aislada.
   - `clients.service`/`vendors.service`: `computeStats` (cobrado/por cobrar, NC, CANCELLED),
     `list`/`get` con `search`.
   - `shared/parties`: `resolveParty` por nombre (reutiliza/crea, case-insensitive) y por RUT.
-- **Criterio de salida:** suite verde contra la BD de test.
+  - **`finance.service` (money-critical, requisito firme, no opcional):** `getSummary`
+    (por cobrar/por pagar, vencidos), `getConsolidated`, y el subsistema de conciliación
+    `getReconciliationSummary`/`autoReconcile`/`pairUp`/`recognizeTransfers` (casos: cruce
+    inequívoco 1:1, ambigüedad que NO se toca, traspasos internos excluidos).
+  - **`finance-imports` pipeline:** `previewImport`/`confirmImport` con un lote de ventas y uno de
+    compras (dedupe, enlace de parte por RUT, NC vinculadas), y `serde` (round-trip parse↔serialize).
+- **Criterio de salida:** suite verde contra la BD de test, **incluyendo conciliación e import**.
 
 ### Fase 1 — Backend: extracción compartida
 - `shared/ledger.ts`: `reconcilePaidStatus`, `monthRange(month)`, `listMonths(model, dateColumn, orgId)`
@@ -87,17 +93,24 @@ Cada fase es incremental y verificable de forma aislada.
 ### Fase 2 — Backend: trocear archivos grandes
 - `finance-imports.service.ts` → `bank-accounts.service.ts`, `bank-transactions.query.ts`,
   `import-pipeline.service.ts`, y helpers puros de serde/coerción a `finance-imports.serde.ts`
-  (junto a `parser.ts`). Routes/controllers recableados.
+  (junto al `finance-imports.parser.ts` existente). La categorización ya vive parcialmente en
+  `finance-imports.categories.ts`; consolidar ahí lo que aún quede en el service. Routes/controllers
+  recableados.
 - `finance.service.ts` → `finance-summary.service.ts` (KPIs + `getConsolidated`) y
   `finance-reconciliation.service.ts` (`pairUp`/`autoReconcile`/`recognizeTransfers`/`transferPayee`).
-- **Criterio de salida:** typecheck + tests verdes (añadir tests de conciliación si el troceo lo
-  facilita).
+- **Criterio de salida:** typecheck + **toda** la suite (incluida la de conciliación e import de
+  Fase 0) verde **sin modificar los tests** — es la garantía de que el troceo no cambió comportamiento.
 
 ### Fase 3 — Frontend: dividir barriles
 - `hooks/useFinance.ts` → `useIncome`, `useExpenses`, `useBankImports`, `useBankCategories`,
   `useReconciliation`, `useFinanceSummary`, compartiendo el helper `invalidateFinance`.
 - `types/domain.ts` → `types/{core,finance,banking,sales,dashboard}.ts` + `domain.ts` re-exportador.
-- **Fix de asimetría:** mover `clients` **y** `vendors` dentro de `invalidateFinance`.
+- **Corrección menor declarada (único cambio de comportamiento del refactor):** hoy
+  `invalidateFinance` invalida `vendors` pero no `clients`, y varias mutaciones añaden `['clients']`
+  a mano (asimetría confusa). Se mueven **ambos** (`clients` y `vendors`) dentro de `invalidateFinance`.
+  Efecto observable: las mutaciones de ingresos ahora también invalidan `clients` de forma
+  centralizada (antes lo hacían solo algunas). Es correcto y deseado, pero se declara aquí por no ser
+  estrictamente "sin cambios de comportamiento".
 - **Criterio de salida:** `npm run lint` (typecheck) + `vite build`.
 
 ### Fase 4 — Frontend: UI genérica
@@ -129,7 +142,7 @@ backend/src/modules/
     bank-accounts.service.ts
     bank-transactions.query.ts
     import-pipeline.service.ts
-    finance-imports.serde.ts  (+ parser.ts existente)
+    finance-imports.serde.ts  (+ finance-imports.parser.ts existente)
 
 frontend/src/
   hooks/  useIncome, useExpenses, useBankImports, useBankCategories,
@@ -140,10 +153,16 @@ frontend/src/
   lib/    paymentState.ts
 ```
 
+Nota: los gemelos de UI hoy viven en `pages/finance/`, `pages/clients/`, `pages/vendors/`. La UI
+genérica se **mueve** a `components/finance/` y `components/parties/` (las páginas quedan como
+envoltorios delgados que instancian el genérico). Es un movimiento de archivos con churn de rutas de
+import esperado y cazado por el typecheck.
+
 ## No-objetivos
 
 - Sin cambios de schema ni migraciones.
-- Sin cambios de comportamiento observable (refactor puro).
+- Sin cambios de comportamiento observable (refactor puro), salvo la corrección menor de
+  invalidación declarada en Fase 3.
 - Sin features nuevas (paginación/búsqueda, multimoneda/decimales, etc. — deuda de backlog aparte).
 - Sin tocar el módulo **Agent** (`tools.ts`/`heuristic.ts`): su troceo va alineado con el
   backlog de "agentes por dominio" y se trata como spec separado.
