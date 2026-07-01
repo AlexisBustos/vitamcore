@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { badRequest, notFound } from '../../utils/http-error';
 import { assertContext } from '../shared/relations';
+import { resolveClientId } from '../shared/parties';
 import type {
   CreateIncomeInput,
   ListIncomeFilters,
@@ -30,17 +31,23 @@ const RECEIVABLE_OR: Prisma.IncomeRecordWhereInput['OR'] = [
   { netAmount: null, status: { in: [...PENDING_STATUSES] } },
 ];
 
-// Invariante de cobranza: el estado PAID solo es válido si hay fecha de cobro.
-// El paso a pagado se hace a mano vía registerPayment; el formulario no fija
-// paidDate, así que un status PAID sin paidDate se degrada a INVOICED.
-function normalizePaidStatus<T extends { status?: string | null }>(
+// Invariante de cobranza: PAID ⇔ hay paidDate. El formulario no envía paidDate,
+// así que reconciliamos el par (status, paidDate): al marcar PAID sin fecha le
+// asignamos la fecha de cobro (hoy) y, al sacar de PAID, la limpiamos para no
+// dejar un registro incoherente. El pago contra un movimiento bancario sigue
+// pasando por registerPayment (fija además paidByBankTransactionId).
+function reconcilePaidStatus<T extends { status?: string | null }>(
   input: T,
-  paidDate: Date | null,
-): T {
-  if (input.status === 'PAID' && !paidDate) {
-    return { ...input, status: 'INVOICED' };
+  currentPaidDate: Date | null,
+): T & { paidDate?: Date | null; paidByBankTransactionId?: string | null } {
+  // status undefined = el update no toca el estado; no tocamos la fecha de cobro.
+  if (input.status === undefined) return input;
+  if (input.status === 'PAID') {
+    // Respeta la fecha de cobro existente; si no hay, marca cobrado hoy.
+    return { ...input, paidDate: currentPaidDate ?? new Date() };
   }
-  return input;
+  // Cualquier otro estado no es cobrado: limpia el rastro de cobro.
+  return { ...input, paidDate: null, paidByBankTransactionId: null };
 }
 
 export async function list(filters: ListIncomeFilters) {
@@ -99,22 +106,39 @@ export async function getById(id: string) {
 
 export async function create(input: CreateIncomeInput) {
   await assertContext(input.organizationId, input.businessUnitId, input.projectId);
-  // create nunca recibe paidDate (no está en el schema): un PAID se degrada a INVOICED.
-  return prisma.incomeRecord.create({ data: normalizePaidStatus(input, null) });
+  // Enlaza con el cliente por nombre (lo crea si no existe) para que el registro
+  // manual también sume en la cartera de clientes.
+  const clientId = await resolveClientId(input.organizationId, input.clientName);
+  // Si se crea directamente como PAID, reconcilePaidStatus le fija paidDate = hoy.
+  return prisma.incomeRecord.create({
+    data: { ...reconcilePaidStatus(input, null), clientId },
+  });
 }
 
 export async function update(id: string, input: UpdateIncomeInput) {
   const current = await prisma.incomeRecord.findUnique({
     where: { id },
-    select: { organizationId: true, paidDate: true },
+    select: { organizationId: true, paidDate: true, clientName: true },
   });
   if (!current) throw notFound('Ingreso no encontrado');
   await assertContext(current.organizationId, input.businessUnitId, input.projectId);
-  // Si el form intenta marcar PAID y el registro no tiene cobro, se degrada a INVOICED.
-  return prisma.incomeRecord.update({
-    where: { id },
-    data: normalizePaidStatus(input, current.paidDate),
-  });
+  // Marcar PAID desde el form fija la fecha de cobro; sacar de PAID la limpia.
+  const data: Prisma.IncomeRecordUncheckedUpdateInput = reconcilePaidStatus(
+    input,
+    current.paidDate,
+  );
+  // Re-enlaza el cliente solo si cambió el nombre (protege los registros
+  // importados de un re-enlace innecesario cuando se edita otro campo).
+  if (input.clientName !== undefined) {
+    const newName = input.clientName?.trim() ?? '';
+    const oldName = current.clientName?.trim() ?? '';
+    if (newName.toLowerCase() !== oldName.toLowerCase()) {
+      data.clientId = newName
+        ? await resolveClientId(current.organizationId, newName)
+        : null;
+    }
+  }
+  return prisma.incomeRecord.update({ where: { id }, data });
 }
 
 export async function registerPayment(id: string, input: RegisterPaymentInput) {

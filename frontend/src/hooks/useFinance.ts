@@ -116,7 +116,11 @@ export function useSaveIncome() {
       payload.id
         ? api.patch(`/income/${payload.id}`, payload.data)
         : api.post('/income', payload.data),
-    onSuccess: () => invalidateFinance(qc),
+    onSuccess: () => {
+      invalidateFinance(qc);
+      // Las métricas de clientes se derivan de sus ingresos: refréscalas.
+      qc.invalidateQueries({ queryKey: ['clients'] });
+    },
   });
 }
 
@@ -124,7 +128,10 @@ export function useDeleteIncome() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.del(`/income/${id}`),
-    onSuccess: () => invalidateFinance(qc),
+    onSuccess: () => {
+      invalidateFinance(qc);
+      qc.invalidateQueries({ queryKey: ['clients'] });
+    },
   });
 }
 

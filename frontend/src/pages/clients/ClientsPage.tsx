@@ -26,6 +26,10 @@ export function ClientsPage() {
     (sum, c) => sum + c.stats.totalCreditNotes,
     0,
   );
+  const totalPending = (data ?? []).reduce(
+    (sum, c) => sum + c.stats.pendingAmount,
+    0,
+  );
 
   return (
     <div className="space-y-6">
@@ -35,13 +39,18 @@ export function ClientsPage() {
       />
 
       {data && data.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard
             title="Clientes"
             value={String(data.length)}
             icon={Users}
           />
           <MetricCard title="Venta neta total" value={formatMoney(totalNet)} />
+          <MetricCard
+            title="Por cobrar"
+            value={formatMoney(totalPending)}
+            tone={totalPending > 0 ? 'warning' : 'default'}
+          />
           <MetricCard
             title="Notas de crédito"
             value={formatMoney(totalCreditNotes)}
@@ -93,6 +102,10 @@ export function ClientsPage() {
                   <th className="px-4 py-3 text-right font-medium">
                     Venta neta
                   </th>
+                  <th className="px-4 py-3 text-right font-medium">Cobrado</th>
+                  <th className="px-4 py-3 text-right font-medium">
+                    Por cobrar
+                  </th>
                   <th className="px-4 py-3 font-medium">Último documento</th>
                 </tr>
               </thead>
@@ -135,6 +148,22 @@ export function ClientsPage() {
                     </td>
                     <td className="px-4 py-3 text-right font-medium">
                       {formatMoney(c.stats.netSales)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-[var(--color-muted-foreground)]">
+                      {c.stats.collectedAmount
+                        ? formatMoney(c.stats.collectedAmount)
+                        : '—'}
+                    </td>
+                    <td
+                      className={`px-4 py-3 text-right ${
+                        c.stats.pendingAmount > 0
+                          ? 'font-medium text-[var(--color-warning)]'
+                          : 'text-[var(--color-muted-foreground)]'
+                      }`}
+                    >
+                      {c.stats.pendingAmount
+                        ? formatMoney(c.stats.pendingAmount)
+                        : '—'}
                     </td>
                     <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
                       {formatDate(c.stats.lastDocumentDate)}

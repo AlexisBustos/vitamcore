@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { badRequest, notFound } from '../../utils/http-error';
 import { assertContext } from '../shared/relations';
+import { resolveVendorId } from '../shared/parties';
 import type {
   CreateExpenseInput,
   ListExpenseFilters,
@@ -21,17 +22,23 @@ const refs = {
 // Estados de un gasto aún por pagar.
 const PAYABLE_STATUSES = ['PENDING', 'OVERDUE'] as const;
 
-// Invariante: el estado PAID solo es válido con fecha de pago. El paso a pagado se
-// hace a mano vía registerPayment; el formulario no fija paidDate, así que un PAID
-// sin paidDate se degrada a PENDING.
-function normalizePaidStatus<T extends { status?: string | null }>(
+// Invariante de pago: PAID ⇔ hay paidDate. El formulario no envía paidDate, así
+// que reconciliamos el par (status, paidDate): al marcar PAID sin fecha le
+// asignamos la fecha de pago (hoy) y, al sacar de PAID, la limpiamos para no
+// dejar un registro incoherente. El pago contra un movimiento bancario sigue
+// pasando por registerPayment (fija además paidByBankTransactionId).
+function reconcilePaidStatus<T extends { status?: string | null }>(
   input: T,
-  paidDate: Date | null,
-): T {
-  if (input.status === 'PAID' && !paidDate) {
-    return { ...input, status: 'PENDING' };
+  currentPaidDate: Date | null,
+): T & { paidDate?: Date | null; paidByBankTransactionId?: string | null } {
+  // status undefined = el update no toca el estado; no tocamos la fecha de pago.
+  if (input.status === undefined) return input;
+  if (input.status === 'PAID') {
+    // Respeta la fecha de pago existente; si no hay, marca pagado hoy.
+    return { ...input, paidDate: currentPaidDate ?? new Date() };
   }
-  return input;
+  // Cualquier otro estado no está pagado: limpia el rastro de pago.
+  return { ...input, paidDate: null, paidByBankTransactionId: null };
 }
 
 export async function list(filters: ListExpenseFilters) {
@@ -84,21 +91,39 @@ export async function getById(id: string) {
 
 export async function create(input: CreateExpenseInput) {
   await assertContext(input.organizationId, input.businessUnitId, input.projectId);
-  // create nunca recibe paidDate (no está en el schema): un PAID se degrada a PENDING.
-  return prisma.expenseRecord.create({ data: normalizePaidStatus(input, null) });
+  // Enlaza con el proveedor por nombre (lo crea si no existe) para que el
+  // registro manual también sume en la cartera de proveedores.
+  const vendorId = await resolveVendorId(input.organizationId, input.vendorName);
+  // Si se crea directamente como PAID, reconcilePaidStatus le fija paidDate = hoy.
+  return prisma.expenseRecord.create({
+    data: { ...reconcilePaidStatus(input, null), vendorId },
+  });
 }
 
 export async function update(id: string, input: UpdateExpenseInput) {
   const current = await prisma.expenseRecord.findUnique({
     where: { id },
-    select: { organizationId: true, paidDate: true },
+    select: { organizationId: true, paidDate: true, vendorName: true },
   });
   if (!current) throw notFound('Gasto no encontrado');
   await assertContext(current.organizationId, input.businessUnitId, input.projectId);
-  return prisma.expenseRecord.update({
-    where: { id },
-    data: normalizePaidStatus(input, current.paidDate),
-  });
+  // Marcar PAID desde el form fija la fecha de pago; sacar de PAID la limpia.
+  const data: Prisma.ExpenseRecordUncheckedUpdateInput = reconcilePaidStatus(
+    input,
+    current.paidDate,
+  );
+  // Re-enlaza el proveedor solo si cambió el nombre (protege los registros
+  // importados de un re-enlace innecesario cuando se edita otro campo).
+  if (input.vendorName !== undefined) {
+    const newName = input.vendorName?.trim() ?? '';
+    const oldName = current.vendorName?.trim() ?? '';
+    if (newName.toLowerCase() !== oldName.toLowerCase()) {
+      data.vendorId = newName
+        ? await resolveVendorId(current.organizationId, newName)
+        : null;
+    }
+  }
+  return prisma.expenseRecord.update({ where: { id }, data });
 }
 
 export async function remove(id: string) {

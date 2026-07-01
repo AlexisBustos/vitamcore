@@ -1,4 +1,4 @@
-import { DocumentKind } from '@prisma/client';
+import { DocumentKind, IncomeStatus } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { notFound } from '../../utils/http-error';
 import type { ListClientsFilters } from './clients.schema';
@@ -9,6 +9,8 @@ const orgRef = { select: { id: true, name: true } };
 const statsSelect = {
   amount: true,
   documentKind: true,
+  status: true,
+  paidDate: true,
   sourceIssueDate: true,
   incomeDate: true,
 } as const;
@@ -16,6 +18,8 @@ const statsSelect = {
 type IncomeStatsRow = {
   amount: number;
   documentKind: DocumentKind;
+  status: IncomeStatus;
+  paidDate: Date | null;
   sourceIssueDate: Date | null;
   incomeDate: Date | null;
 };
@@ -28,6 +32,8 @@ function computeStats(incomes: IncomeStatsRow[]) {
   let totalCreditNotes = 0;
   let invoiceCount = 0;
   let creditNoteCount = 0;
+  let collectedAmount = 0;
+  let pendingAmount = 0;
   let lastDocumentDate: Date | null = null;
 
   for (const inc of incomes) {
@@ -39,6 +45,12 @@ function computeStats(incomes: IncomeStatsRow[]) {
     } else {
       grossInvoiced += amount;
       invoiceCount += 1;
+      // Cobrado vs por cobrar: solo facturas no anuladas (las NC no se cobran,
+      // coherente con la pestaña de Cuentas por cobrar que excluye NC).
+      if (inc.status !== IncomeStatus.CANCELLED) {
+        if (inc.paidDate) collectedAmount += amount;
+        else pendingAmount += amount;
+      }
     }
     const date = inc.sourceIssueDate ?? inc.incomeDate;
     if (date && (!lastDocumentDate || date > lastDocumentDate)) {
@@ -52,6 +64,8 @@ function computeStats(incomes: IncomeStatsRow[]) {
     totalCreditNotes,
     invoiceCount,
     creditNoteCount,
+    collectedAmount,
+    pendingAmount,
     documentCount: incomes.length,
     lastDocumentDate,
   };

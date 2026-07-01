@@ -256,6 +256,8 @@ export interface ClientStats {
   totalCreditNotes: number;
   invoiceCount: number;
   creditNoteCount: number;
+  collectedAmount: number;
+  pendingAmount: number;
   documentCount: number;
   lastDocumentDate: string | null;
 }
