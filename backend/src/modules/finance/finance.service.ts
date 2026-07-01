@@ -5,6 +5,7 @@
 import { Prisma, type ExpenseStatus, type IncomeStatus } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { currentMonthRange } from '../shared/dates';
+import { buildOwnAccounts, isInternalTransfer } from '../shared/internal-transfer';
 
 const INCOME_PENDING: IncomeStatus[] = ['EXPECTED', 'INVOICED', 'OVERDUE'];
 const EXPENSE_PENDING: ExpenseStatus[] = ['PENDING', 'OVERDUE'];
@@ -291,11 +292,21 @@ export async function getReconciliationSummary(filters: {
     };
   }
 
+  // Cuentas propias para detectar traspasos internos (no son ingreso/gasto).
+  const accounts = await prisma.bankAccount.findMany({
+    where: filters.organizationId
+      ? { organizationId: filters.organizationId }
+      : {},
+    select: { accountNumber: true },
+  });
+  const ownAccounts = buildOwnAccounts(accounts.map((a) => a.accountNumber));
+
   const rows = await prisma.bankTransaction.findMany({
     where,
     select: {
       creditAmount: true,
       chargeAmount: true,
+      description: true,
       _count: { select: { paidIncomes: true, paidExpenses: true } },
     },
   });
@@ -303,8 +314,15 @@ export async function getReconciliationSummary(filters: {
   const credits = { total: 0, conciliado: 0, suelto: 0 };
   const charges = { total: 0, conciliado: 0, suelto: 0 };
   let unlinkedCount = 0;
+  const internal = { count: 0, amount: 0 };
 
   for (const r of rows) {
+    // Los traspasos internos se excluyen del cuadre (no son suelto ni total).
+    if (isInternalTransfer(r.description, ownAccounts)) {
+      internal.count += 1;
+      internal.amount += r.creditAmount + r.chargeAmount;
+      continue;
+    }
     const linkedIncome = r._count.paidIncomes > 0;
     const linkedExpense = r._count.paidExpenses > 0;
     if (r.creditAmount > 0) {
@@ -320,7 +338,7 @@ export async function getReconciliationSummary(filters: {
   credits.suelto = credits.total - credits.conciliado;
   charges.suelto = charges.total - charges.conciliado;
 
-  return { credits, charges, unlinkedCount };
+  return { credits, charges, unlinkedCount, internal };
 }
 
 /**
@@ -393,8 +411,30 @@ export async function getConsolidated(filters: {
 
 // ----- Auto-conciliación conservadora (solo pares de monto único) -----
 
-type AutoCandidate = { id: string; target: number; date: Date | null };
-type AutoMov = { id: string; amount: number; date: Date };
+type AutoCandidate = {
+  id: string;
+  target: number;
+  date: Date | null;
+  counterpart: string;
+  document: string;
+};
+type AutoMov = {
+  id: string;
+  amount: number;
+  date: Date;
+  description: string;
+  documentNumber: string | null;
+};
+
+/** Etiqueta legible del documento (p. ej. "Factura 1234"), con fallback. */
+function docLabel(
+  type: string | null | undefined,
+  folio: string | null | undefined,
+  fallback: string,
+): string {
+  const label = [type?.trim(), folio?.trim()].filter(Boolean).join(' ');
+  return label || fallback;
+}
 
 /**
  * Empareja facturas con movimientos solo cuando para un monto hay exactamente
@@ -443,8 +483,9 @@ export async function autoReconcile(input: {
   organizationId: string;
   month?: string;
   apply: boolean;
+  selection?: { invoiceId: string; movId: string }[];
 }) {
-  const { organizationId, month, apply } = input;
+  const { organizationId, month, apply, selection } = input;
   const WINDOW_MS = 60 * 24 * 60 * 60 * 1000; // ±60 días
 
   let range: { gte: Date; lt: Date } | null = null;
@@ -467,22 +508,32 @@ export async function autoReconcile(input: {
       select: {
         id: true, amount: true, netAmount: true,
         sourceIssueDate: true, incomeDate: true, dueDate: true,
+        clientName: true, sourceRut: true, description: true,
+        sourceDocumentType: true, sourceFolio: true,
       },
     }),
     prisma.bankTransaction.findMany({
       where: { organizationId, creditAmount: { gt: 0 }, paidIncomes: { none: {} } },
-      select: { id: true, creditAmount: true, transactionDate: true },
+      select: {
+        id: true, creditAmount: true, transactionDate: true,
+        description: true, documentNumber: true,
+      },
     }),
     prisma.expenseRecord.findMany({
       where: { organizationId, status: { not: 'CANCELLED' }, paidDate: null },
       select: {
         id: true, amount: true,
         sourceIssueDate: true, expenseDate: true, dueDate: true,
+        vendorName: true, sourceRut: true, description: true,
+        sourceDocumentType: true, sourceFolio: true,
       },
     }),
     prisma.bankTransaction.findMany({
       where: { organizationId, chargeAmount: { gt: 0 }, paidExpenses: { none: {} } },
-      select: { id: true, chargeAmount: true, transactionDate: true },
+      select: {
+        id: true, chargeAmount: true, transactionDate: true,
+        description: true, documentNumber: true,
+      },
     }),
   ]);
 
@@ -491,6 +542,8 @@ export async function autoReconcile(input: {
       id: r.id,
       target: r.netAmount ?? r.amount,
       date: r.sourceIssueDate ?? r.incomeDate ?? r.dueDate,
+      counterpart: r.clientName ?? r.sourceRut ?? '—',
+      document: docLabel(r.sourceDocumentType, r.sourceFolio, r.description),
     }))
     .filter((c) => inRange(c.date));
   const expenseCands: AutoCandidate[] = expenses
@@ -498,22 +551,38 @@ export async function autoReconcile(input: {
       id: r.id,
       target: r.amount,
       date: r.sourceIssueDate ?? r.expenseDate ?? r.dueDate,
+      counterpart: r.vendorName ?? r.sourceRut ?? '—',
+      document: docLabel(r.sourceDocumentType, r.sourceFolio, r.description),
     }))
     .filter((c) => inRange(c.date));
 
   const incomeMovs: AutoMov[] = creditMovs.map((t) => ({
     id: t.id, amount: t.creditAmount, date: t.transactionDate,
+    description: t.description, documentNumber: t.documentNumber,
   }));
   const expenseMovs: AutoMov[] = chargeMovs.map((t) => ({
     id: t.id, amount: t.chargeAmount, date: t.transactionDate,
+    description: t.description, documentNumber: t.documentNumber,
   }));
 
   const inc = pairUp(incomeCands, incomeMovs, WINDOW_MS);
   const exp = pairUp(expenseCands, expenseMovs, WINDOW_MS);
 
-  if (apply && (inc.pairs.length > 0 || exp.pairs.length > 0)) {
+  // Al aplicar con una selección explícita, solo se escriben los pares elegidos.
+  // El preview (apply:false) o el apply sin selección usan todos los detectados.
+  const selectedKeys = selection
+    ? new Set(selection.map((s) => `${s.invoiceId}:${s.movId}`))
+    : null;
+  const pickApply = (pairs: { invoiceId: string; movId: string; movDate: Date }[]) =>
+    apply && selectedKeys
+      ? pairs.filter((p) => selectedKeys.has(`${p.invoiceId}:${p.movId}`))
+      : pairs;
+  const incPairs = pickApply(inc.pairs);
+  const expPairs = pickApply(exp.pairs);
+
+  if (apply && (incPairs.length > 0 || expPairs.length > 0)) {
     await prisma.$transaction([
-      ...inc.pairs.map((p) =>
+      ...incPairs.map((p) =>
         prisma.incomeRecord.update({
           where: { id: p.invoiceId },
           data: {
@@ -523,7 +592,7 @@ export async function autoReconcile(input: {
           },
         }),
       ),
-      ...exp.pairs.map((p) =>
+      ...expPairs.map((p) =>
         prisma.expenseRecord.update({
           where: { id: p.invoiceId },
           data: {
@@ -536,10 +605,169 @@ export async function autoReconcile(input: {
     ]);
   }
 
+  // Detalle legible de cada par para que el usuario lo revise antes de aplicar.
+  const incById = new Map(incomeCands.map((c) => [c.id, c]));
+  const incMovById = new Map(incomeMovs.map((m) => [m.id, m]));
+  const expById = new Map(expenseCands.map((c) => [c.id, c]));
+  const expMovById = new Map(expenseMovs.map((m) => [m.id, m]));
+
+  const detail = (
+    kind: 'income' | 'expense',
+    pairs: { invoiceId: string; movId: string }[],
+    invMap: Map<string, AutoCandidate>,
+    movMap: Map<string, AutoMov>,
+  ) =>
+    pairs.map((p) => {
+      const c = invMap.get(p.invoiceId)!;
+      const m = movMap.get(p.movId)!;
+      return {
+        kind,
+        invoiceId: p.invoiceId,
+        movId: p.movId,
+        amount: c.target,
+        counterpart: c.counterpart,
+        document: c.document,
+        invoiceDate: c.date,
+        movementDescription: m.description,
+        movementDocumentNumber: m.documentNumber,
+        movementDate: m.date,
+      };
+    });
+
+  const details = [
+    ...detail('income', incPairs, incById, incMovById),
+    ...detail('expense', expPairs, expById, expMovById),
+  ];
+
   return {
-    pairs: inc.pairs.length + exp.pairs.length,
-    linkedIncome: inc.pairs.length,
-    linkedExpense: exp.pairs.length,
+    pairs: incPairs.length + expPairs.length,
+    linkedIncome: incPairs.length,
+    linkedExpense: expPairs.length,
     ambiguousAmounts: inc.ambiguousAmounts + exp.ambiguousAmounts,
+    details,
+  };
+}
+
+// ----- Reconocer transferencias a/desde terceros como gastos/ingresos -----
+
+// Pagos a terceros llegan como "Traspaso A: <nombre>"; cobros como
+// "Traspaso De: <nombre>". Los internos son "Traspaso A/De Cuenta: <nº>" y no
+// calzan estos prefijos (el ":" va justo tras "A"/"De").
+const TRANSFER_OUT_PREFIX = 'Traspaso A:'; // pago → gasto
+const TRANSFER_IN_PREFIX = 'Traspaso De:'; // cobro → ingreso
+
+/** Extrae el destinatario/pagador de la descripción del movimiento. */
+function transferPayee(description: string): string {
+  return description.replace(/^\s*traspaso (a|de):\s*/i, '').trim() || 'Sin nombre';
+}
+
+/**
+ * Reconoce transferencias sin factura como gastos/ingresos pagados, atribuidos
+ * al tercero. direction 'expense' = "Traspaso A:" (crea ExpenseRecord con
+ * vendorName); 'income' = "Traspaso De:" (crea IncomeRecord con clientName).
+ * preview (apply:false) no escribe; aplicar crea el registro por movimiento y lo
+ * deja conciliado (paidByBankTransactionId + status PAID). selection acota cuáles.
+ */
+export async function recognizeTransfers(input: {
+  organizationId: string;
+  month?: string;
+  direction: 'expense' | 'income';
+  category: string;
+  apply: boolean;
+  selection?: string[];
+}) {
+  const { organizationId, month, direction, category, apply, selection } = input;
+  const isIncome = direction === 'income';
+
+  const where: Prisma.BankTransactionWhereInput = {
+    organizationId,
+    description: {
+      startsWith: isIncome ? TRANSFER_IN_PREFIX : TRANSFER_OUT_PREFIX,
+      mode: 'insensitive',
+    },
+    ...(isIncome
+      ? { creditAmount: { gt: 0 }, paidIncomes: { none: {} } }
+      : { chargeAmount: { gt: 0 }, paidExpenses: { none: {} } }),
+  };
+  if (month) {
+    const [y, m] = month.split('-').map(Number);
+    where.transactionDate = {
+      gte: new Date(Date.UTC(y, m - 1, 1)),
+      lt: new Date(Date.UTC(y, m, 1)),
+    };
+  }
+
+  const movs = await prisma.bankTransaction.findMany({
+    where,
+    select: {
+      id: true,
+      creditAmount: true,
+      chargeAmount: true,
+      transactionDate: true,
+      description: true,
+      currency: true,
+    },
+    orderBy: { transactionDate: 'asc' },
+  });
+
+  const amountOf = (m: { creditAmount: number; chargeAmount: number }) =>
+    isIncome ? m.creditAmount : m.chargeAmount;
+
+  const selectedSet = selection ? new Set(selection) : null;
+  const chosen =
+    apply && selectedSet ? movs.filter((m) => selectedSet.has(m.id)) : movs;
+
+  if (apply && chosen.length > 0) {
+    await prisma.$transaction(
+      chosen.map((m) => {
+        const payee = transferPayee(m.description);
+        const amount = amountOf(m);
+        return isIncome
+          ? prisma.incomeRecord.create({
+              data: {
+                organizationId,
+                clientName: payee,
+                description: `Cobro de ${payee}`,
+                amount,
+                netAmount: amount,
+                currency: m.currency,
+                category,
+                status: 'PAID',
+                incomeDate: m.transactionDate,
+                paidDate: m.transactionDate,
+                paidByBankTransactionId: m.id,
+              },
+            })
+          : prisma.expenseRecord.create({
+              data: {
+                organizationId,
+                vendorName: payee,
+                description: `Pago a ${payee}`,
+                amount,
+                currency: m.currency,
+                category,
+                status: 'PAID',
+                expenseDate: m.transactionDate,
+                paidDate: m.transactionDate,
+                paidByBankTransactionId: m.id,
+              },
+            });
+      }),
+    );
+  }
+
+  const details = chosen.map((m) => ({
+    movId: m.id,
+    payee: transferPayee(m.description),
+    amount: amountOf(m),
+    date: m.transactionDate,
+    description: m.description,
+  }));
+
+  return {
+    count: details.length,
+    created: apply ? chosen.length : 0,
+    totalAmount: details.reduce((s, d) => s + d.amount, 0),
+    details,
   };
 }

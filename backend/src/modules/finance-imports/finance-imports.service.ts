@@ -11,6 +11,7 @@ import { badRequest, notFound } from '../../utils/http-error';
 import { categorizeWith } from './finance-imports.categories';
 import { getActiveRules } from '../finance-categories/category-rules.service';
 import { assertOrganization } from '../shared/relations';
+import { buildOwnAccounts, isInternalTransfer } from '../shared/internal-transfer';
 import {
   parseBankRows,
   parsePurchaseRows,
@@ -117,15 +118,24 @@ export async function listBankTransactions(filters: ListTransactionsFilters) {
     where.paidExpenses = { none: {} };
   }
 
-  const transactions = await prisma.bankTransaction.findMany({
-    where,
-    orderBy: [{ transactionDate: 'desc' }, { createdAt: 'desc' }],
-    take: 300,
-    include: {
-      bankAccount: refs.bankAccount,
-      _count: { select: { paidIncomes: true, paidExpenses: true } },
-    },
-  });
+  const [transactions, accounts] = await Promise.all([
+    prisma.bankTransaction.findMany({
+      where,
+      orderBy: [{ transactionDate: 'desc' }, { createdAt: 'desc' }],
+      take: 300,
+      include: {
+        bankAccount: refs.bankAccount,
+        _count: { select: { paidIncomes: true, paidExpenses: true } },
+      },
+    }),
+    prisma.bankAccount.findMany({
+      where: filters.organizationId
+        ? { organizationId: filters.organizationId }
+        : {},
+      select: { accountNumber: true },
+    }),
+  ]);
+  const ownAccounts = buildOwnAccounts(accounts.map((a) => a.accountNumber));
 
   const totals = transactions.reduce(
     (acc, t) => {
@@ -139,6 +149,7 @@ export async function listBankTransactions(filters: ListTransactionsFilters) {
   const rows = transactions.map(({ _count, ...t }) => ({
     ...t,
     reconciled: _count.paidIncomes > 0 || _count.paidExpenses > 0,
+    internal: isInternalTransfer(t.description, ownAccounts),
   }));
 
   return {

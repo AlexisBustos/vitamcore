@@ -18,11 +18,13 @@ export function FinanceSummaryTab({
   consolidatedMonth,
   onReviewUnlinked,
   onAutoReconcile,
+  onRecognizeTransfers,
 }: {
   organizationId?: string;
   consolidatedMonth?: string;
   onReviewUnlinked: () => void;
   onAutoReconcile: () => void;
+  onRecognizeTransfers: (direction: 'expense' | 'income') => void;
 }) {
   const { data, isLoading, isError, error } = useFinanceSummary(organizationId);
 
@@ -36,6 +38,7 @@ export function FinanceSummaryTab({
         month={consolidatedMonth}
         onReviewUnlinked={onReviewUnlinked}
         onAutoReconcile={onAutoReconcile}
+        onRecognizeTransfers={onRecognizeTransfers}
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

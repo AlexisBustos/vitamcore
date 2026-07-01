@@ -406,6 +406,10 @@ export function BanksTab({
                         <span className="inline-flex items-center rounded-full bg-[var(--color-success)]/10 px-2 py-0.5 text-xs font-medium text-[var(--color-success)]">
                           Conciliado
                         </span>
+                      ) : t.internal ? (
+                        <span className="inline-flex items-center rounded-full bg-[var(--color-accent)]/10 px-2 py-0.5 text-xs font-medium text-[var(--color-accent)]">
+                          Interno
+                        </span>
                       ) : (
                         <span className="inline-flex items-center rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-xs font-medium text-[var(--color-muted-foreground)]">
                           Suelto

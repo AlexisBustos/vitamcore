@@ -12,6 +12,7 @@ import { ReceivablesTab } from './ReceivablesTab';
 import { PayablesTab } from './PayablesTab';
 import { BanksTab } from './BanksTab';
 import { AutoReconcileModal } from './AutoReconcileModal';
+import { RecognizeTransfersModal } from './RecognizeTransfersModal';
 
 type Tab =
   | 'summary'
@@ -62,6 +63,17 @@ export function FinancePage() {
       return;
     }
     setAutoOpen(true);
+  }
+
+  const [recognizeDir, setRecognizeDir] = useState<'expense' | 'income' | null>(
+    null,
+  );
+  function openRecognizeTransfers(direction: 'expense' | 'income') {
+    if (!organizationId) {
+      alert('Selecciona una empresa para reconocer transferencias.');
+      return;
+    }
+    setRecognizeDir(direction);
   }
 
   return (
@@ -121,6 +133,7 @@ export function FinancePage() {
           consolidatedMonth={consolidatedMonth}
           onReviewUnlinked={reviewUnlinked}
           onAutoReconcile={openAutoReconcile}
+          onRecognizeTransfers={openRecognizeTransfers}
         />
       )}
       {tab === 'receivables' && <ReceivablesTab organizationId={organizationId} />}
@@ -141,6 +154,15 @@ export function FinancePage() {
           onClose={() => setAutoOpen(false)}
           organizationId={organizationId}
           month={consolidatedMonth}
+        />
+      )}
+
+      {recognizeDir && organizationId && (
+        <RecognizeTransfersModal
+          open={!!recognizeDir}
+          onClose={() => setRecognizeDir(null)}
+          organizationId={organizationId}
+          direction={recognizeDir}
         />
       )}
     </div>

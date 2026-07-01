@@ -24,11 +24,13 @@ export function ConsolidatedPosition({
   month,
   onReviewUnlinked,
   onAutoReconcile,
+  onRecognizeTransfers,
 }: {
   organizationId?: string;
   month?: string;
   onReviewUnlinked: () => void;
   onAutoReconcile: () => void;
+  onRecognizeTransfers: (direction: 'expense' | 'income') => void;
 }) {
   const { data, isLoading, isError, error } = useConsolidated({ organizationId, month });
 
@@ -66,9 +68,17 @@ export function ConsolidatedPosition({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle>{cuadreLabel(month)}</CardTitle>
-          <Button variant="outline" onClick={onAutoReconcile}>
-            Auto-conciliar exactos
-          </Button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="outline" onClick={() => onRecognizeTransfers('expense')}>
+              Reconocer pagos
+            </Button>
+            <Button variant="outline" onClick={() => onRecognizeTransfers('income')}>
+              Reconocer cobros
+            </Button>
+            <Button variant="outline" onClick={onAutoReconcile}>
+              Auto-conciliar exactos
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -120,6 +130,12 @@ export function ConsolidatedPosition({
                 revisar
               </button>
             </div>
+          )}
+          {rec.internal.count > 0 && (
+            <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+              Se excluyeron {rec.internal.count} traspaso(s) interno(s) entre cuentas
+              propias ({formatMoney(rec.internal.amount)}); no cuentan como suelto.
+            </p>
           )}
         </CardContent>
       </Card>

@@ -388,6 +388,7 @@ export interface BankTransaction {
   category: string | null;
   categoryManual: boolean;
   reconciled: boolean;
+  internal: boolean;
   createdAt: string;
   organization?: Ref;
   bankAccount?: Pick<BankAccount, 'id' | 'name' | 'accountNumber'>;
@@ -500,6 +501,7 @@ export interface ReconciliationSummary {
   credits: { total: number; conciliado: number; suelto: number };
   charges: { total: number; conciliado: number; suelto: number };
   unlinkedCount: number;
+  internal: { count: number; amount: number };
 }
 
 export interface ConsolidatedOrg {
@@ -522,11 +524,40 @@ export interface ConsolidatedResponse {
   reconciliation: ReconciliationSummary;
 }
 
+export interface AutoReconcilePair {
+  kind: 'income' | 'expense';
+  invoiceId: string;
+  movId: string;
+  amount: number;
+  counterpart: string;
+  document: string;
+  invoiceDate: string | null;
+  movementDescription: string;
+  movementDocumentNumber: string | null;
+  movementDate: string;
+}
+
 export interface AutoReconcileResult {
   pairs: number;
   linkedIncome: number;
   linkedExpense: number;
   ambiguousAmounts: number;
+  details: AutoReconcilePair[];
+}
+
+export interface RecognizeTransfer {
+  movId: string;
+  payee: string;
+  amount: number;
+  date: string;
+  description: string;
+}
+
+export interface RecognizeTransfersResult {
+  count: number;
+  created: number;
+  totalAmount: number;
+  details: RecognizeTransfer[];
 }
 
 export interface SalesSummary {

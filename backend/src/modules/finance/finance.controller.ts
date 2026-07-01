@@ -1,7 +1,11 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import * as service from './finance.service';
-import { autoReconcileSchema, consolidatedQuery } from './finance.schema';
+import {
+  autoReconcileSchema,
+  consolidatedQuery,
+  recognizeTransfersSchema,
+} from './finance.schema';
 
 const summaryQuery = z.object({ organizationId: z.string().optional() });
 
@@ -18,4 +22,9 @@ export async function consolidatedController(req: Request, res: Response) {
 export async function autoReconcileController(req: Request, res: Response) {
   const input = autoReconcileSchema.parse(req.body);
   res.json({ data: await service.autoReconcile(input) });
+}
+
+export async function recognizeTransfersController(req: Request, res: Response) {
+  const input = recognizeTransfersSchema.parse(req.body);
+  res.json({ data: await service.recognizeTransfers(input) });
 }
