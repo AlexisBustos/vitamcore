@@ -6,6 +6,12 @@ import { prisma } from '../../lib/prisma';
 import { badRequest, notFound } from '../../utils/http-error';
 import { assertContext } from '../shared/relations';
 import { resolveClientId } from '../shared/parties';
+import {
+  reconcilePaidStatus,
+  monthRange,
+  listMonths as ledgerListMonths,
+  PENDING_INCOME_STATUSES,
+} from '../shared/ledger';
 import type {
   CreateIncomeInput,
   ListIncomeFilters,
@@ -19,36 +25,14 @@ const refs = {
   project: { select: { id: true, name: true } },
 };
 
-// Estados de un ingreso aún por cobrar (mismos que usa el resumen financiero).
-const PENDING_STATUSES = ['EXPECTED', 'INVOICED', 'OVERDUE'] as const;
-
 // "Saldo por cobrar" coherente con los KPIs de finance.service: usa netAmount
 // cuando está calculado (ventas importadas) y, si no, cae al estado clásico
 // (ingresos manuales o ventas legacy sin netAmount). Sin esto, el KPI y la
 // pestaña de Cuentas por cobrar pueden descuadrar.
 const RECEIVABLE_OR: Prisma.IncomeRecordWhereInput['OR'] = [
   { netAmount: { gt: 0 }, status: { not: 'CANCELLED' } },
-  { netAmount: null, status: { in: [...PENDING_STATUSES] } },
+  { netAmount: null, status: { in: [...PENDING_INCOME_STATUSES] } },
 ];
-
-// Invariante de cobranza: PAID ⇔ hay paidDate. El formulario no envía paidDate,
-// así que reconciliamos el par (status, paidDate): al marcar PAID sin fecha le
-// asignamos la fecha de cobro (hoy) y, al sacar de PAID, la limpiamos para no
-// dejar un registro incoherente. El pago contra un movimiento bancario sigue
-// pasando por registerPayment (fija además paidByBankTransactionId).
-function reconcilePaidStatus<T extends { status?: string | null }>(
-  input: T,
-  currentPaidDate: Date | null,
-): T & { paidDate?: Date | null; paidByBankTransactionId?: string | null } {
-  // status undefined = el update no toca el estado; no tocamos la fecha de cobro.
-  if (input.status === undefined) return input;
-  if (input.status === 'PAID') {
-    // Respeta la fecha de cobro existente; si no hay, marca cobrado hoy.
-    return { ...input, paidDate: currentPaidDate ?? new Date() };
-  }
-  // Cualquier otro estado no es cobrado: limpia el rastro de cobro.
-  return { ...input, paidDate: null, paidByBankTransactionId: null };
-}
 
 export async function list(filters: ListIncomeFilters) {
   const where: Prisma.IncomeRecordWhereInput = {
@@ -81,11 +65,7 @@ export async function list(filters: ListIncomeFilters) {
   }
 
   if (filters.month) {
-    const [y, m] = filters.month.split('-').map(Number);
-    where.incomeDate = {
-      gte: new Date(Date.UTC(y, m - 1, 1)),
-      lt: new Date(Date.UTC(y, m, 1)), // primer día del mes siguiente
-    };
+    where.incomeDate = monthRange(filters.month);
   }
 
   return prisma.incomeRecord.findMany({
@@ -201,14 +181,5 @@ export async function remove(id: string) {
 /// Meses (YYYY-MM) que tienen ingresos, ordenados descendente. Alimenta el
 /// desplegable de filtro por mes (solo ofrece meses con datos).
 export async function listMonths(organizationId?: string): Promise<string[]> {
-  const orgClause = organizationId
-    ? Prisma.sql`AND "organizationId" = ${organizationId}`
-    : Prisma.empty;
-  const rows = await prisma.$queryRaw<{ mes: string }[]>(Prisma.sql`
-    SELECT DISTINCT to_char(date_trunc('month', "incomeDate"), 'YYYY-MM') AS mes
-    FROM "income_records"
-    WHERE "incomeDate" IS NOT NULL ${orgClause}
-    ORDER BY mes DESC
-  `);
-  return rows.map((r) => r.mes);
+  return ledgerListMonths('income', organizationId);
 }
