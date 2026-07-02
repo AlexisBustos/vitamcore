@@ -20,7 +20,6 @@ export function IncomeForm({ open, onClose, income, defaultOrganizationId }: Pro
       record={income}
       defaultOrganizationId={defaultOrganizationId}
       config={{
-        kind: 'income',
         title: { create: 'Nuevo ingreso', edit: 'Editar ingreso' },
         partyField: {
           key: 'clientName',

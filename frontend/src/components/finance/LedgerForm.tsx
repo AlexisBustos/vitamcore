@@ -19,7 +19,6 @@ import type { IncomeRecord, ExpenseRecord } from '@/types/domain';
 type LedgerRecord = IncomeRecord | ExpenseRecord;
 
 export interface LedgerFormConfig {
-  kind: 'income' | 'expense';
   title: { create: string; edit: string };
   partyField: {
     key: 'clientName' | 'vendorName';

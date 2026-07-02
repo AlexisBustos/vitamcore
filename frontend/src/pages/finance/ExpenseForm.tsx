@@ -20,7 +20,6 @@ export function ExpenseForm({ open, onClose, expense, defaultOrganizationId }: P
       record={expense}
       defaultOrganizationId={defaultOrganizationId}
       config={{
-        kind: 'expense',
         title: { create: 'Nuevo gasto', edit: 'Editar gasto' },
         partyField: {
           key: 'vendorName',
