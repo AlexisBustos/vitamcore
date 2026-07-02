@@ -18,10 +18,11 @@ datasource db {
 // Enums
 // ---------------------------------------------------------
 
-/// Roles disponibles en esta etapa inicial.
+/// Roles disponibles.
 enum Role {
-  CEO
-  ADMIN
+  CEO          // dueño / super-usuario — acceso total
+  ADMIN        // acceso total + gestión de usuarios
+  COLABORADOR  // solo Proyectos y Tareas
 }
 
 /// Tipo de empresa.

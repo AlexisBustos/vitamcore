@@ -4,6 +4,8 @@
  */
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth';
+import { requireRole, allowRoles } from '../middleware/authorize';
+import { ADMIN_ROLES, ALL_ROLES } from '../modules/shared/roles';
 import { authRouter } from '../modules/auth/auth.routes';
 import { organizationsRouter } from '../modules/organizations/organizations.routes';
 import { businessUnitsRouter } from '../modules/business-units/business-units.routes';
@@ -22,6 +24,7 @@ import { documentsRouter } from '../modules/documents/documents.routes';
 import { decisionsRouter } from '../modules/decisions/decisions.routes';
 import { agentRouter } from '../modules/agent/agent.routes';
 import { dashboardRouter } from '../modules/dashboard/dashboard.routes';
+import { usersRouter } from '../modules/users/users.routes';
 
 export const apiRouter = Router();
 
@@ -33,21 +36,28 @@ apiRouter.get('/health', (_req, res) => {
 // Autenticación.
 apiRouter.use('/auth', authRouter);
 
-// Módulos de negocio (protegidos).
-apiRouter.use('/organizations', requireAuth, organizationsRouter);
-apiRouter.use('/business-units', requireAuth, businessUnitsRouter);
-apiRouter.use('/projects', requireAuth, projectsRouter);
-apiRouter.use('/tasks', requireAuth, tasksRouter);
-apiRouter.use('/sales', requireAuth, salesRouter);
-apiRouter.use('/income', requireAuth, incomeRouter);
-apiRouter.use('/expenses', requireAuth, expensesRouter);
-apiRouter.use('/finance', requireAuth, financeRouter);
-apiRouter.use('/finance/imports', requireAuth, financeImportsRouter);
-apiRouter.use('/finance/categories', requireAuth, financeCategoriesRouter);
-apiRouter.use('/finance/category-rules', requireAuth, financeCategoryRulesRouter);
-apiRouter.use('/clients', requireAuth, clientsRouter);
-apiRouter.use('/vendors', requireAuth, vendorsRouter);
-apiRouter.use('/documents', requireAuth, documentsRouter);
-apiRouter.use('/decisions', requireAuth, decisionsRouter);
-apiRouter.use('/agent', requireAuth, agentRouter);
-apiRouter.use('/dashboard', requireAuth, dashboardRouter);
+// Compartidas (admin + colaborador): acceso total a Proyectos y Tareas.
+apiRouter.use('/projects', requireAuth, requireRole(...ALL_ROLES), projectsRouter);
+apiRouter.use('/tasks', requireAuth, requireRole(...ALL_ROLES), tasksRouter);
+
+// Datos de referencia: colaborador puede LEER (para selectores), no escribir.
+const referenceAccess = allowRoles({ read: ALL_ROLES, write: ADMIN_ROLES });
+apiRouter.use('/organizations', requireAuth, referenceAccess, organizationsRouter);
+apiRouter.use('/business-units', requireAuth, referenceAccess, businessUnitsRouter);
+
+// Solo admin (CEO/ADMIN): todo lo demás.
+const adminOnly = requireRole(...ADMIN_ROLES);
+apiRouter.use('/sales', requireAuth, adminOnly, salesRouter);
+apiRouter.use('/income', requireAuth, adminOnly, incomeRouter);
+apiRouter.use('/expenses', requireAuth, adminOnly, expensesRouter);
+apiRouter.use('/finance', requireAuth, adminOnly, financeRouter);
+apiRouter.use('/finance/imports', requireAuth, adminOnly, financeImportsRouter);
+apiRouter.use('/finance/categories', requireAuth, adminOnly, financeCategoriesRouter);
+apiRouter.use('/finance/category-rules', requireAuth, adminOnly, financeCategoryRulesRouter);
+apiRouter.use('/clients', requireAuth, adminOnly, clientsRouter);
+apiRouter.use('/vendors', requireAuth, adminOnly, vendorsRouter);
+apiRouter.use('/documents', requireAuth, adminOnly, documentsRouter);
+apiRouter.use('/decisions', requireAuth, adminOnly, decisionsRouter);
+apiRouter.use('/agent', requireAuth, adminOnly, agentRouter);
+apiRouter.use('/dashboard', requireAuth, adminOnly, dashboardRouter);
+apiRouter.use('/users', requireAuth, adminOnly, usersRouter);

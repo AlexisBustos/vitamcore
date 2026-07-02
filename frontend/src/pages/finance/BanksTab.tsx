@@ -312,7 +312,10 @@ export function BanksTab({
       {movements.data && movements.data.transactions.length > 0 && (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            {/* Padding compacto (px-2) vía selector de hijos para que las 10
+                columnas quepan en pantallas de laptop sin recortar "Saldo";
+                el overflow-x-auto sigue como red de seguridad en anchos mínimos. */}
+            <table className="w-full text-sm [&_td]:px-2 [&_th]:px-2">
               <thead className="bg-[var(--color-muted)] text-left text-xs text-[var(--color-muted-foreground)]">
                 <tr>
                   <th className="px-2 py-3">
@@ -383,7 +386,7 @@ export function BanksTab({
                           title="Tipo de la categoría"
                         />
                         <Select
-                          className="h-8 min-w-[150px] text-xs"
+                          className="h-8 min-w-[116px] text-xs"
                           options={[{ value: '', label: 'Sin categoría' }, ...categoryOptions]}
                           value={t.category ?? ''}
                           onChange={(e) =>

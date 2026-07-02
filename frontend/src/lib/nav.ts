@@ -14,6 +14,7 @@ import {
   Settings,
   TrendingUp,
   Truck,
+  UserCog,
   Users,
   Wallet,
   type LucideIcon,
@@ -37,5 +38,6 @@ export const navItems: NavItem[] = [
   { label: 'Documentos', path: '/documentos', icon: FileText },
   { label: 'Decisiones', path: '/decisiones', icon: Gavel },
   { label: 'IA Ejecutiva', path: '/ia', icon: Bot },
+  { label: 'Usuarios', path: '/usuarios', icon: UserCog },
   { label: 'Configuración', path: '/configuracion', icon: Settings },
 ];

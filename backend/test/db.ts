@@ -10,6 +10,7 @@ import { prisma } from '../src/lib/prisma';
 export async function resetDb() {
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
+      "users",
       "income_records", "expense_records", "clients", "vendors",
       "bank_transactions", "bank_accounts", "financial_import_batches",
       "organizations", "business_units", "projects"
