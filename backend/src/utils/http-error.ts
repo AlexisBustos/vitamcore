@@ -17,3 +17,4 @@ export const unauthorized = (msg = 'No autorizado') =>
 export const badRequest = (msg = 'Solicitud inválida') =>
   new HttpError(400, msg);
 export const notFound = (msg = 'No encontrado') => new HttpError(404, msg);
+export const forbidden = (msg = 'Acceso denegado') => new HttpError(403, msg);
