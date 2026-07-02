@@ -1,13 +1,6 @@
-import { useState, type FormEvent } from 'react';
-import { Modal } from '@/components/ui/modal';
-import { Field } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Select } from '@/components/ui/select';
-import { Button } from '@/components/ui/button';
-import { ContextFields, type ContextValue } from '@/components/ContextFields';
-import { expenseStatusOptions, recurrenceOptions } from '@/lib/domain';
-import { getErrorMessage } from '@/lib/errors';
+// Wrapper delgado sobre LedgerForm para el formulario de gastos.
+import { LedgerForm } from '@/components/finance/LedgerForm';
+import { expenseStatusOptions } from '@/lib/domain';
 import { useSaveExpense } from '@/hooks/useFinance';
 import type { ExpenseRecord } from '@/types/domain';
 
@@ -18,177 +11,32 @@ interface Props {
   defaultOrganizationId?: string;
 }
 
-const toDate = (v: string | null | undefined) => (v ? v.slice(0, 10) : '');
-
 export function ExpenseForm({ open, onClose, expense, defaultOrganizationId }: Props) {
-  const editing = !!expense;
   const save = useSaveExpense();
-  const [error, setError] = useState<string | null>(null);
-
-  const [ctx, setCtx] = useState<ContextValue>({
-    organizationId: expense?.organizationId ?? defaultOrganizationId ?? '',
-    businessUnitId: expense?.businessUnitId ?? '',
-    projectId: expense?.projectId ?? '',
-  });
-
-  const [form, setForm] = useState({
-    description: expense?.description ?? '',
-    vendorName: expense?.vendorName ?? '',
-    amount: String(expense?.amount ?? 0),
-    category: expense?.category ?? '',
-    status: expense?.status ?? 'PENDING',
-    expenseDate: toDate(expense?.expenseDate),
-    dueDate: toDate(expense?.dueDate),
-    isRecurring: expense?.isRecurring ?? false,
-    recurrenceFrequency: expense?.recurrenceFrequency ?? '',
-    notes: expense?.notes ?? '',
-  });
-
-  function set<K extends keyof typeof form>(key: K, value: string | boolean) {
-    setForm((f) => ({ ...f, [key]: value }));
-  }
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    const base = {
-      businessUnitId: ctx.businessUnitId || null,
-      projectId: ctx.projectId || null,
-      description: form.description,
-      vendorName: form.vendorName || null,
-      amount: Number(form.amount) || 0,
-      category: form.category || null,
-      status: form.status,
-      expenseDate: form.expenseDate || null,
-      dueDate: form.dueDate || null,
-      isRecurring: form.isRecurring,
-      recurrenceFrequency: form.isRecurring
-        ? form.recurrenceFrequency || null
-        : null,
-      notes: form.notes || null,
-    };
-    try {
-      await save.mutateAsync({
-        id: expense?.id,
-        data: editing ? base : { ...base, organizationId: ctx.organizationId },
-      });
-      onClose();
-    } catch (err) {
-      setError(getErrorMessage(err));
-    }
-  }
-
   return (
-    <Modal
+    <LedgerForm
       open={open}
       onClose={onClose}
-      size="lg"
-      title={editing ? 'Editar gasto' : 'Nuevo gasto'}
-    >
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <ContextFields
-          value={ctx}
-          onChange={(p) => setCtx((c) => ({ ...c, ...p }))}
-          lockOrganization={editing}
-        />
-
-        <Field label="Descripción" required>
-          <Input
-            value={form.description}
-            onChange={(e) => set('description', e.target.value)}
-            required
-          />
-        </Field>
-
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Proveedor">
-            <Input
-              value={form.vendorName}
-              onChange={(e) => set('vendorName', e.target.value)}
-            />
-          </Field>
-          <Field label="Monto (CLP)">
-            <Input
-              type="number"
-              min={0}
-              value={form.amount}
-              onChange={(e) => set('amount', e.target.value)}
-            />
-          </Field>
-          <Field label="Categoría">
-            <Input
-              value={form.category}
-              onChange={(e) => set('category', e.target.value)}
-              placeholder="Ej: Infraestructura"
-            />
-          </Field>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Estado">
-            <Select
-              options={expenseStatusOptions}
-              value={form.status}
-              onChange={(e) => set('status', e.target.value)}
-            />
-          </Field>
-          <Field label="Fecha del gasto">
-            <Input
-              type="date"
-              value={form.expenseDate}
-              onChange={(e) => set('expenseDate', e.target.value)}
-            />
-          </Field>
-          <Field label="Vencimiento">
-            <Input
-              type="date"
-              value={form.dueDate}
-              onChange={(e) => set('dueDate', e.target.value)}
-            />
-          </Field>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="flex items-center gap-2 text-sm text-[var(--color-foreground)]">
-            <input
-              type="checkbox"
-              checked={form.isRecurring}
-              onChange={(e) => set('isRecurring', e.target.checked)}
-            />
-            Gasto recurrente
-          </label>
-          {form.isRecurring && (
-            <Select
-              options={recurrenceOptions}
-              placeholder="Frecuencia"
-              value={form.recurrenceFrequency}
-              onChange={(e) => set('recurrenceFrequency', e.target.value)}
-            />
-          )}
-        </div>
-
-        <Field label="Notas">
-          <Textarea
-            value={form.notes}
-            onChange={(e) => set('notes', e.target.value)}
-          />
-        </Field>
-
-        {error && (
-          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-[var(--color-danger)]">
-            {error}
-          </p>
-        )}
-
-        <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button type="submit" disabled={save.isPending}>
-            {save.isPending ? 'Guardando…' : 'Guardar'}
-          </Button>
-        </div>
-      </form>
-    </Modal>
+      record={expense}
+      defaultOrganizationId={defaultOrganizationId}
+      config={{
+        title: { create: 'Nuevo gasto', edit: 'Editar gasto' },
+        partyField: {
+          key: 'vendorName',
+          label: 'Proveedor',
+          value: expense?.vendorName,
+        },
+        dateField: {
+          key: 'expenseDate',
+          label: 'Fecha del gasto',
+          value: expense?.expenseDate,
+        },
+        statusOptions: expenseStatusOptions,
+        defaultStatus: 'PENDING',
+        categoryPlaceholder: 'Ej: Infraestructura',
+        recurringLabel: 'Gasto recurrente',
+        save,
+      }}
+    />
   );
 }
