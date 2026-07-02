@@ -13,7 +13,6 @@ import type { Client } from '@/types/domain';
 export function ClientsPage() {
   const config: PartyListConfig<Client, ClientFilters> = {
     listHook: useClients,
-    icon: Users,
     title: 'Clientes',
     description:
       'Cartera consolidada por empresa, generada al importar ventas.',

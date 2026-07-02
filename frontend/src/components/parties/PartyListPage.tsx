@@ -6,7 +6,6 @@
 // columnas, celdas con o sin clase de color condicional).
 import { Fragment, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { LucideIcon } from 'lucide-react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { PageHeader } from '@/components/PageHeader';
 import { Card } from '@/components/ui/card';
@@ -27,7 +26,6 @@ export interface Column<T> {
 
 export interface PartyListConfig<T extends { id: string }, F> {
   listHook: (filters: F) => UseQueryResult<T[]>;
-  icon: LucideIcon;
   title: string;
   description: string;
   routeTo: (row: T) => string; // `/clientes/${id}` | `/proveedores/${id}`

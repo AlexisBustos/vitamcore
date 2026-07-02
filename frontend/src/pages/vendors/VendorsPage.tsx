@@ -13,7 +13,6 @@ import type { Vendor } from '@/types/domain';
 export function VendorsPage() {
   const config: PartyListConfig<Vendor, VendorFilters> = {
     listHook: useVendors,
-    icon: Truck,
     title: 'Proveedores',
     description:
       'Cartera consolidada por empresa, generada al importar compras.',
