@@ -122,13 +122,18 @@ Los estados 2-4 (overdue/paid/cancelled) y sus labels ("Vencidas"/"Pagadas"/"Anu
   import type { LucideIcon } from 'lucide-react';
   import type { UseQueryResult } from '@tanstack/react-query';
   import type { IncomeRecord, ExpenseRecord } from '@/types/domain';
+  import type { FinanceFilters } from '@/hooks/useFinance';
+
+  // Estado de filtro: el union real de FinanceFilters.paymentState (NO string suelto).
+  type PaymentStateFilter = NonNullable<FinanceFilters['paymentState']>;
+  //  = 'receivable' | 'payable' | 'overdue' | 'paid' | 'cancelled'
 
   interface LedgerTabConfig<T extends IncomeRecord | ExpenseRecord> {
     recordType: 'income' | 'expense';
     icon: LucideIcon;
-    estados: { value: string; label: string }[];                  // 4 estados; el 1º difiere
-    initialEstado: string;
-    listHook: (filters: { organizationId?: string; paymentState?: string; month?: string }) => UseQueryResult<T[]>;
+    estados: { value: PaymentStateFilter; label: string }[];      // 4 estados; el 1º difiere
+    initialEstado: PaymentStateFilter;
+    listHook: (filters: FinanceFilters) => UseQueryResult<T[]>;    // useIncome | useExpenses (su firma real es FinanceFilters)
     monthsHook: (organizationId?: string) => UseQueryResult<string[]>;
     registerHook: () => ReturnType<typeof useRegisterPayment>;     // firma idéntica en income/expense
     rowTotal: (r: T) => number;                                    // netAmount ?? amount | amount
@@ -148,7 +153,7 @@ Los estados 2-4 (overdue/paid/cancelled) y sus labels ("Vencidas"/"Pagadas"/"Anu
 
   export function LedgerTab<T extends IncomeRecord | ExpenseRecord>({ organizationId, config }: LedgerTabProps<T>) { … }
   ```
-  Copia el markup VERBATIM de `ReceivablesTab` como base. Parametriza: icono, textos, `estados`/`initialEstado`; invoca los hooks DENTRO de `LedgerTab` (`const { data: rows = [], isLoading, isError, error } = config.listHook({ organizationId, paymentState: estado, month })`, `const { data: months = [] } = config.monthsHook(organizationId)`, `const registrar = config.registerHook()`). La celda 1 se delega a `config.renderPartyCell(r)` (así cada wrapper reproduce su markup exacto: cliente texto plano; proveedor con sus 3 ramas). La columna "Emisión" usa `formatDate(config.issueDate(r))`. El total (encabezado y 5ª celda) usa `config.rowTotal`; el header `config.amountHeader`. El `ReconcileModal` recibe `recordType=config.recordType`, `record.name=config.partyName(reconciling)`, `record.amount=config.rowTotal(reconciling)`. Conserva Folio/Vence, acción Conciliar/Revertir, `onReconcile`/`onPayManual` idénticos.
+  Copia el markup VERBATIM de `ReceivablesTab` como base. El estado del filtro se tipa con la unión, no `string`: `const [estado, setEstado] = useState<PaymentStateFilter>(config.initialEstado)` (así `config.listHook({ organizationId, paymentState: estado, month })` cuadra con `FinanceFilters` y `useIncome`/`useExpenses` son asignables a `listHook` — verificado con `tsc`). Parametriza: icono, textos, `estados`/`initialEstado`; invoca los hooks DENTRO de `LedgerTab` (`const { data: rows = [], isLoading, isError, error } = config.listHook({ organizationId, paymentState: estado, month })`, `const { data: months = [] } = config.monthsHook(organizationId)`, `const registrar = config.registerHook()`). La celda 1 se delega a `config.renderPartyCell(r)` (así cada wrapper reproduce su markup exacto: cliente texto plano; proveedor con sus 3 ramas). La columna "Emisión" usa `formatDate(config.issueDate(r))`. El total (encabezado y 5ª celda) usa `config.rowTotal`; el header `config.amountHeader`. El `ReconcileModal` recibe `recordType=config.recordType`, `record.name=config.partyName(reconciling)`, `record.amount=config.rowTotal(reconciling)`. Conserva Folio/Vence, acción Conciliar/Revertir, `onReconcile`/`onPayManual` idénticos.
   Cabecera en español.
 - [ ] **Step 2** — Reescribir `ReceivablesTab.tsx` como wrapper: `export function ReceivablesTab({ organizationId }: { organizationId?: string })` que retorna `<LedgerTab<IncomeRecord> organizationId={organizationId} config={{ recordType:'income', icon:Receipt, estados:[{value:'receivable',label:'Por cobrar'},{value:'overdue',label:'Vencidas'},{value:'paid',label:'Pagadas'},{value:'cancelled',label:'Anuladas'}], initialEstado:'receivable', listHook:useIncome, monthsHook:useIncomeMonths, registerHook:useRegisterPayment, rowTotal:(r)=>r.netAmount ?? r.amount, issueDate:(r)=>r.incomeDate, partyName:(r)=>r.clientName ?? '—', renderPartyCell:(r)=> r.clientName ?? '—', amountHeader:'Neto', emptyNoOrg:'Elige una empresa arriba para ver sus cuentas por cobrar.', spinnerLabel:'Cargando facturas…', emptyTable:'Sin facturas en este estado' }} />`. La celda de cliente es texto plano (`{r.clientName ?? '—'}`), como hoy.
 - [ ] **Step 3** — Reescribir `PayablesTab.tsx` como wrapper `<LedgerTab<ExpenseRecord> …>`: `recordType:'expense'`, `icon:CreditCard`, primer estado `{value:'payable',label:'Por pagar'}` (+ overdue/paid/cancelled iguales), `initialEstado:'payable'`, hooks de expenses (`useExpenses`/`useExpenseMonths`/`useRegisterExpensePayment`), `rowTotal:(r)=>r.amount`, `issueDate:(r)=>r.expenseDate`, `partyName:(r)=>r.vendorName ?? '—'`, `renderPartyCell` = las **3 ramas VERBATIM** de `PayablesTab` líneas 117-134 (sin `vendorName`→`'—'`; con nombre sin `vendorId`→`<span class="text-[var(--color-muted-foreground)]">`; con ambos→`<Link to={\`/proveedores/${r.vendorId}\`} class="text-[var(--color-primary)] hover:underline">`), `amountHeader:'Monto'`, textos de "cuentas por pagar"/"Cargando gastos…"/"Sin gastos en este estado".
