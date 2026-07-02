@@ -1,4 +1,6 @@
 import { NavLink } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
+import { canAccessPath } from '@/lib/permissions';
 import { navItems } from '@/lib/nav';
 import { cn } from '@/lib/utils';
 
@@ -8,6 +10,9 @@ interface SidebarProps {
 }
 
 export function Sidebar({ open, onNavigate }: SidebarProps) {
+  const { user } = useAuth();
+  const visibleItems = navItems.filter((item) => canAccessPath(item.path, user?.role));
+
   return (
     <aside
       className={cn(
@@ -28,7 +33,7 @@ export function Sidebar({ open, onNavigate }: SidebarProps) {
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {navItems.map((item) => (
+        {visibleItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
