@@ -45,13 +45,12 @@ export function useAutoReconcile() {
         )
         .then((r) => r.data),
     // Solo el modo aplicar muta datos; el preview no invalida nada. Marca
-    // facturas/gastos como PAID, así que invalida también clients (fichas de
-    // cobranza) igual que useRegisterPayment.
+    // facturas/gastos como PAID; invalidateFinance ya incluye clients
+    // (fichas de cobranza) de forma centralizada.
     onSuccess: (_data, vars) => {
       if (vars.apply) {
         invalidateFinance(qc);
         qc.invalidateQueries({ queryKey: ['finance-imports'] });
-        qc.invalidateQueries({ queryKey: ['clients'] });
       }
     },
   });
@@ -79,7 +78,6 @@ export function useRecognizeTransfers() {
       if (vars.apply) {
         invalidateFinance(qc);
         qc.invalidateQueries({ queryKey: ['finance-imports'] });
-        qc.invalidateQueries({ queryKey: ['clients'] });
       }
     },
   });

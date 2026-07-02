@@ -38,8 +38,6 @@ export function useSaveIncome() {
         : api.post('/income', payload.data),
     onSuccess: () => {
       invalidateFinance(qc);
-      // Las métricas de clientes se derivan de sus ingresos: refréscalas.
-      qc.invalidateQueries({ queryKey: ['clients'] });
     },
   });
 }
@@ -50,7 +48,6 @@ export function useDeleteIncome() {
     mutationFn: (id: string) => api.del(`/income/${id}`),
     onSuccess: () => {
       invalidateFinance(qc);
-      qc.invalidateQueries({ queryKey: ['clients'] });
     },
   });
 }
@@ -69,7 +66,6 @@ export function useRegisterPayment() {
       }),
     onSuccess: () => {
       invalidateFinance(qc);
-      qc.invalidateQueries({ queryKey: ['clients'] });
       qc.invalidateQueries({ queryKey: ['finance-imports'] });
     },
   });

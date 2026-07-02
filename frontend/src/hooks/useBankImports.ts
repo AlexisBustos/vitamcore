@@ -194,7 +194,6 @@ export function useConfirmFinanceImport() {
     onSuccess: () => {
       invalidateFinance(qc);
       qc.invalidateQueries({ queryKey: ['finance-imports'] });
-      qc.invalidateQueries({ queryKey: ['clients'] });
     },
   });
 }
