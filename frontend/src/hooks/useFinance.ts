@@ -11,29 +11,20 @@ import type {
   BankCategoryRule,
   BankMonthlyPoint,
   BankTransactionsResponse,
-  ExpenseRecord,
   FinancialImportBatch,
   FinancialImportType,
   ConsolidatedResponse,
   AutoReconcileResult,
   RecognizeTransfersResult,
   FinanceSummary,
-  IncomeRecord,
   ReconciliationCandidate,
   SalesImportSummary,
 } from '@/types/domain';
+import { invalidateFinance } from './finance-shared';
 
-export type FinanceFilters = {
-  organizationId?: string;
-  businessUnitId?: string;
-  projectId?: string;
-  category?: string;
-  status?: string;
-  isRecurring?: string;
-  documentKind?: string;
-  paymentState?: 'receivable' | 'payable' | 'overdue' | 'paid' | 'cancelled';
-  month?: string;
-};
+export { useIncome, useIncomeMonths, useSaveIncome, useDeleteIncome, useRegisterPayment } from './useIncome';
+export { useExpenses, useExpenseMonths, useSaveExpense, useDeleteExpense, useRegisterExpensePayment } from './useExpenses';
+export type { FinanceFilters } from './finance-shared';
 
 export type FinanceImportFilters = {
   organizationId?: string;
@@ -85,132 +76,6 @@ export function useConsolidated(filters: { organizationId?: string; month?: stri
           `/finance/consolidated${toQuery(filters)}`,
         )
         .then((r) => r.data),
-  });
-}
-
-// ----- Ingresos -----
-export function useIncome(filters: FinanceFilters = {}) {
-  return useQuery({
-    queryKey: ['income', filters],
-    queryFn: () =>
-      api
-        .get<{ data: IncomeRecord[] }>(`/income${toQuery(filters)}`)
-        .then((r) => r.data),
-  });
-}
-
-export function useIncomeMonths(organizationId?: string) {
-  return useQuery({
-    queryKey: ['income', 'months', organizationId ?? 'all'],
-    queryFn: () =>
-      api
-        .get<{ data: string[] }>(`/income/months${toQuery({ organizationId })}`)
-        .then((r) => r.data),
-  });
-}
-
-export function useSaveIncome() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (payload: { id?: string; data: Record<string, unknown> }) =>
-      payload.id
-        ? api.patch(`/income/${payload.id}`, payload.data)
-        : api.post('/income', payload.data),
-    onSuccess: () => {
-      invalidateFinance(qc);
-      // Las métricas de clientes se derivan de sus ingresos: refréscalas.
-      qc.invalidateQueries({ queryKey: ['clients'] });
-    },
-  });
-}
-
-export function useDeleteIncome() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => api.del(`/income/${id}`),
-    onSuccess: () => {
-      invalidateFinance(qc);
-      qc.invalidateQueries({ queryKey: ['clients'] });
-    },
-  });
-}
-
-export function useRegisterPayment() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (payload: {
-      id: string;
-      paidDate?: string | null;
-      bankTransactionId?: string | null;
-    }) =>
-      api.patch(`/income/${payload.id}/payment`, {
-        paidDate: payload.paidDate ?? null,
-        bankTransactionId: payload.bankTransactionId ?? null,
-      }),
-    onSuccess: () => {
-      invalidateFinance(qc);
-      qc.invalidateQueries({ queryKey: ['clients'] });
-      qc.invalidateQueries({ queryKey: ['finance-imports'] });
-    },
-  });
-}
-
-// ----- Gastos -----
-export function useExpenses(filters: FinanceFilters = {}) {
-  return useQuery({
-    queryKey: ['expenses', filters],
-    queryFn: () =>
-      api
-        .get<{ data: ExpenseRecord[] }>(`/expenses${toQuery(filters)}`)
-        .then((r) => r.data),
-  });
-}
-
-export function useExpenseMonths(organizationId?: string) {
-  return useQuery({
-    queryKey: ['expenses', 'months', organizationId ?? 'all'],
-    queryFn: () =>
-      api
-        .get<{ data: string[] }>(`/expenses/months${toQuery({ organizationId })}`)
-        .then((r) => r.data),
-  });
-}
-
-export function useSaveExpense() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (payload: { id?: string; data: Record<string, unknown> }) =>
-      payload.id
-        ? api.patch(`/expenses/${payload.id}`, payload.data)
-        : api.post('/expenses', payload.data),
-    onSuccess: () => invalidateFinance(qc),
-  });
-}
-
-export function useDeleteExpense() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => api.del(`/expenses/${id}`),
-    onSuccess: () => invalidateFinance(qc),
-  });
-}
-
-export function useRegisterExpensePayment() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (payload: {
-      id: string;
-      paidDate?: string | null;
-      bankTransactionId?: string | null;
-    }) =>
-      api.patch(`/expenses/${payload.id}/payment`, {
-        paidDate: payload.paidDate ?? null,
-        bankTransactionId: payload.bankTransactionId ?? null,
-      }),
-    onSuccess: () => {
-      invalidateFinance(qc);
-      qc.invalidateQueries({ queryKey: ['finance-imports'] });
-    },
   });
 }
 
@@ -558,12 +423,4 @@ export function useRecognizeTransfers() {
       }
     },
   });
-}
-
-function invalidateFinance(qc: ReturnType<typeof useQueryClient>) {
-  qc.invalidateQueries({ queryKey: ['income'] });
-  qc.invalidateQueries({ queryKey: ['expenses'] });
-  qc.invalidateQueries({ queryKey: ['finance'] });
-  qc.invalidateQueries({ queryKey: ['dashboard'] });
-  qc.invalidateQueries({ queryKey: ['vendors'] });
 }

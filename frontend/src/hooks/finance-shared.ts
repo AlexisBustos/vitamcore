@@ -1,0 +1,22 @@
+// Helpers compartidos por los hooks de finanzas (income, expenses, imports...).
+import type { useQueryClient } from '@tanstack/react-query';
+
+export type FinanceFilters = {
+  organizationId?: string;
+  businessUnitId?: string;
+  projectId?: string;
+  category?: string;
+  status?: string;
+  isRecurring?: string;
+  documentKind?: string;
+  paymentState?: 'receivable' | 'payable' | 'overdue' | 'paid' | 'cancelled';
+  month?: string;
+};
+
+export function invalidateFinance(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ['income'] });
+  qc.invalidateQueries({ queryKey: ['expenses'] });
+  qc.invalidateQueries({ queryKey: ['finance'] });
+  qc.invalidateQueries({ queryKey: ['dashboard'] });
+  qc.invalidateQueries({ queryKey: ['vendors'] });
+}
