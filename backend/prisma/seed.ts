@@ -37,6 +37,9 @@ const CEO_NAME = process.env.SEED_CEO_NAME ?? 'CEO VITAM';
 const CEO_EMAIL = process.env.SEED_CEO_EMAIL ?? 'ceo@vitam.tech';
 const CEO_PASSWORD = process.env.SEED_CEO_PASSWORD ?? 'VitamCore2026!';
 
+const COLLAB_EMAIL = process.env.SEED_COLLAB_EMAIL ?? 'colaborador@vitam.tech';
+const COLLAB_PASSWORD = process.env.SEED_COLLAB_PASSWORD ?? 'Colaborador2026!';
+
 /** Fecha relativa a hoy, en días (negativo = pasado). */
 function daysFromNow(days: number): Date {
   const d = new Date();
@@ -55,6 +58,19 @@ async function seedUserAndConfig() {
       email: CEO_EMAIL,
       passwordHash,
       role: Role.CEO,
+      isActive: true,
+    },
+  });
+
+  const collabHash = await bcrypt.hash(COLLAB_PASSWORD, 12);
+  await prisma.user.upsert({
+    where: { email: COLLAB_EMAIL },
+    update: { name: 'Colaborador Demo', role: Role.COLABORADOR, isActive: true },
+    create: {
+      name: 'Colaborador Demo',
+      email: COLLAB_EMAIL,
+      passwordHash: collabHash,
+      role: Role.COLABORADOR,
       isActive: true,
     },
   });
@@ -694,6 +710,7 @@ async function main() {
 
   console.log('Seed completado.');
   console.log(`  Usuario CEO: ${CEO_EMAIL} / ${CEO_PASSWORD}`);
+  console.log(`  Usuario Colaborador: ${COLLAB_EMAIL} / ${COLLAB_PASSWORD}`);
   console.log(`  Empresas: ${orgs} | Unidades: ${units} | Proyectos: ${projects} | Tareas: ${tasks}`);
   console.log(`  Ventas: ${sales} | Ingresos: ${income} | Gastos: ${expenses} | Documentos: ${docs} | Decisiones: ${decisions}`);
 }
