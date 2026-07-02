@@ -90,3 +90,15 @@ export async function makeBankTransaction(
     } as Prisma.BankTransactionUncheckedCreateInput,
   });
 }
+
+export async function makeUser(overrides: Record<string, unknown> = {}) {
+  return prisma.user.create({
+    data: {
+      name: 'Usuario Test',
+      email: `user-${Math.random().toString(36).slice(2)}@test.local`,
+      passwordHash: 'hash-test',
+      role: 'ADMIN',
+      ...overrides,
+    } as Prisma.UserUncheckedCreateInput,
+  });
+}
