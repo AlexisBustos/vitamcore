@@ -45,7 +45,9 @@ export async function updateUser(id: string, input: UpdateUserInput, currentUser
   // Proteger al CEO: no se puede desactivar ni cambiar su rol.
   if (target.role === 'CEO') {
     if (input.isActive === false) throw badRequest('No se puede desactivar al usuario CEO');
-    if (input.role && input.role !== 'CEO') throw badRequest('No se puede cambiar el rol del usuario CEO');
+    // El rol del payload nunca puede ser 'CEO' (no es asignable vía API),
+    // así que cualquier `role` presente aquí implica un intento de cambio.
+    if (input.role) throw badRequest('No se puede cambiar el rol del usuario CEO');
   }
 
   // Anti-auto-bloqueo: no puedes desactivarte ni degradarte a ti mismo.
