@@ -22,7 +22,7 @@ El estado actual del sistema de auth:
 
 1. **Bloqueo real** (backend + frontend), no cosmético. El backend rechaza (403) accesos prohibidos aunque el usuario manipule la URL o llame a la API directamente.
 2. El usuario limitado ve **todos** los proyectos y tareas (de ambas empresas), sin filtrado por asignación. No se toca el modelo de datos.
-3. El usuario limitado puede **ver y editar** dentro de Proyectos y Tareas (crear tareas, cambiar estados, editar proyectos).
+3. El usuario limitado puede **ver y editar** dentro de Proyectos y Tareas (crear tareas, cambiar estados, editar proyectos) — acceso total incluyendo **borrar** proyectos y tareas (los botones de borrado y `useDeleteProject`/`useDeleteTask` ya existen en esas páginas).
 4. Nombre del rol limitado: `COLABORADOR`.
 5. El usuario **CEO está protegido**: no se puede desactivar ni degradar desde la UI.
 
@@ -101,7 +101,7 @@ Módulo `modules/users/` siguiendo el patrón de 4 archivos del proyecto:
 Endpoints:
 
 - `GET /users` — lista usuarios. **Nunca** devuelve `passwordHash` (select explícito de `id, name, email, role, isActive, createdAt, updatedAt`).
-- `POST /users` — crea usuario. Body: `{ name, email, role: 'ADMIN' | 'COLABORADOR', password }`. Hash con bcrypt (cost 12, reusa `utils/password`). Email duplicado (P2002) → `badRequest`. El schema **rechaza** `role: 'CEO'`.
+- `POST /users` — crea usuario. Body: `{ name, email, role: 'ADMIN' | 'COLABORADOR', password }`. Hash con `hashPassword` de `utils/password` (bcrypt cost 12). Email duplicado (P2002) → `badRequest`. El schema **rechaza** `role: 'CEO'`.
 - `PATCH /users/:id` — actualiza `name`, `role`, `isActive` y, opcionalmente, `password` (reset). Todos opcionales.
 
 Sin borrado físico: se **desactiva** (`isActive = false`). `requireAuth` y `login` ya rechazan usuarios con `isActive=false`, así que un usuario desactivado queda sin acceso de inmediato.
@@ -135,8 +135,9 @@ export function landingPath(role?: string): string;   // admin → '/', colabora
 
 **Rutas** (`App.tsx`):
 - Nuevo wrapper `RequireAdmin` (análogo a `ProtectedRoute`) que envuelve las rutas solo-admin; si `!isAdmin(role)`, redirige a `landingPath(role)` (`/proyectos`).
-- Rutas solo-admin: `/` (Dashboard), `/empresas*`, `/ventas`, `/clientes*`, `/proveedores*`, `/finanzas`, `/documentos`, `/decisiones`, `/ia`, y la nueva `/usuarios`.
+- Rutas solo-admin: `/` (Dashboard), `/empresas*`, `/ventas`, `/clientes*`, `/proveedores*`, `/finanzas`, `/documentos`, `/decisiones`, `/ia`, `/configuracion` (placeholder existente) y la nueva `/usuarios`.
 - Rutas compartidas (sin `RequireAdmin`): `/proyectos*`, `/tareas`.
+- **Regla:** toda ruta privada que no esté en `COLLABORATOR_PATHS` (`['/proyectos', '/tareas']`) debe ir envuelta en `RequireAdmin`. Esto cubre explícitamente `/configuracion`, que de otro modo un colaborador podría abrir por URL.
 - El índice `/` para colaborador redirige a `/proyectos` (vía `RequireAdmin` sobre el Dashboard, o un `Navigate` condicional en el índice).
 
 **Página Usuarios** (`pages/users/UsersPage.tsx`, admin):
