@@ -14,6 +14,7 @@ import { getErrorMessage } from '@/lib/errors';
 import { useOrganizations } from '@/hooks/useOrganizations';
 import { useBusinessUnits } from '@/hooks/useBusinessUnits';
 import { useProjects } from '@/hooks/useProjects';
+import { useAssignees } from '@/hooks/useAssignees';
 import { useSaveTask } from '@/hooks/useTasks';
 import type { Task } from '@/types/domain';
 
@@ -44,6 +45,7 @@ export function TaskForm({
   const editing = !!task;
   const save = useSaveTask();
   const { data: organizations } = useOrganizations();
+  const { data: assignees } = useAssignees();
   const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
@@ -55,7 +57,7 @@ export function TaskForm({
     status: task?.status ?? defaultStatus ?? 'TODO',
     priority: task?.priority ?? 'MEDIUM',
     source: task?.source ?? 'MANUAL',
-    owner: task?.owner ?? '',
+    ownerId: task?.ownerId ?? '',
     dueDate: toDateInput(task?.dueDate),
   });
 
@@ -77,6 +79,10 @@ export function TaskForm({
     () => (projects ?? []).map((p) => ({ value: p.id, label: p.name })),
     [projects],
   );
+  const assigneeOptions = useMemo(
+    () => (assignees ?? []).map((u) => ({ value: u.id, label: u.name })),
+    [assignees],
+  );
 
   function set<K extends keyof typeof form>(key: K, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -93,7 +99,7 @@ export function TaskForm({
       status: form.status,
       priority: form.priority,
       source: form.source,
-      owner: form.owner || null,
+      ownerId: form.ownerId || null,
       dueDate: form.dueDate || null,
     };
     try {
@@ -196,9 +202,11 @@ export function TaskForm({
         </div>
 
         <Field label="Responsable">
-          <Input
-            value={form.owner}
-            onChange={(e) => set('owner', e.target.value)}
+          <Select
+            options={assigneeOptions}
+            placeholder="Sin asignar"
+            value={form.ownerId}
+            onChange={(e) => set('ownerId', e.target.value)}
           />
         </Field>
         <Field label="Descripción">

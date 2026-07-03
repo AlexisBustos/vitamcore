@@ -9,6 +9,7 @@ import { priorityOptions, projectStatusOptions } from '@/lib/domain';
 import { getErrorMessage } from '@/lib/errors';
 import { useOrganizations } from '@/hooks/useOrganizations';
 import { useBusinessUnits } from '@/hooks/useBusinessUnits';
+import { useAssignees } from '@/hooks/useAssignees';
 import { useSaveProject } from '@/hooks/useProjects';
 import type { Project } from '@/types/domain';
 
@@ -33,6 +34,7 @@ export function ProjectForm({
   const editing = !!project;
   const save = useSaveProject();
   const { data: organizations } = useOrganizations();
+  const { data: assignees } = useAssignees();
   const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
@@ -42,7 +44,7 @@ export function ProjectForm({
     description: project?.description ?? '',
     status: project?.status ?? 'IDEA',
     priority: project?.priority ?? 'MEDIUM',
-    owner: project?.owner ?? '',
+    ownerId: project?.ownerId ?? '',
     nextAction: project?.nextAction ?? '',
     risks: project?.risks ?? '',
     startDate: toDateInput(project?.startDate),
@@ -62,6 +64,10 @@ export function ProjectForm({
     () => (units ?? []).map((u) => ({ value: u.id, label: u.name })),
     [units],
   );
+  const assigneeOptions = useMemo(
+    () => (assignees ?? []).map((u) => ({ value: u.id, label: u.name })),
+    [assignees],
+  );
 
   function set<K extends keyof typeof form>(key: K, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -76,7 +82,7 @@ export function ProjectForm({
       description: form.description || null,
       status: form.status,
       priority: form.priority,
-      owner: form.owner || null,
+      ownerId: form.ownerId || null,
       nextAction: form.nextAction || null,
       risks: form.risks || null,
       startDate: form.startDate || null,
@@ -170,9 +176,11 @@ export function ProjectForm({
         </div>
 
         <Field label="Responsable">
-          <Input
-            value={form.owner}
-            onChange={(e) => set('owner', e.target.value)}
+          <Select
+            options={assigneeOptions}
+            placeholder="Sin asignar"
+            value={form.ownerId}
+            onChange={(e) => set('ownerId', e.target.value)}
           />
         </Field>
         <Field label="Próxima acción">
