@@ -54,6 +54,7 @@ export async function list(filters: ListTasksFilters) {
       project: { select: { id: true, name: true } },
       owner: { select: { id: true, name: true } },
       labels: { include: { label: true } },
+      checklistItems: { select: { done: true } },
     },
   });
 }
@@ -67,6 +68,7 @@ export async function getById(id: string) {
       project: { select: { id: true, name: true } },
       owner: { select: { id: true, name: true } },
       labels: { include: { label: true } },
+      checklistItems: { orderBy: { position: 'asc' } },
     },
   });
   if (!task) throw notFound('Tarea no encontrada');

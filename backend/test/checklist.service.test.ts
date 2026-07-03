@@ -49,4 +49,21 @@ describe('checklist.service', () => {
     const rest = await checklist.listByTask(task.id);
     expect(rest).toHaveLength(0);
   });
+
+  test('getById incluye ítems ordenados; list incluye solo done', async () => {
+    const org = await makeOrg();
+    const task = await makeTask(org.id);
+    const a = await checklist.addItem(task.id, { text: 'Uno' } as never);
+    await checklist.addItem(task.id, { text: 'Dos' } as never);
+    await checklist.updateItem(task.id, a.id, { done: true } as never);
+
+    const tasksService = await import('../src/modules/tasks/tasks.service');
+    const detail = await tasksService.getById(task.id);
+    expect(detail.checklistItems.map((i: { text: string }) => i.text)).toEqual(['Uno', 'Dos']);
+
+    const list = await tasksService.list({ organizationId: org.id } as never);
+    const flags = list[0].checklistItems.map((i: { done: boolean }) => i.done);
+    expect(flags).toContain(true);
+    expect(flags).toHaveLength(2);
+  });
 });
