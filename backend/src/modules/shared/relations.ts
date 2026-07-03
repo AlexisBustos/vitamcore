@@ -71,3 +71,18 @@ export async function assertContext(
     await assertProjectInOrganization(projectId, organizationId);
   }
 }
+
+/**
+ * Verifica que el usuario responsable exista (si viene ownerId).
+ * Solo comprueba existencia, NO isActive: la restricción de "solo activos"
+ * vive en el endpoint /assignees (lo que puebla el desplegable). Así, si un
+ * responsable se desactiva luego, editar el registro no queda bloqueado.
+ */
+export async function assertAssignableUser(ownerId?: string | null) {
+  if (!ownerId) return;
+  const user = await prisma.user.findUnique({
+    where: { id: ownerId },
+    select: { id: true },
+  });
+  if (!user) throw badRequest('El responsable indicado no existe');
+}
