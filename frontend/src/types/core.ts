@@ -42,6 +42,16 @@ export interface TaskLabel {
   label: Label;
 }
 
+export interface ChecklistItem {
+  id: string;
+  taskId: string;
+  text: string;
+  done: boolean;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Organization {
   id: string;
   name: string;
@@ -119,10 +129,12 @@ export interface Task {
   businessUnit?: Ref | null;
   project?: Ref | null;
   labels?: TaskLabel[];
+  checklistItems?: { done: boolean }[];
 }
 
 export interface TaskDetail extends Task {
   labels: TaskLabel[];
+  checklistItems: ChecklistItem[];
 }
 
 export interface ContextRefs {
