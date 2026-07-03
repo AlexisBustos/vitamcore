@@ -132,9 +132,38 @@ export interface Task {
   checklistItems?: { done: boolean }[];
 }
 
+export type TaskActivityType =
+  | 'CREATED'
+  | 'STATUS_CHANGED'
+  | 'ASSIGNED'
+  | 'DUE_DATE_CHANGED'
+  | 'START_DATE_CHANGED'
+  | 'LABEL_ADDED'
+  | 'LABEL_REMOVED'
+  | 'MOVED_PROJECT';
+
+export interface TaskComment {
+  id: string;
+  taskId: string;
+  body: string;
+  createdAt: string;
+  author: Ref | null;
+}
+
+export interface TaskActivity {
+  id: string;
+  taskId: string;
+  type: TaskActivityType;
+  data: Record<string, unknown> | null;
+  createdAt: string;
+  actor: Ref | null;
+}
+
 export interface TaskDetail extends Task {
   labels: TaskLabel[];
   checklistItems: ChecklistItem[];
+  comments: TaskComment[];
+  activity: TaskActivity[];
 }
 
 export interface ContextRefs {

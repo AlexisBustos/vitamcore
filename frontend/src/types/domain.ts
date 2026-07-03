@@ -8,6 +8,7 @@ export type {
   OrganizationType, EntityStatus, ProjectStatus, TaskStatus, Priority, TaskSource,
   Ref, Organization, OrganizationDetail, BusinessUnit, Project, ProjectDetail, Task,
   Label, TaskLabel, ChecklistItem, TaskDetail,
+  TaskActivityType, TaskComment, TaskActivity,
   DocumentType, DocumentStatus, DocumentRecord, DecisionStatus, StrategicDecision,
 } from './core';
 export type { SalesStatus, SalesSource, SalesOpportunity, SalesSummary } from './sales';
