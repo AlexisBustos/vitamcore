@@ -6,6 +6,7 @@ import type { ProjectStatus, TaskStatus } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { badRequest, notFound } from '../../utils/http-error';
 import {
+  assertAssignableUser,
   assertBusinessUnitInOrganization,
   assertOrganization,
 } from '../shared/relations';
@@ -29,6 +30,7 @@ export async function list(filters: ListProjectsFilters) {
   const projects = await prisma.project.findMany({
     where: {
       organizationId: filters.organizationId,
+      ownerId: filters.ownerId,
       businessUnitId: filters.businessUnitId,
       status: filters.status,
       priority: filters.priority,
@@ -37,6 +39,7 @@ export async function list(filters: ListProjectsFilters) {
     include: {
       organization: { select: { id: true, name: true } },
       businessUnit: { select: { id: true, name: true } },
+      owner: { select: { id: true, name: true } },
       _count: { select: { tasks: true } },
     },
   });
@@ -65,6 +68,7 @@ export async function getById(id: string) {
     include: {
       organization: { select: { id: true, name: true } },
       businessUnit: { select: { id: true, name: true } },
+      owner: { select: { id: true, name: true } },
       tasks: { orderBy: [{ status: 'asc' }, { dueDate: 'asc' }] },
     },
   });
@@ -80,6 +84,7 @@ export async function create(input: CreateProjectInput) {
       input.organizationId,
     );
   }
+  await assertAssignableUser(input.ownerId);
   try {
     return await prisma.project.create({ data: input });
   } catch (err) {
@@ -101,6 +106,7 @@ export async function update(id: string, input: UpdateProjectInput) {
       current.organizationId,
     );
   }
+  await assertAssignableUser(input.ownerId);
 
   try {
     return await prisma.project.update({ where: { id }, data: input });

@@ -30,7 +30,7 @@ export const createProjectSchema = z.object({
   priority: priorityEnum.default('MEDIUM'),
   startDate: dateInput,
   targetDate: dateInput,
-  owner: z.string().trim().max(200).optional().nullable(),
+  ownerId: z.string().min(1).optional().nullable(),
   nextAction: optionalText,
   risks: optionalText,
   notes: optionalText,
@@ -46,6 +46,7 @@ export const updateProjectSchema = createProjectSchema
 
 export const listProjectsQuery = z.object({
   organizationId: z.string().optional(),
+  ownerId: z.string().optional(),
   businessUnitId: z.string().optional(),
   status: projectStatusEnum.optional(),
   priority: priorityEnum.optional(),
