@@ -12,6 +12,10 @@ import { errorHandler, notFoundHandler } from './middleware/error';
 export function createApp() {
   const app = express();
 
+  // Detrás de Nginx (reverse proxy + terminación SSL). Necesario para que
+  // Express respete X-Forwarded-Proto y las cookies `secure` funcionen.
+  app.set('trust proxy', 1);
+
   app.use(
     cors({
       origin: env.CORS_ORIGIN,
