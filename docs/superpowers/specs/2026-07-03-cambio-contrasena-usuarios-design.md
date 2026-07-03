@@ -25,6 +25,14 @@ que un usuario cambie su propia clave. Este diseño cubre ese vacío.
 - Validaciones de la nueva contraseña.
 
 **Fuera de alcance** (posibles agregados futuros, no ahora):
+- **Enforcement del forzado en el backend**: el forzar-cambio-al-primer-ingreso es un
+  **gate del frontend** (redirect a `/cambiar-clave`). El backend NO bloquea las demás
+  rutas cuando `mustChangePassword=true`; un usuario con sesión válida y conocimiento
+  técnico podría llamar la API directamente sin cambiar la clave. Es una decisión
+  consciente: el objetivo del forzado es UX (asegurar que el colaborador reemplace la
+  clave temporal en su propia cuenta ya autenticada), no una barrera de seguridad dura.
+  Aceptable para una herramienta interna con usuarios de confianza. Si a futuro se
+  quiere endurecer, se agregaría un middleware que rechace escrituras con el flag activo.
 - Invalidar sesiones abiertas en otros dispositivos al cambiar la clave (el JWT es
   stateless; el token viejo sigue válido hasta expirar, 7 días). Aceptable para una
   herramienta interna.
@@ -75,10 +83,12 @@ Recibe `userId` y `{ currentPassword, newPassword }`:
    `unauthorized('Contraseña actual incorrecta')`.
 3. Validar la nueva:
    - `newPassword.length >= 8` (ya cubierto por Zod, defensivo también aquí).
-   - La nueva debe ser **distinta de la actual**: comparar `verifyPassword(newPassword, hash)`;
+   - La nueva debe ser **distinta de la actual**: comparar `await verifyPassword(newPassword, hash)`;
      si coincide → `badRequest('La nueva contraseña debe ser distinta de la actual')`.
-4. Guardar: `passwordHash = hashPassword(newPassword)` y `mustChangePassword = false`.
-5. Devolver el usuario público actualizado (sin `passwordHash`).
+     (Nota: `verifyPassword` y `hashPassword` son async → usar `await`.)
+4. Guardar: `passwordHash = await hashPassword(newPassword)` y `mustChangePassword = false`.
+5. Devolver el usuario público actualizado (sin `passwordHash`), envuelto en `{ user }`
+   para ser consistente con el resto del módulo `auth` (login/me responden `{ user }`).
 
 ### Cambios en usuarios (`users.service.ts`)
 - `createUser`: setear `mustChangePassword: true`.
@@ -86,8 +96,12 @@ Recibe `userId` y `{ currentPassword, newPassword }`:
   también `mustChangePassword: true` en el mismo update.
 
 ### Exponer el flag en la sesión
-- `login` (`auth.service.ts`) y `/auth/me` (`meController`) devuelven `mustChangePassword`
-  dentro del `user`. Implica extender `AuthUser` (o el objeto de respuesta) con ese campo.
+- `login` (`auth.service.ts`) devuelve `mustChangePassword` dentro del `user`. Como hace
+  `findUnique` sin `select`, basta con agregar el campo al objeto `user` que arma.
+- `/auth/me` sale de `req.user`, que lo arma `requireAuth` en `middleware/auth.ts`. Ahí
+  hay que tocar **tres puntos**: (a) agregar `mustChangePassword: boolean` a la interfaz
+  `AuthUser`; (b) agregarlo al `select` de la query del usuario; (c) agregarlo al objeto
+  `req.user` que se asigna.
 - El controller de login mantiene el mismo flujo de cookie; solo se agrega el campo
   al `user` devuelto.
 
@@ -95,15 +109,29 @@ Recibe `userId` y `{ currentPassword, newPassword }`:
 
 ### Tipos y contexto
 - Extender el tipo del usuario autenticado con `mustChangePassword: boolean`.
-- `AuthContext` expone el `user` con el flag y un método para refrescar la sesión
-  (`/auth/me`) tras un cambio exitoso.
+- `AuthContext` hoy expone solo `user`/`login`/`logout`. Hay que **agregar un método
+  `refresh()`** que haga `api.get('/auth/me')` y actualice el `user` del contexto
+  (esto NO es React Query; la sesión vive en el Context). El hook de cambio lo invoca
+  al terminar para recoger el nuevo `mustChangePassword=false`.
+
+### Estructura de rutas (evita bucle de redirección)
+En `App.tsx`, `/cambiar-clave` se monta como **hermano de `AppLayout`** bajo
+`ProtectedRoute`, para que la pantalla forzada quede fuera del layout y el gate no
+entre en bucle:
+```
+<Route element={<ProtectedRoute />}>
+  <Route path="/cambiar-clave" element={<ChangePasswordPage />} />
+  <Route element={<AppLayout />}> …resto de rutas… </Route>
+</Route>
+```
 
 ### Pantalla dedicada de primer ingreso — `/cambiar-clave`
 - Vista a pantalla completa, **fuera de `AppLayout`** (sin menú lateral ni header).
 - Solo pide **nueva contraseña + confirmación** (modo forzado).
-- **Gate**: si `user.mustChangePassword === true` y la ruta actual no es
-  `/cambiar-clave`, redirigir ahí y bloquear el acceso al resto de la app. Al éxito,
-  el flag pasa a `false` y se libera la navegación (redirige al landing por rol).
+- **Gate**: el chequeo `user.mustChangePassword === true` vive **dentro de `AppLayout`**
+  (o en `ProtectedRoute`): si está activo, redirige a `/cambiar-clave`. Como esa ruta
+  está fuera de `AppLayout`, no hay bucle. Al éxito, `refresh()` deja el flag en `false`
+  y se redirige al landing por rol (`landingPath`, ya existe en `lib/permissions.ts`).
 
 ### Modal de cambio voluntario (Header)
 - Al hacer clic en el avatar/nombre del `Header`, un menú/acciones muestra
@@ -113,8 +141,8 @@ Recibe `userId` y `{ currentPassword, newPassword }`:
 
 ### Hook y validación
 - Un único hook `useChangePassword` (mutation a `POST /auth/change-password`) usado
-  por la pantalla y el modal. En `onSuccess` refresca la sesión (`/auth/me`) para
-  actualizar el flag.
+  por la pantalla y el modal. En `onSuccess` llama a `AuthContext.refresh()` (que pega
+  a `/auth/me`) para actualizar el flag en el contexto.
 - Validación en el formulario: `nueva.length >= 8` y `nueva === confirmación`.
   Errores del backend (actual incorrecta, nueva igual a la actual) se muestran al usuario.
 
