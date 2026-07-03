@@ -29,6 +29,19 @@ export interface Ref {
   name: string;
 }
 
+export interface Label {
+  id: string;
+  organizationId: string;
+  name: string;
+  color: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaskLabel {
+  label: Label;
+}
+
 export interface Organization {
   id: string;
   name: string;
@@ -95,6 +108,7 @@ export interface Task {
   status: TaskStatus;
   priority: Priority;
   dueDate: string | null;
+  startDate: string | null;
   ownerId: string | null;
   owner: Ref | null;
   source: TaskSource;
@@ -104,6 +118,11 @@ export interface Task {
   organization?: Ref;
   businessUnit?: Ref | null;
   project?: Ref | null;
+  labels?: TaskLabel[];
+}
+
+export interface TaskDetail extends Task {
+  labels: TaskLabel[];
 }
 
 export interface ContextRefs {
