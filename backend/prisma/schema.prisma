@@ -270,6 +270,9 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  ownedTasks    Task[]    @relation("TaskOwner")
+  ownedProjects Project[] @relation("ProjectOwner")
+
   @@map("users")
 }
 
@@ -352,7 +355,7 @@ model Project {
   priority       Priority      @default(MEDIUM)
   startDate      DateTime?
   targetDate     DateTime?
-  owner          String?
+  ownerId        String?
   nextAction     String?
   risks          String?
   notes          String?
@@ -361,6 +364,7 @@ model Project {
 
   organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   businessUnit       BusinessUnit?       @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  owner              User?               @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   tasks              Task[]
   salesOpportunities SalesOpportunity[]
   incomeRecords      IncomeRecord[]
@@ -372,6 +376,7 @@ model Project {
   @@index([organizationId])
   @@index([businessUnitId])
   @@index([status])
+  @@index([ownerId])
   @@map("projects")
 }
 
@@ -386,7 +391,7 @@ model Task {
   status         TaskStatus @default(TODO)
   priority       Priority   @default(MEDIUM)
   dueDate        DateTime?
-  owner          String?
+  ownerId        String?
   source         TaskSource @default(MANUAL)
   notes          String?
   createdAt      DateTime   @default(now())
@@ -395,11 +400,13 @@ model Task {
   organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
   project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  owner        User?         @relation("TaskOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([projectId])
   @@index([status])
   @@index([dueDate])
+  @@index([ownerId])
   @@map("tasks")
 }
 
