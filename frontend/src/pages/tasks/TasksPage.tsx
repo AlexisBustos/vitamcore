@@ -30,6 +30,7 @@ import {
   type TaskFilters,
 } from '@/hooks/useTasks';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/context/AuthContext';
 import type { Task } from '@/types/domain';
 import { TaskForm } from './TaskForm';
 import { TaskBoard } from './TaskBoard';
@@ -42,6 +43,7 @@ export function TasksPage() {
   const [view, setView] = useState<'table' | 'kanban'>('table');
   const [newStatus, setNewStatus] = useState<Task['status']>('TODO');
 
+  const { user } = useAuth();
   const { data: organizations } = useOrganizations();
   const { data: projects } = useProjects(
     filters.organizationId ? { organizationId: filters.organizationId } : {},
@@ -138,6 +140,19 @@ export function TasksPage() {
         <div className="mt-3 flex justify-end gap-1">
           <Button
             size="sm"
+            variant={filters.ownerId ? 'primary' : 'outline'}
+            onClick={() =>
+              setFilters((f) => ({
+                ...f,
+                ownerId: f.ownerId ? undefined : user?.id,
+              }))
+            }
+            className="mr-auto"
+          >
+            Mis tareas
+          </Button>
+          <Button
+            size="sm"
             variant={view === 'table' ? 'primary' : 'outline'}
             onClick={() => setView('table')}
           >
@@ -171,6 +186,7 @@ export function TasksPage() {
                   <th className="px-4 py-3 font-medium">Tarea</th>
                   <th className="px-4 py-3 font-medium">Empresa</th>
                   <th className="px-4 py-3 font-medium">Proyecto</th>
+                  <th className="px-4 py-3 font-medium">Responsable</th>
                   <th className="px-4 py-3 font-medium">Estado</th>
                   <th className="px-4 py-3 font-medium">Prioridad</th>
                   <th className="px-4 py-3 font-medium">Vence</th>
@@ -191,6 +207,9 @@ export function TasksPage() {
                       </td>
                       <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
                         {task.project?.name ?? '—'}
+                      </td>
+                      <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
+                        {task.owner?.name ?? '—'}
                       </td>
                       <td className="px-4 py-3">
                         <TaskStatusBadge value={task.status} />

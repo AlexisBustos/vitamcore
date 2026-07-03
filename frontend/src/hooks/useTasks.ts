@@ -10,6 +10,7 @@ const KEY = ['tasks'];
 
 export type TaskFilters = {
   organizationId?: string;
+  ownerId?: string;
   businessUnitId?: string;
   projectId?: string;
   status?: string;
