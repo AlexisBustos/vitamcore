@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { LabelChips } from './LabelChips';
 import { LabelPicker } from './LabelPicker';
+import { ChecklistSection } from './ChecklistSection';
 import { priorityOptions, taskStatusOptions } from '@/lib/domain';
 
 function toDateInput(v: string | null | undefined) {
@@ -85,7 +86,8 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
             />
           </Field>
 
-          {/* Fase 2: Checklist */}
+          <ChecklistSection taskId={task.id} items={task.checklistItems ?? []} />
+
           {/* Fase 3: Actividad y comentarios */}
         </div>
       )}
