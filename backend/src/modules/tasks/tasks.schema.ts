@@ -28,6 +28,8 @@ export const createTaskSchema = z.object({
   status: taskStatusEnum.default('TODO'),
   priority: priorityEnum.default('MEDIUM'),
   dueDate: dateInput,
+  startDate: dateInput,
+  labelIds: z.array(z.string().min(1)).optional(),
   ownerId: z.string().min(1).optional().nullable(),
   source: taskSourceEnum.default('MANUAL'),
   notes: optionalText,
@@ -43,6 +45,7 @@ export const updateTaskSchema = createTaskSchema
 export const listTasksQuery = z.object({
   organizationId: z.string().optional(),
   ownerId: z.string().optional(),
+  search: z.string().trim().min(1).optional(),
   businessUnitId: z.string().optional(),
   projectId: z.string().optional(),
   status: taskStatusEnum.optional(),
