@@ -102,3 +102,15 @@ export async function makeUser(overrides: Record<string, unknown> = {}) {
     } as Prisma.UserUncheckedCreateInput,
   });
 }
+
+export async function makeProject(organizationId: string, overrides: Record<string, unknown> = {}) {
+  return prisma.project.create({
+    data: { organizationId, name: 'Proyecto Test', ...overrides } as Prisma.ProjectUncheckedCreateInput,
+  });
+}
+
+export async function makeTask(organizationId: string, overrides: Record<string, unknown> = {}) {
+  return prisma.task.create({
+    data: { organizationId, title: 'Tarea Test', ...overrides } as Prisma.TaskUncheckedCreateInput,
+  });
+}
