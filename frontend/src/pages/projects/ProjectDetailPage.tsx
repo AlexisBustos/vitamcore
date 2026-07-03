@@ -49,7 +49,7 @@ export function ProjectDetailPage() {
   const info: { label: string; value: string }[] = [
     { label: 'Empresa', value: project.organization?.name ?? '—' },
     { label: 'Unidad', value: project.businessUnit?.name ?? '—' },
-    { label: 'Responsable', value: project.owner ?? '—' },
+    { label: 'Responsable', value: project.owner?.name ?? '—' },
     { label: 'Inicio', value: formatDate(project.startDate) },
     { label: 'Objetivo', value: formatDate(project.targetDate) },
   ];

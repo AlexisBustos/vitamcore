@@ -103,7 +103,7 @@ export function ProjectsPage() {
       list = list.filter(
         (p) =>
           p.name.toLowerCase().includes(q) ||
-          (p.owner ?? '').toLowerCase().includes(q) ||
+          (p.owner?.name ?? '').toLowerCase().includes(q) ||
           (p.nextAction ?? '').toLowerCase().includes(q),
       );
     }
@@ -308,7 +308,7 @@ export function ProjectsPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
-                        {p.owner ?? '—'}
+                        {p.owner?.name ?? '—'}
                       </td>
                       <td className="px-4 py-3">
                         <ProjectStatusBadge value={p.status} />
