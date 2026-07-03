@@ -1,7 +1,8 @@
-import { Pencil, Trash2 } from 'lucide-react';
+import { CheckSquare, Pencil, Trash2 } from 'lucide-react';
 import { PriorityBadge } from '@/components/badges';
 import { Button } from '@/components/ui/button';
 import { LabelChips } from '@/components/tasks/LabelChips';
+import { checklistProgress } from '@/components/tasks/checklistProgress';
 import { formatDate, isOverdue } from '@/lib/domain';
 import { cn } from '@/lib/utils';
 import type { Task } from '@/types/domain';
@@ -26,6 +27,7 @@ function initials(name?: string | null): string {
 
 export function TaskCard({ task, onOpen, onEdit, onDelete }: Props) {
   const overdue = isOverdue(task.dueDate) && task.status !== 'DONE';
+  const cl = checklistProgress(task.checklistItems);
 
   function handleDragStart(e: React.DragEvent<HTMLDivElement>) {
     e.dataTransfer.setData('text/plain', task.id);
@@ -76,6 +78,11 @@ export function TaskCard({ task, onOpen, onEdit, onDelete }: Props) {
       <div className="mt-2 flex items-center justify-between">
         <PriorityBadge value={task.priority} />
         <div className="flex items-center gap-2">
+          {cl.total > 0 && (
+            <span className="flex items-center gap-1 text-xs text-[var(--color-muted-foreground)]">
+              <CheckSquare className="h-3.5 w-3.5" /> {cl.done}/{cl.total}
+            </span>
+          )}
           <span
             className={cn(
               'text-xs',
