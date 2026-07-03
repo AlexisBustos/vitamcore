@@ -12,11 +12,12 @@ const COLUMNS: { status: TaskStatus; title: string }[] = [
 interface Props {
   tasks: Task[];
   onAdd: (status: TaskStatus) => void;
+  onOpenTask: (task: Task) => void;
   onEditTask: (task: Task) => void;
   onDeleteTask: (task: Task) => void;
 }
 
-export function TaskBoard({ tasks, onAdd, onEditTask, onDeleteTask }: Props) {
+export function TaskBoard({ tasks, onAdd, onOpenTask, onEditTask, onDeleteTask }: Props) {
   const moveTask = useMoveTask();
 
   const byStatus = useMemo(() => {
@@ -42,6 +43,7 @@ export function TaskBoard({ tasks, onAdd, onEditTask, onDeleteTask }: Props) {
           tasks={byStatus[col.status]}
           onDropTask={handleDrop}
           onAdd={onAdd}
+          onOpenTask={onOpenTask}
           onEditTask={onEditTask}
           onDeleteTask={onDeleteTask}
         />

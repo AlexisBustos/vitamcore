@@ -10,6 +10,7 @@ interface Props {
   tasks: Task[];
   onDropTask: (taskId: string, status: TaskStatus) => void;
   onAdd: (status: TaskStatus) => void;
+  onOpenTask: (task: Task) => void;
   onEditTask: (task: Task) => void;
   onDeleteTask: (task: Task) => void;
 }
@@ -20,6 +21,7 @@ export function BoardColumn({
   tasks,
   onDropTask,
   onAdd,
+  onOpenTask,
   onEditTask,
   onDeleteTask,
 }: Props) {
@@ -83,6 +85,7 @@ export function BoardColumn({
             <TaskCard
               key={task.id}
               task={task}
+              onOpen={onOpenTask}
               onEdit={onEditTask}
               onDelete={onDeleteTask}
             />

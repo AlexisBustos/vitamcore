@@ -58,6 +58,7 @@ export function TaskForm({
     priority: task?.priority ?? 'MEDIUM',
     source: task?.source ?? 'MANUAL',
     ownerId: task?.ownerId ?? '',
+    startDate: toDateInput(task?.startDate),
     dueDate: toDateInput(task?.dueDate),
   });
 
@@ -100,6 +101,7 @@ export function TaskForm({
       priority: form.priority,
       source: form.source,
       ownerId: form.ownerId || null,
+      startDate: form.startDate || null,
       dueDate: form.dueDate || null,
     };
     try {
@@ -166,6 +168,13 @@ export function TaskForm({
               value={form.businessUnitId}
               onChange={(e) => set('businessUnitId', e.target.value)}
               disabled={!form.organizationId}
+            />
+          </Field>
+          <Field label="Inicio">
+            <Input
+              type="date"
+              value={form.startDate}
+              onChange={(e) => set('startDate', e.target.value)}
             />
           </Field>
           <Field label="Vencimiento">
