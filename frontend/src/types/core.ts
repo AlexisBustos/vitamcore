@@ -68,7 +68,8 @@ export interface Project {
   priority: Priority;
   startDate: string | null;
   targetDate: string | null;
-  owner: string | null;
+  ownerId: string | null;
+  owner: Ref | null;
   nextAction: string | null;
   risks: string | null;
   notes: string | null;
@@ -94,7 +95,8 @@ export interface Task {
   status: TaskStatus;
   priority: Priority;
   dueDate: string | null;
-  owner: string | null;
+  ownerId: string | null;
+  owner: Ref | null;
   source: TaskSource;
   notes: string | null;
   createdAt: string;
