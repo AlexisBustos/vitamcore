@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { notFound } from '../../utils/http-error';
 import {
+  assertAssignableUser,
   assertBusinessUnitInOrganization,
   assertOrganization,
   assertProjectInOrganization,
@@ -24,6 +25,7 @@ const OPEN_STATUSES: Prisma.TaskWhereInput['status'] = {
 export async function list(filters: ListTasksFilters) {
   const where: Prisma.TaskWhereInput = {
     organizationId: filters.organizationId,
+    ownerId: filters.ownerId,
     businessUnitId: filters.businessUnitId,
     projectId: filters.projectId,
     status: filters.status,
@@ -42,6 +44,7 @@ export async function list(filters: ListTasksFilters) {
       organization: { select: { id: true, name: true } },
       businessUnit: { select: { id: true, name: true } },
       project: { select: { id: true, name: true } },
+      owner: { select: { id: true, name: true } },
     },
   });
 }
@@ -53,6 +56,7 @@ export async function getById(id: string) {
       organization: { select: { id: true, name: true } },
       businessUnit: { select: { id: true, name: true } },
       project: { select: { id: true, name: true } },
+      owner: { select: { id: true, name: true } },
     },
   });
   if (!task) throw notFound('Tarea no encontrada');
@@ -62,6 +66,7 @@ export async function getById(id: string) {
 export async function create(input: CreateTaskInput) {
   await assertOrganization(input.organizationId);
   await assertRelations(input.organizationId, input.businessUnitId, input.projectId);
+  await assertAssignableUser(input.ownerId);
   // Las validaciones anteriores solo leen, así que pueden ir fuera de la
   // transacción. La escritura + la sincronización del proyecto van juntas.
   return prisma.$transaction(async (tx) => {
@@ -83,6 +88,7 @@ export async function update(id: string, input: UpdateTaskInput) {
     input.businessUnitId,
     input.projectId,
   );
+  await assertAssignableUser(input.ownerId);
 
   return prisma.$transaction(async (tx) => {
     const task = await tx.task.update({ where: { id }, data: input });
