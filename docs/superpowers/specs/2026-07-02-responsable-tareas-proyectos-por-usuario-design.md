@@ -46,16 +46,16 @@ ownedProjects Project[] @relation("ProjectOwner")
 
 `ownerId` es **nullable**: una tarea o proyecto puede no tener responsable.
 
-### Migración de datos (sin pérdida silenciosa)
+### Migración de datos (sin pérdida silenciosa, patrón expand/contract)
 
-Una única migración Prisma que:
+Como `prisma migrate dev` autogeneraría un diff destructivo (`DROP owner` + `ADD ownerId`) que borraría los datos antes de poder copiarlos, la migración se crea con **`prisma migrate dev --create-only`** y se **edita a mano** para intercalar el paso de datos. La migración resultante, en orden:
 
-1. Añade la columna `ownerId` (nullable) manteniendo `owner` temporalmente.
-2. Ejecuta un paso de datos: por cada fila con `owner` no vacío, busca un `User` cuyo `name` coincida tras normalizar (`trim` + minúsculas). Si hay match único → set `ownerId`.
-3. Para las filas cuyo `owner` **no** matchea ningún usuario: antepone el nombre viejo a `notes` con el prefijo `Responsable previo (sin cuenta): <nombre>` (respetando el `notes` existente si lo hubiera), y deja `ownerId = NULL`.
+1. Añade la columna `ownerId` (nullable) **manteniendo** `owner`.
+2. Paso de datos (SQL dentro del mismo archivo de migración, no en runtime): por cada fila con `owner` no vacío, busca un `User` **activo** (`isActive = true`) cuyo `name` coincida tras normalizar (`trim` + minúsculas). Si hay **match único** → set `ownerId`.
+3. Filas que **no** matchean —sin coincidencia, con `owner` vacío no aplica, o con **más de un** usuario del mismo nombre normalizado (se trata como no-match para no asignar arbitrariamente)—: se antepone el nombre viejo a `notes` con el prefijo `Responsable previo (sin cuenta): <nombre>` (respetando el `notes` existente si lo hubiera), y se deja `ownerId = NULL`.
 4. Elimina la columna `owner`.
 
-El paso de datos se implementa como SQL dentro del archivo de migración (o un script `tsx` invocado en el flujo de migración del sprint), no en runtime de la app.
+La migración solo matchea usuarios **activos** a propósito: no tiene sentido auto-asignar como responsable a alguien que ya fue dado de baja. Un `owner` de texto que coincida solo con un usuario inactivo se trata como no-match y se preserva en `notes`.
 
 ## Backend
 
@@ -65,7 +65,7 @@ Módulo mínimo siguiendo la convención de 4 archivos (aquí `schema` es trivia
 
 - `GET /api/assignees` → devuelve `{ data: Array<{ id, name, role }> }`, **solo usuarios con `isActive = true`**, ordenados por `name`.
 - Reutiliza la lógica de `users.service` (un `select` acotado sin `passwordHash`) o expone una función `listAssignables()` propia.
-- Montado en `routes/index.ts` con `allowRoles({ read: ALL_ROLES })` (o `requireRole(...ALL_ROLES)` al ser solo GET) — **no** hereda el `adminOnly` del módulo `/users`.
+- Montado en `routes/index.ts` con **`requireRole(...ALL_ROLES)`** (al ser solo GET; no se usa `allowRoles`, cuya firma exige `{ read, write }`) — **no** hereda el `adminOnly` del módulo `/users`.
 
 Este endpoint es el que permite que un COLABORADOR pueble el desplegable sin acceder al módulo admin de usuarios.
 
@@ -73,7 +73,8 @@ Este endpoint es el que permite que un COLABORADOR pueble el desplegable sin acc
 
 Nuevo helper en `backend/src/modules/shared/relations.ts`:
 
-- `assertAssignableUser(ownerId)` — si `ownerId` viene, verifica que exista un `User` con ese id y `isActive = true`; si no, lanza `badRequest`. Coherente con el patrón existente (`assertOrganization`, `assertBusinessUnitInOrganization`).
+- `assertAssignableUser(ownerId)` — si `ownerId` viene, verifica únicamente que **exista** un `User` con ese id; si no existe, lanza `badRequest`. Coherente con el patrón existente (`assertOrganization`, `assertBusinessUnitInOrganization`).
+- **Por qué "existe" y no "existe y está activo"**: la restricción de "solo activos" vive en el endpoint `/assignees` (lo que puebla el desplegable), así que la UI solo ofrece asignar usuarios activos. El assert de escritura, en cambio, solo comprueba existencia. Esto evita un caso borde: si un responsable se **desactiva** después de haber sido asignado, su registro conserva el `ownerId` y editar cualquier otro campo (el form reenvía `ownerId`) **no** queda bloqueado. Una asignación de inactivo por API directa es de bajo riesgo en una herramienta interna y no se defiende aquí.
 
 ### Tareas (`modules/tasks/`)
 
