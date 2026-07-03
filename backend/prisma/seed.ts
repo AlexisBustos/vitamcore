@@ -114,7 +114,6 @@ interface ProjectSeed {
   unit: string;
   status: ProjectStatus;
   priority: Priority;
-  owner?: string;
   nextAction?: string;
   risks?: string;
   startDate?: Date;
@@ -139,7 +138,6 @@ async function seedProject(
       name: p.name,
       status: p.status,
       priority: p.priority,
-      owner: p.owner,
       nextAction: p.nextAction,
       risks: p.risks,
       startDate: p.startDate,
@@ -198,7 +196,6 @@ async function main() {
       unit: 'Centro Médico',
       status: ProjectStatus.IN_PROGRESS,
       priority: Priority.HIGH,
-      owner: 'Dirección Healthcare',
       nextAction: 'Cerrar habilitación sanitaria del recinto.',
       risks: 'Plazos de habilitación municipal.',
       startDate: daysFromNow(-60),
@@ -209,7 +206,6 @@ async function main() {
       unit: 'Salud Ocupacional',
       status: ProjectStatus.IN_PROGRESS,
       priority: Priority.MEDIUM,
-      owner: 'Coordinación SO',
       nextAction: 'Agendar exámenes preocupacionales de julio.',
       startDate: daysFromNow(-30),
       targetDate: daysFromNow(20),
@@ -219,7 +215,6 @@ async function main() {
       unit: 'Operativos Empresas',
       status: ProjectStatus.PLANNED,
       priority: Priority.MEDIUM,
-      owner: 'Operativos',
       nextAction: 'Definir empresas objetivo del operativo.',
       targetDate: daysFromNow(60),
     },
@@ -231,7 +226,6 @@ async function main() {
       unit: 'Productos SaaS',
       status: ProjectStatus.IN_PROGRESS,
       priority: Priority.HIGH,
-      owner: 'Equipo Producto',
       nextAction: 'Cerrar onboarding del primer cliente B2B.',
       startDate: daysFromNow(-90),
       targetDate: daysFromNow(30),
@@ -241,7 +235,6 @@ async function main() {
       unit: 'Productos SaaS',
       status: ProjectStatus.IN_REVIEW,
       priority: Priority.MEDIUM,
-      owner: 'Equipo Producto',
       nextAction: 'Revisión de UX con stakeholders.',
     },
     {
@@ -249,7 +242,6 @@ async function main() {
       unit: 'Productos SaaS',
       status: ProjectStatus.IN_PROGRESS,
       priority: Priority.CRITICAL,
-      owner: 'Equipo SHE',
       nextAction: 'Definir roadmap del próximo trimestre.',
       risks: 'Dependencia de integración con clientes industriales.',
       targetDate: daysFromNow(15),
@@ -259,7 +251,6 @@ async function main() {
       unit: 'Productos SaaS',
       status: ProjectStatus.PLANNED,
       priority: Priority.MEDIUM,
-      owner: 'Equipo Producto',
     },
     {
       name: 'Vitam Check',
@@ -272,7 +263,6 @@ async function main() {
       unit: 'Productos SaaS',
       status: ProjectStatus.BLOCKED,
       priority: Priority.HIGH,
-      owner: 'Legal + Producto',
       risks: 'Definiciones legales de consentimiento pendientes.',
       nextAction: 'Reunión con asesoría legal.',
     },
@@ -281,7 +271,6 @@ async function main() {
       unit: 'Desarrollo Software',
       status: ProjectStatus.IN_PROGRESS,
       priority: Priority.CRITICAL,
-      owner: 'CEO',
       nextAction: 'Completar módulos del Sprint 1.',
       startDate: daysFromNow(-14),
       targetDate: daysFromNow(30),
@@ -291,7 +280,6 @@ async function main() {
       unit: 'Infraestructura',
       status: ProjectStatus.PLANNED,
       priority: Priority.HIGH,
-      owner: 'Infraestructura',
       nextAction: 'Definir estándares de interoperabilidad (HL7/FHIR).',
       targetDate: daysFromNow(90),
     },
@@ -320,7 +308,6 @@ async function main() {
           status: TaskStatus.DOING,
           priority: Priority.CRITICAL,
           source: TaskSource.MANUAL,
-          owner: 'CEO',
           dueDate: daysFromNow(3),
         },
         {
