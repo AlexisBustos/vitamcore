@@ -404,6 +404,7 @@ model Task {
   project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
   owner        User?         @relation("TaskOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   labels       TaskLabel[]
+  checklistItems ChecklistItem[]
 
   @@index([organizationId])
   @@index([projectId])
@@ -441,6 +442,22 @@ model TaskLabel {
   @@id([taskId, labelId])
   @@index([labelId])
   @@map("task_labels")
+}
+
+/// Ítem de checklist plana de una tarea (con orden).
+model ChecklistItem {
+  id        String   @id @default(cuid())
+  taskId    String
+  text      String
+  done      Boolean  @default(false)
+  position  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@map("checklist_items")
 }
 
 // ---------------------------------------------------------
