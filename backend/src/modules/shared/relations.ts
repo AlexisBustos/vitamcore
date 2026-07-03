@@ -86,3 +86,24 @@ export async function assertAssignableUser(ownerId?: string | null) {
   });
   if (!user) throw badRequest('El responsable indicado no existe');
 }
+
+/**
+ * Verifica que todas las etiquetas existan y pertenezcan a la empresa indicada.
+ * Evita asignar a una tarea etiquetas de otra empresa.
+ */
+export async function assertLabelsInOrganization(
+  labelIds: string[],
+  organizationId: string,
+) {
+  if (labelIds.length === 0) return;
+  const found = await prisma.label.findMany({
+    where: { id: { in: labelIds } },
+    select: { id: true, organizationId: true },
+  });
+  if (found.length !== labelIds.length) {
+    throw badRequest('Alguna etiqueta indicada no existe');
+  }
+  if (found.some((l) => l.organizationId !== organizationId)) {
+    throw badRequest('Alguna etiqueta no pertenece a la empresa indicada');
+  }
+}
