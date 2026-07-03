@@ -314,6 +314,7 @@ model Organization {
   vendors                Vendor[]
   documents              Document[]
   strategicDecisions     StrategicDecision[]
+  labels                 Label[]
 
   @@map("organizations")
 }
@@ -391,6 +392,7 @@ model Task {
   status         TaskStatus @default(TODO)
   priority       Priority   @default(MEDIUM)
   dueDate        DateTime?
+  startDate      DateTime?
   ownerId        String?
   source         TaskSource @default(MANUAL)
   notes          String?
@@ -401,6 +403,7 @@ model Task {
   businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
   project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
   owner        User?         @relation("TaskOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  labels       TaskLabel[]
 
   @@index([organizationId])
   @@index([projectId])
@@ -408,6 +411,36 @@ model Task {
   @@index([dueDate])
   @@index([ownerId])
   @@map("tasks")
+}
+
+/// Etiqueta reutilizable de tareas, por empresa.
+model Label {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  color          String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tasks        TaskLabel[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("labels")
+}
+
+/// Puente muchos-a-muchos Task ↔ Label.
+model TaskLabel {
+  taskId  String
+  labelId String
+
+  task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  label Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, labelId])
+  @@index([labelId])
+  @@map("task_labels")
 }
 
 // ---------------------------------------------------------
