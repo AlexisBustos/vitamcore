@@ -1,20 +1,21 @@
 import { useState, type ReactNode } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, LayoutGrid, Pencil, Plus, Table as TableIcon, Trash2 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import {
-  PriorityBadge,
-  ProjectStatusBadge,
-  TaskStatusBadge,
-} from '@/components/badges';
+import { Input } from '@/components/ui/input';
+import { PriorityBadge, ProjectStatusBadge } from '@/components/badges';
 import { Spinner, ErrorState, EmptyState } from '@/components/ui/feedback';
-import { formatDate, isOverdue } from '@/lib/domain';
+import { formatDate } from '@/lib/domain';
 import { getErrorMessage } from '@/lib/errors';
 import { useProject, useDeleteProject } from '@/hooks/useProjects';
+import { useTasks, useSaveTask, useDeleteTask } from '@/hooks/useTasks';
 import type { Task } from '@/types/domain';
 import { TaskForm } from '@/pages/tasks/TaskForm';
+import { TaskBoard } from '@/pages/tasks/TaskBoard';
+import { TasksTableView } from '@/components/tasks/TasksTableView';
+import { TaskPanel } from '@/components/tasks/TaskPanel';
 import { ProjectForm } from './ProjectForm';
 
 export function ProjectDetailPage() {
@@ -22,15 +23,44 @@ export function ProjectDetailPage() {
   const navigate = useNavigate();
   const { data: project, isLoading, isError, error } = useProject(id);
   const deleteProject = useDeleteProject();
+  const saveTask = useSaveTask();
+  const deleteTask = useDeleteTask();
 
   const [editOpen, setEditOpen] = useState(false);
   const [taskForm, setTaskForm] = useState<{ open: boolean; task: Task | null }>(
     { open: false, task: null },
   );
+  const [view, setView] = useState<'table' | 'kanban'>('table');
+  const [search, setSearch] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const openTaskId = searchParams.get('tarea');
+
+  // Tareas del proyecto (con búsqueda), acotadas por projectId.
+  const { data: tasks } = useTasks({ projectId: id, search: search || undefined });
 
   if (isLoading) return <Spinner />;
   if (isError || !project)
     return <ErrorState message={getErrorMessage(error)} />;
+
+  function openTask(t: Task) {
+    setSearchParams((p) => {
+      p.set('tarea', t.id);
+      return p;
+    });
+  }
+  function closeTask() {
+    setSearchParams((p) => {
+      p.delete('tarea');
+      return p;
+    });
+  }
+  function quickStatus(task: Task, status: Task['status']) {
+    saveTask.mutate({ id: task.id, data: { status } });
+  }
+  async function handleDeleteTask(task: Task) {
+    if (!confirm(`¿Eliminar la tarea "${task.title}"?`)) return;
+    await deleteTask.mutateAsync(task.id);
+  }
 
   async function handleDelete() {
     if (!project) return;
@@ -40,6 +70,7 @@ export function ProjectDetailPage() {
     navigate('/proyectos');
   }
 
+  // El avance se calcula con las tareas embebidas del proyecto (siempre completas).
   const doneTasks = project.tasks.filter((t) => t.status === 'DONE').length;
   const totalTasks = project.tasks.length;
   const progress = totalTasks
@@ -53,6 +84,8 @@ export function ProjectDetailPage() {
     { label: 'Inicio', value: formatDate(project.startDate) },
     { label: 'Objetivo', value: formatDate(project.targetDate) },
   ];
+
+  const projectTasks = tasks ?? [];
 
   return (
     <div className="space-y-6">
@@ -137,55 +170,64 @@ export function ProjectDetailPage() {
         </div>
       )}
 
-      {/* Tareas del proyecto */}
+      {/* Tareas del proyecto: búsqueda + lista/tablero + panel */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Tareas ({project.tasks.length})</CardTitle>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setTaskForm({ open: true, task: null })}
-          >
-            <Plus className="h-4 w-4" /> Nueva tarea
-          </Button>
+        <CardHeader className="flex flex-row items-center justify-between gap-3">
+          <CardTitle>Tareas</CardTitle>
+          <div className="flex items-center gap-2">
+            <Input
+              placeholder="Buscar…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9 w-40"
+            />
+            <Button
+              size="sm"
+              variant={view === 'table' ? 'primary' : 'outline'}
+              onClick={() => setView('table')}
+            >
+              <TableIcon className="h-4 w-4" /> Lista
+            </Button>
+            <Button
+              size="sm"
+              variant={view === 'kanban' ? 'primary' : 'outline'}
+              onClick={() => setView('kanban')}
+            >
+              <LayoutGrid className="h-4 w-4" /> Tablero
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setTaskForm({ open: true, task: null })}
+            >
+              <Plus className="h-4 w-4" /> Nueva tarea
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
-          {project.tasks.length === 0 ? (
+          {projectTasks.length === 0 ? (
             <EmptyState title="Sin tareas">
-              Agrega la primera tarea de este proyecto.
+              {search
+                ? 'No hay tareas que coincidan con la búsqueda.'
+                : 'Agrega la primera tarea de este proyecto.'}
             </EmptyState>
+          ) : view === 'table' ? (
+            <TasksTableView
+              tasks={projectTasks}
+              onOpen={openTask}
+              onQuickStatus={quickStatus}
+              onEdit={(task) => setTaskForm({ open: true, task })}
+              onDelete={handleDeleteTask}
+              hideProject
+            />
           ) : (
-            <div className="divide-y divide-[var(--color-border)]">
-              {project.tasks.map((task) => (
-                <button
-                  key={task.id}
-                  onClick={() => setTaskForm({ open: true, task })}
-                  className="flex w-full items-center justify-between py-3 text-left hover:opacity-80"
-                >
-                  <div>
-                    <p className="font-medium text-[var(--color-foreground)]">
-                      {task.title}
-                    </p>
-                    <p className="text-xs text-[var(--color-muted-foreground)]">
-                      Vence:{' '}
-                      <span
-                        className={
-                          isOverdue(task.dueDate) && task.status !== 'DONE'
-                            ? 'text-[var(--color-danger)]'
-                            : ''
-                        }
-                      >
-                        {formatDate(task.dueDate)}
-                      </span>
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <PriorityBadge value={task.priority} />
-                    <TaskStatusBadge value={task.status} />
-                  </div>
-                </button>
-              ))}
-            </div>
+            <TaskBoard
+              tasks={projectTasks}
+              onAdd={() => setTaskForm({ open: true, task: null })}
+              onOpenTask={openTask}
+              onEditTask={(task) => setTaskForm({ open: true, task })}
+              onDeleteTask={handleDeleteTask}
+            />
           )}
         </CardContent>
       </Card>
@@ -207,6 +249,8 @@ export function ProjectDetailPage() {
           lockContext={!taskForm.task}
         />
       )}
+
+      <TaskPanel taskId={openTaskId} onClose={closeTask} />
     </div>
   );
 }
