@@ -4,13 +4,14 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { api, toQuery } from '@/lib/api';
-import type { Task, TaskStatus } from '@/types/domain';
+import type { Task, TaskStatus, TaskDetail } from '@/types/domain';
 
 const KEY = ['tasks'];
 
 export type TaskFilters = {
   organizationId?: string;
   ownerId?: string;
+  search?: string;
   businessUnitId?: string;
   projectId?: string;
   status?: string;
@@ -23,6 +24,14 @@ export function useTasks(filters: TaskFilters = {}) {
     queryKey: [...KEY, filters],
     queryFn: () =>
       api.get<{ data: Task[] }>(`/tasks${toQuery(filters)}`).then((r) => r.data),
+  });
+}
+
+export function useTaskDetail(id: string | null) {
+  return useQuery({
+    queryKey: ['tasks', 'detail', id],
+    enabled: !!id,
+    queryFn: () => api.get<{ data: TaskDetail }>(`/tasks/${id}`).then((r) => r.data),
   });
 }
 
