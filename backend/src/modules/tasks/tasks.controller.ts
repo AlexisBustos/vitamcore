@@ -17,12 +17,12 @@ export async function getController(req: Request, res: Response) {
 
 export async function createController(req: Request, res: Response) {
   const input = createTaskSchema.parse(req.body);
-  res.status(201).json({ data: await service.create(input) });
+  res.status(201).json({ data: await service.create(input, req.user?.id) });
 }
 
 export async function updateController(req: Request, res: Response) {
   const input = updateTaskSchema.parse(req.body);
-  res.json({ data: await service.update(req.params.id, input) });
+  res.json({ data: await service.update(req.params.id, input, req.user?.id) });
 }
 
 export async function removeController(req: Request, res: Response) {
