@@ -75,8 +75,17 @@ curl -s https://core.vitam.tech/api/health
 
 ## Actualizaciones posteriores
 
+Flujo de trabajo: se desarrolla en `develop`, se prueba en local, se mergea a
+`main` y se despliega (el VPS siempre corre `main`).
+
 ```bash
-sudo bash /home/vitam/apps/vitamcore/deploy.sh
+# En tu PC, cuando lo probado en local está listo:
+git checkout main && git merge --ff-only develop && git push origin main
+git checkout develop
+
+# En el VPS (se corre COMO vitam, dueño del repo y PM2):
+ssh root@64.176.18.197
+sudo -u vitam bash /home/vitam/apps/vitamcore/deploy.sh
 ```
 
 ## Backup diario de la base
