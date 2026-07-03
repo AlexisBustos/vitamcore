@@ -12,6 +12,10 @@ import {
   updateItemController,
   removeItemController,
 } from './checklist.controller';
+import {
+  listCommentsController,
+  createCommentController,
+} from './comments.controller';
 
 export const tasksRouter = Router();
 
@@ -25,3 +29,7 @@ tasksRouter.delete('/:id', asyncHandler(removeController));
 tasksRouter.post('/:id/checklist', asyncHandler(addItemController));
 tasksRouter.patch('/:id/checklist/:itemId', asyncHandler(updateItemController));
 tasksRouter.delete('/:id/checklist/:itemId', asyncHandler(removeItemController));
+
+// Comentarios anidados (heredan el acceso ALL_ROLES del montaje de /tasks).
+tasksRouter.get('/:id/comments', asyncHandler(listCommentsController));
+tasksRouter.post('/:id/comments', asyncHandler(createCommentController));
