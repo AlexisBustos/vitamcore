@@ -11,6 +11,7 @@ import { organizationsRouter } from '../modules/organizations/organizations.rout
 import { businessUnitsRouter } from '../modules/business-units/business-units.routes';
 import { projectsRouter } from '../modules/projects/projects.routes';
 import { tasksRouter } from '../modules/tasks/tasks.routes';
+import { assigneesRouter } from '../modules/assignees/assignees.routes';
 import { salesRouter } from '../modules/sales/sales.routes';
 import { incomeRouter } from '../modules/income/income.routes';
 import { expensesRouter } from '../modules/expenses/expenses.routes';
@@ -39,6 +40,8 @@ apiRouter.use('/auth', authRouter);
 // Compartidas (admin + colaborador): acceso total a Proyectos y Tareas.
 apiRouter.use('/projects', requireAuth, requireRole(...ALL_ROLES), projectsRouter);
 apiRouter.use('/tasks', requireAuth, requireRole(...ALL_ROLES), tasksRouter);
+// Personas asignables como responsable: solo lectura, todos los roles.
+apiRouter.use('/assignees', requireAuth, requireRole(...ALL_ROLES), assigneesRouter);
 
 // Datos de referencia: colaborador puede LEER (para selectores), no escribir.
 const referenceAccess = allowRoles({ read: ALL_ROLES, write: ADMIN_ROLES });
