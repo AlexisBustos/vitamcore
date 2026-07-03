@@ -146,10 +146,13 @@ Constante compartida (backend `modules/shared/` + frontend `lib/`): ~10 claves f
 
 ### Autoría de acciones (cambio transversal)
 Actividad y comentarios requieren saber **quién** ejecuta la acción. Hoy los services de tasks no reciben el usuario. Se pasará `req.user.id` desde el controller al service en las operaciones que lo necesitan:
-- `updateTask(id, input, actorId)` y `create(input, actorId)` reciben el actor para registrar `TaskActivity`.
+- `create(input, actorId?)` y `update(id, input, actorId?)` reciben el actor (**opcional**, `string | null`) para registrar `TaskActivity`.
+- **Compatibilidad con el agente**: `agent.service.ts` llama hoy a `createTask({...})` con un solo argumento (`agent.service.ts:~134`). Como `actorId` es opcional, esa llamada sigue compilando; se actualiza explícitamente para pasar `null` (origen IA). Es la única firma compartida fuera del controller.
 - Comentarios: `createComment(taskId, body, authorId)`.
 
-El registro de actividad se hace **dentro de la misma transacción** que la mutación (helper `recordActivity(tx, taskId, actorId, type, data)` en un nuevo `modules/tasks/task-activity.service.ts`), comparando el estado previo con el nuevo para emitir solo los eventos que corresponden.
+El registro de actividad se hace **dentro de la misma transacción** que la mutación (helper `recordActivity(tx, taskId, actorId, type, data)` en un nuevo `modules/tasks/task-activity.service.ts`), comparando el estado previo con el nuevo para emitir solo los eventos que corresponden. Para poder comparar, el `update` amplía el `select` del estado previo (`current`) de `{ id, organizationId, projectId }` a incluir también `status`, `dueDate`, `startDate`, `ownerId` y las labels previas.
+
+**Ojo de fasedo**: aunque `startDate` y las labels se crean en Fase 1, el registro de actividad (`recordActivity`) y el enum `TaskActivityType` viven en **Fase 3**. Fase 1 y Fase 2 **no** registran actividad todavía (el feed no existe aún).
 
 ### Módulo `labels` (`modules/labels/`)
 CRUD por empresa siguiendo el patrón de 4 archivos:
@@ -183,7 +186,7 @@ Nuevo `components/tasks/TaskPanel.tsx` — drawer lateral derecho que se abre al
 - Checklist con barra de progreso (añadir/marcar/borrar/reordenar ítems).
 - Feed "Actividad y comentarios": caja para escribir comentario + lista cronológica de comentarios y eventos de actividad intercalados.
 
-El estado de "qué tarjeta está abierta" se maneja por id en la URL o en estado local de cada página (a decidir en el plan; preferible query param `?tarea=<id>` para que sea enlazable).
+El estado de "qué tarjeta está abierta" se maneja por **query param `?tarea=<id>`** (enlazable y compartible; el panel lee/escribe el param con el router). Esto funciona igual en la página de Tareas y en el detalle del proyecto.
 
 ### Tarjeta enriquecida (`TaskCard`)
 Añade: fila de chips de etiquetas (color), progreso de checklist (`✔ 2/5`), iniciales/avatar del responsable, además de lo actual (prioridad, vencimiento).
@@ -215,3 +218,4 @@ Cada fase: rama propia, migración propia, tests, merge a `develop` verificado.
 - **Backend**: `npm run build` (typecheck) + `npm test` (Vitest, BD real). Tests nuevos por fase: labels service (CRUD + unicidad por empresa + validación de color), sincronización de `labelIds` en task create/update, filtro `search`, checklist (crear/toggle/reordenar/borrar), comentarios (autoría), y `recordActivity` (emite los eventos correctos al comparar estados). Adaptar los tests existentes de tasks al nuevo `getById` enriquecido.
 - **Frontend**: `npm run lint` + `vite build`. Smoke manual por fase: abrir panel desde tareas y desde el proyecto, crear/asignar etiquetas, buscar, checklist con progreso, escribir comentario y ver actividad, y el detalle de proyecto con lista+tablero.
 - Verificar cada migración contra la BD de test (`npm run test:db:setup`).
+- **`test/db.ts` (`resetDb`)**: el `TRUNCATE ... CASCADE` desde `organizations` y `users` **ya cubre** las nuevas tablas (`labels`, `task_labels`, `checklist_items`, `task_comments`, `task_activity`) por sus FKs, así que no hace falta cambio funcional; sí conviene actualizar el **comentario** de `resetDb` que enumera las tablas hijas para que no quede desactualizado.
