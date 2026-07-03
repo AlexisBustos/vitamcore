@@ -114,3 +114,9 @@ export async function makeTask(organizationId: string, overrides: Record<string,
     data: { organizationId, title: 'Tarea Test', ...overrides } as Prisma.TaskUncheckedCreateInput,
   });
 }
+
+export async function makeLabel(organizationId: string, overrides: Record<string, unknown> = {}) {
+  return prisma.label.create({
+    data: { organizationId, name: 'Etiqueta Test', color: 'blue', ...overrides } as Prisma.LabelUncheckedCreateInput,
+  });
+}

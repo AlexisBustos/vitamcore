@@ -12,6 +12,7 @@ import { businessUnitsRouter } from '../modules/business-units/business-units.ro
 import { projectsRouter } from '../modules/projects/projects.routes';
 import { tasksRouter } from '../modules/tasks/tasks.routes';
 import { assigneesRouter } from '../modules/assignees/assignees.routes';
+import { labelsRouter } from '../modules/labels/labels.routes';
 import { salesRouter } from '../modules/sales/sales.routes';
 import { incomeRouter } from '../modules/income/income.routes';
 import { expensesRouter } from '../modules/expenses/expenses.routes';
@@ -42,6 +43,8 @@ apiRouter.use('/projects', requireAuth, requireRole(...ALL_ROLES), projectsRoute
 apiRouter.use('/tasks', requireAuth, requireRole(...ALL_ROLES), tasksRouter);
 // Personas asignables como responsable: solo lectura, todos los roles.
 apiRouter.use('/assignees', requireAuth, requireRole(...ALL_ROLES), assigneesRouter);
+// Etiquetas de tareas (por empresa): todos los roles.
+apiRouter.use('/labels', requireAuth, requireRole(...ALL_ROLES), labelsRouter);
 
 // Datos de referencia: colaborador puede LEER (para selectores), no escribir.
 const referenceAccess = allowRoles({ read: ALL_ROLES, write: ADMIN_ROLES });
