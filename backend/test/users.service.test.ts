@@ -88,4 +88,27 @@ describe('users.updateUser — reglas de seguridad', () => {
       users.updateUser('no-existe', { name: 'X' }, admin.id),
     ).rejects.toMatchObject({ statusCode: 404 });
   });
+
+  test('createUser deja mustChangePassword=true', async () => {
+    await users.createUser({
+      name: 'Nuevo',
+      email: 'nuevo@test.local',
+      role: 'COLABORADOR',
+      password: 'temporal1',
+    });
+    const db = await import('../src/lib/prisma').then((m) =>
+      m.prisma.user.findUnique({ where: { email: 'nuevo@test.local' } }),
+    );
+    expect(db!.mustChangePassword).toBe(true);
+  });
+
+  test('updateUser con password (reset admin) deja mustChangePassword=true', async () => {
+    const admin = await makeUser({ role: 'ADMIN', email: 'a4@t.local' });
+    const u = await makeUser({ mustChangePassword: false, email: 'c2@t.local' });
+    await users.updateUser(u.id, { password: 'reseteada1' }, admin.id);
+    const db = await import('../src/lib/prisma').then((m) =>
+      m.prisma.user.findUnique({ where: { id: u.id } }),
+    );
+    expect(db!.mustChangePassword).toBe(true);
+  });
 });

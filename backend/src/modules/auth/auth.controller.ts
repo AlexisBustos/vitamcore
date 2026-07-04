@@ -5,7 +5,7 @@
 import type { CookieOptions, Request, Response } from 'express';
 import { isProduction } from '../../config/env';
 import { SESSION_COOKIE } from '../../utils/jwt';
-import { loginSchema } from './auth.schema';
+import { changePasswordSchema, loginSchema } from './auth.schema';
 import * as authService from './auth.service';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -34,4 +34,10 @@ export async function logoutController(_req: Request, res: Response) {
 export async function meController(req: Request, res: Response) {
   // requireAuth garantiza que req.user existe.
   res.json({ user: req.user });
+}
+
+export async function changePasswordController(req: Request, res: Response) {
+  const input = changePasswordSchema.parse(req.body);
+  const user = await authService.changePassword(req.user!.id, input);
+  res.json({ user });
 }

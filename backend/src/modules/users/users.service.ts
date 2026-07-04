@@ -27,7 +27,13 @@ export async function createUser(input: CreateUserInput) {
   const passwordHash = await hashPassword(input.password);
   try {
     return await prisma.user.create({
-      data: { name: input.name, email: input.email, role: input.role, passwordHash },
+      data: {
+        name: input.name,
+        email: input.email,
+        role: input.role,
+        passwordHash,
+        mustChangePassword: true,
+      },
       select: publicSelect,
     });
   } catch (err) {
@@ -60,7 +66,10 @@ export async function updateUser(id: string, input: UpdateUserInput, currentUser
   if (input.name !== undefined) data.name = input.name;
   if (input.role !== undefined) data.role = input.role;
   if (input.isActive !== undefined) data.isActive = input.isActive;
-  if (input.password !== undefined) data.passwordHash = await hashPassword(input.password);
+  if (input.password !== undefined) {
+    data.passwordHash = await hashPassword(input.password);
+    data.mustChangePassword = true;
+  }
 
   return prisma.user.update({ where: { id }, data, select: publicSelect });
 }

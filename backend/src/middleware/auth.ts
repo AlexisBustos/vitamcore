@@ -13,6 +13,7 @@ export interface AuthUser {
   name: string;
   email: string;
   role: string;
+  mustChangePassword: boolean;
 }
 
 // Extiende el tipo Request de Express con el usuario autenticado.
@@ -37,7 +38,14 @@ export async function requireAuth(
     const payload = verifySessionToken(token);
     const user = await prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, name: true, email: true, role: true, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+        mustChangePassword: true,
+      },
     });
 
     if (!user || !user.isActive) {
@@ -49,6 +57,7 @@ export async function requireAuth(
       name: user.name,
       email: user.email,
       role: user.role,
+      mustChangePassword: user.mustChangePassword,
     };
     next();
   } catch (err) {
