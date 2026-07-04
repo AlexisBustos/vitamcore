@@ -1,11 +1,19 @@
 import { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Navigate, Outlet } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 
 /** Layout privado: sidebar + header + área de contenido. */
 export function AppLayout() {
+  const { user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Primer ingreso forzado: bloquea la app hasta cambiar la contraseña.
+  // /cambiar-clave vive fuera de este layout, así que no hay bucle.
+  if (user?.mustChangePassword) {
+    return <Navigate to="/cambiar-clave" replace />;
+  }
 
   return (
     <div className="flex h-screen overflow-hidden">

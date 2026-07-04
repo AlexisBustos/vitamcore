@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { LogOut, Menu } from 'lucide-react';
+import { KeyRound, LogOut, Menu } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
+import { ChangePasswordModal } from '@/components/ChangePasswordModal';
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -10,6 +11,7 @@ interface HeaderProps {
 export function Header({ onToggleSidebar }: HeaderProps) {
   const { user, logout } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [showPwd, setShowPwd] = useState(false);
 
   const initials = (user?.name ?? '')
     .split(' ')
@@ -50,6 +52,15 @@ export function Header({ onToggleSidebar }: HeaderProps) {
         <Button
           variant="ghost"
           size="sm"
+          onClick={() => setShowPwd(true)}
+          title="Cambiar contraseña"
+        >
+          <KeyRound className="h-4 w-4" />
+          <span className="hidden sm:inline">Contraseña</span>
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={handleLogout}
           disabled={loggingOut}
           title="Cerrar sesión"
@@ -58,6 +69,8 @@ export function Header({ onToggleSidebar }: HeaderProps) {
           <span className="hidden sm:inline">Salir</span>
         </Button>
       </div>
+
+      <ChangePasswordModal open={showPwd} onClose={() => setShowPwd(false)} />
     </header>
   );
 }

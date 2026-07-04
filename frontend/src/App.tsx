@@ -20,6 +20,7 @@ import { DocumentsPage } from '@/pages/documents/DocumentsPage';
 import { DecisionsPage } from '@/pages/decisions/DecisionsPage';
 import { AgentPage } from '@/pages/agent/AgentPage';
 import { UsersPage } from '@/pages/users/UsersPage';
+import { ChangePasswordPage } from '@/pages/ChangePasswordPage';
 
 // Secciones que aún son placeholders profesionales (Sprint 4+).
 const placeholders: { path: string; title: string; description: string }[] = [
@@ -33,6 +34,8 @@ export default function App() {
 
       {/* Rutas privadas */}
       <Route element={<ProtectedRoute />}>
+        {/* Pantalla de primer ingreso forzado (fuera del layout). */}
+        <Route path="/cambiar-clave" element={<ChangePasswordPage />} />
         <Route element={<AppLayout />}>
           {/* Compartidas: admin + colaborador */}
           <Route path="/proyectos" element={<ProjectsPage />} />
