@@ -149,11 +149,11 @@ export function TasksPage() {
         <div className="mt-3 flex justify-end gap-1">
           <Button
             size="sm"
-            variant={filters.ownerId ? 'primary' : 'outline'}
+            variant={filters.assigneeId ? 'primary' : 'outline'}
             onClick={() =>
               setFilters((f) => ({
                 ...f,
-                ownerId: f.ownerId ? undefined : user?.id,
+                assigneeId: f.assigneeId ? undefined : user?.id,
               }))
             }
             className="mr-auto"

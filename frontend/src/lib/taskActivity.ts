@@ -23,6 +23,10 @@ export function activityText(a: TaskActivity): string {
       return `quitó la etiqueta “${d.name ?? ''}”`;
     case 'MOVED_PROJECT':
       return 'movió la tarea de proyecto';
+    case 'ASSIGNEE_ADDED':
+      return `agregó a ${d.name ?? ''} como responsable`;
+    case 'ASSIGNEE_REMOVED':
+      return `quitó a ${d.name ?? ''} de responsables`;
     default:
       return 'actualizó la tarea';
   }

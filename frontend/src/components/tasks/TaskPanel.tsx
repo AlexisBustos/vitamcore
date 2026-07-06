@@ -1,5 +1,5 @@
 import { useTaskDetail, useSaveTask } from '@/hooks/useTasks';
-import { useAssignees } from '@/hooks/useAssignees';
+import { AssigneePicker } from './AssigneePicker';
 import { Drawer } from '@/components/ui/drawer';
 import { Field } from '@/components/ui/field';
 import { Select } from '@/components/ui/select';
@@ -18,7 +18,6 @@ function toDateInput(v: string | null | undefined) {
 export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose: () => void }) {
   const { data: task } = useTaskDetail(taskId);
   const save = useSaveTask();
-  const { data: assignees } = useAssignees();
   const open = !!taskId;
 
   function patch(data: Record<string, unknown>) {
@@ -63,15 +62,14 @@ export function TaskPanel({ taskId, onClose }: { taskId: string | null; onClose:
             <Field label="Prioridad">
               <Select options={priorityOptions} value={task.priority} onChange={(e) => patch({ priority: e.target.value })} />
             </Field>
-            <Field label="Responsable">
-              <Select
-                options={(assignees ?? []).map((u) => ({ value: u.id, label: u.name }))}
-                placeholder="Sin asignar"
-                value={task.ownerId ?? ''}
-                onChange={(e) => patch({ ownerId: e.target.value || null })}
-              />
-            </Field>
-            <div />
+            <div className="col-span-2">
+              <Field label="Responsables">
+                <AssigneePicker
+                  selected={(task.assignees ?? []).map((a) => a.user.id)}
+                  onChange={(ids) => patch({ assigneeIds: ids })}
+                />
+              </Field>
+            </div>
             <Field label="Inicio">
               <Input type="date" defaultValue={toDateInput(task.startDate)} onChange={(e) => patch({ startDate: e.target.value || null })} />
             </Field>

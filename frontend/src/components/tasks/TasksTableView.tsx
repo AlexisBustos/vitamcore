@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PriorityBadge, TaskStatusBadge } from '@/components/badges';
 import { LabelChips } from './LabelChips';
+import { AssigneeAvatars } from './AssigneeAvatars';
 import { formatDate, isOverdue } from '@/lib/domain';
 import { cn } from '@/lib/utils';
 import type { Task } from '@/types/domain';
@@ -65,7 +66,11 @@ export function TasksTableView({
                     </td>
                   )}
                   <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
-                    {task.owner?.name ?? '—'}
+                    {task.assignees.length > 0 ? (
+                      <AssigneeAvatars users={task.assignees.map((a) => a.user)} />
+                    ) : (
+                      '—'
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <TaskStatusBadge value={task.status} />

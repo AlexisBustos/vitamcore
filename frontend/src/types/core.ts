@@ -119,8 +119,6 @@ export interface Task {
   priority: Priority;
   dueDate: string | null;
   startDate: string | null;
-  ownerId: string | null;
-  owner: Ref | null;
   source: TaskSource;
   notes: string | null;
   createdAt: string;
@@ -129,6 +127,7 @@ export interface Task {
   businessUnit?: Ref | null;
   project?: Ref | null;
   labels?: TaskLabel[];
+  assignees: { user: Ref }[];
   checklistItems?: { done: boolean }[];
 }
 
@@ -140,7 +139,9 @@ export type TaskActivityType =
   | 'START_DATE_CHANGED'
   | 'LABEL_ADDED'
   | 'LABEL_REMOVED'
-  | 'MOVED_PROJECT';
+  | 'MOVED_PROJECT'
+  | 'ASSIGNEE_ADDED'
+  | 'ASSIGNEE_REMOVED';
 
 export interface TaskComment {
   id: string;

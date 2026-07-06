@@ -14,7 +14,7 @@ import { getErrorMessage } from '@/lib/errors';
 import { useOrganizations } from '@/hooks/useOrganizations';
 import { useBusinessUnits } from '@/hooks/useBusinessUnits';
 import { useProjects } from '@/hooks/useProjects';
-import { useAssignees } from '@/hooks/useAssignees';
+import { AssigneePicker } from '@/components/tasks/AssigneePicker';
 import { useSaveTask } from '@/hooks/useTasks';
 import type { Task } from '@/types/domain';
 
@@ -45,7 +45,6 @@ export function TaskForm({
   const editing = !!task;
   const save = useSaveTask();
   const { data: organizations } = useOrganizations();
-  const { data: assignees } = useAssignees();
   const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
@@ -57,7 +56,7 @@ export function TaskForm({
     status: task?.status ?? defaultStatus ?? 'TODO',
     priority: task?.priority ?? 'MEDIUM',
     source: task?.source ?? 'MANUAL',
-    ownerId: task?.ownerId ?? '',
+    assigneeIds: task?.assignees?.map((a) => a.user.id) ?? [],
     startDate: toDateInput(task?.startDate),
     dueDate: toDateInput(task?.dueDate),
   });
@@ -80,11 +79,6 @@ export function TaskForm({
     () => (projects ?? []).map((p) => ({ value: p.id, label: p.name })),
     [projects],
   );
-  const assigneeOptions = useMemo(
-    () => (assignees ?? []).map((u) => ({ value: u.id, label: u.name })),
-    [assignees],
-  );
-
   function set<K extends keyof typeof form>(key: K, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
   }
@@ -100,7 +94,7 @@ export function TaskForm({
       status: form.status,
       priority: form.priority,
       source: form.source,
-      ownerId: form.ownerId || null,
+      assigneeIds: form.assigneeIds,
       startDate: form.startDate || null,
       dueDate: form.dueDate || null,
     };
@@ -210,12 +204,10 @@ export function TaskForm({
           </Field>
         </div>
 
-        <Field label="Responsable">
-          <Select
-            options={assigneeOptions}
-            placeholder="Sin asignar"
-            value={form.ownerId}
-            onChange={(e) => set('ownerId', e.target.value)}
+        <Field label="Responsables">
+          <AssigneePicker
+            selected={form.assigneeIds}
+            onChange={(ids) => setForm((f) => ({ ...f, assigneeIds: ids }))}
           />
         </Field>
         <Field label="Descripción">

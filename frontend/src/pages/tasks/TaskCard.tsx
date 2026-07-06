@@ -2,6 +2,7 @@ import { CheckSquare, Pencil, Trash2 } from 'lucide-react';
 import { PriorityBadge } from '@/components/badges';
 import { Button } from '@/components/ui/button';
 import { LabelChips } from '@/components/tasks/LabelChips';
+import { AssigneeAvatars } from '@/components/tasks/AssigneeAvatars';
 import { checklistProgress } from '@/components/tasks/checklistProgress';
 import { formatDate, isOverdue } from '@/lib/domain';
 import { cn } from '@/lib/utils';
@@ -12,17 +13,6 @@ interface Props {
   onOpen: (task: Task) => void;
   onEdit: (task: Task) => void;
   onDelete: (task: Task) => void;
-}
-
-// Iniciales del responsable (máx. 2) para el avatar.
-function initials(name?: string | null): string {
-  if (!name) return '';
-  return name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? '')
-    .join('');
 }
 
 export function TaskCard({ task, onOpen, onEdit, onDelete }: Props) {
@@ -93,14 +83,7 @@ export function TaskCard({ task, onOpen, onEdit, onDelete }: Props) {
           >
             {formatDate(task.dueDate)}
           </span>
-          {task.owner?.name && (
-            <span
-              title={task.owner.name}
-              className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--color-muted)] text-[10px] font-semibold text-[var(--color-foreground)]"
-            >
-              {initials(task.owner.name)}
-            </span>
-          )}
+          <AssigneeAvatars users={task.assignees.map((a) => a.user)} />
         </div>
       </div>
     </div>
