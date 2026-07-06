@@ -141,7 +141,6 @@ export async function convertProposedTask(id: string) {
     priority: proposed.priority,
     dueDate: proposed.dueDate,
     source: 'AI',
-    ownerId: null,
     notes: proposed.rationale ? `Propuesta por IA: ${proposed.rationale}` : null,
   });
 

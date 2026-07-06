@@ -5,7 +5,6 @@ export type ActivityEvent = { type: TaskActivityType; data?: Prisma.InputJsonVal
 
 type ScalarState = {
   status: TaskStatus;
-  ownerId: string | null;
   projectId: string | null;
   dueDate: Date | null;
   startDate: Date | null;
@@ -24,9 +23,6 @@ export function diffScalarEvents(prev: ScalarState, input: Partial<ScalarState>)
   const events: ActivityEvent[] = [];
   if ('status' in input && input.status !== undefined && input.status !== prev.status) {
     events.push({ type: TaskActivityType.STATUS_CHANGED, data: { from: prev.status, to: input.status } });
-  }
-  if ('ownerId' in input && (input.ownerId ?? null) !== prev.ownerId) {
-    events.push({ type: TaskActivityType.ASSIGNED, data: {} });
   }
   if ('projectId' in input && (input.projectId ?? null) !== prev.projectId) {
     events.push({ type: TaskActivityType.MOVED_PROJECT, data: {} });

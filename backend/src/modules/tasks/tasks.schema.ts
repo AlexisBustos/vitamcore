@@ -30,7 +30,7 @@ export const createTaskSchema = z.object({
   dueDate: dateInput,
   startDate: dateInput,
   labelIds: z.array(z.string().min(1)).optional(),
-  ownerId: z.string().min(1).optional().nullable(),
+  assigneeIds: z.array(z.string().min(1)).optional(),
   source: taskSourceEnum.default('MANUAL'),
   notes: optionalText,
 });
@@ -44,7 +44,7 @@ export const updateTaskSchema = createTaskSchema
 
 export const listTasksQuery = z.object({
   organizationId: z.string().optional(),
-  ownerId: z.string().optional(),
+  assigneeId: z.string().optional(),
   search: z.string().trim().min(1).optional(),
   businessUnitId: z.string().optional(),
   projectId: z.string().optional(),

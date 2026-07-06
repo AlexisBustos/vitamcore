@@ -7,7 +7,6 @@ import { prisma } from '../src/lib/prisma';
 
 const base = {
   status: 'TODO' as const,
-  ownerId: null as string | null,
   projectId: null as string | null,
   dueDate: null as Date | null,
   startDate: null as Date | null,
@@ -21,11 +20,6 @@ describe('diffScalarEvents', () => {
   test('cambio de estado => STATUS_CHANGED con from/to', () => {
     const events = diffScalarEvents(base, { status: 'DOING' });
     expect(events).toEqual([{ type: 'STATUS_CHANGED', data: { from: 'TODO', to: 'DOING' } }]);
-  });
-
-  test('reasignar => ASSIGNED', () => {
-    const events = diffScalarEvents(base, { ownerId: 'u1' });
-    expect(events.map((e) => e.type)).toEqual(['ASSIGNED']);
   });
 
   test('mismo valor enviado no genera evento', () => {

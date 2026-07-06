@@ -88,6 +88,23 @@ export async function assertAssignableUser(ownerId?: string | null) {
 }
 
 /**
+ * Verifica que todos los usuarios responsables existan (si vienen ids).
+ * Como assertAssignableUser, solo comprueba existencia (no isActive): la
+ * restricción de "solo activos" vive en el endpoint /assignees.
+ * Asume ids únicos (el llamador deduplica antes de invocar).
+ */
+export async function assertAssignableUsers(userIds: string[]) {
+  if (userIds.length === 0) return;
+  const found = await prisma.user.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true },
+  });
+  if (found.length !== userIds.length) {
+    throw badRequest('Algún responsable indicado no existe');
+  }
+}
+
+/**
  * Verifica que todas las etiquetas existan y pertenezcan a la empresa indicada.
  * Evita asignar a una tarea etiquetas de otra empresa.
  */

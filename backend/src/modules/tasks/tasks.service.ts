@@ -5,7 +5,7 @@ import { Prisma, TaskActivityType } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { notFound } from '../../utils/http-error';
 import {
-  assertAssignableUser,
+  assertAssignableUsers,
   assertBusinessUnitInOrganization,
   assertLabelsInOrganization,
   assertOrganization,
@@ -31,12 +31,15 @@ const OPEN_STATUSES: Prisma.TaskWhereInput['status'] = {
 export async function list(filters: ListTasksFilters) {
   const where: Prisma.TaskWhereInput = {
     organizationId: filters.organizationId,
-    ownerId: filters.ownerId,
     businessUnitId: filters.businessUnitId,
     projectId: filters.projectId,
     status: filters.status,
     priority: filters.priority,
   };
+
+  if (filters.assigneeId) {
+    where.assignees = { some: { userId: filters.assigneeId } };
+  }
 
   if (filters.overdue) {
     where.dueDate = { lt: new Date() };
@@ -57,7 +60,7 @@ export async function list(filters: ListTasksFilters) {
       organization: { select: { id: true, name: true } },
       businessUnit: { select: { id: true, name: true } },
       project: { select: { id: true, name: true } },
-      owner: { select: { id: true, name: true } },
+      assignees: { include: { user: { select: { id: true, name: true } } } },
       labels: { include: { label: true } },
       checklistItems: { select: { done: true } },
     },
@@ -71,7 +74,7 @@ export async function getById(id: string) {
       organization: { select: { id: true, name: true } },
       businessUnit: { select: { id: true, name: true } },
       project: { select: { id: true, name: true } },
-      owner: { select: { id: true, name: true } },
+      assignees: { include: { user: { select: { id: true, name: true } } } },
       labels: { include: { label: true } },
       checklistItems: { orderBy: { position: 'asc' } },
       comments: {
@@ -91,8 +94,9 @@ export async function getById(id: string) {
 export async function create(input: CreateTaskInput, actorId?: string | null) {
   await assertOrganization(input.organizationId);
   await assertRelations(input.organizationId, input.businessUnitId, input.projectId);
-  await assertAssignableUser(input.ownerId);
-  const { labelIds, ...data } = input;
+  const assigneeIds = [...new Set(input.assigneeIds ?? [])];
+  await assertAssignableUsers(assigneeIds);
+  const { labelIds, assigneeIds: _ignore, ...data } = input;
   if (labelIds?.length) {
     await assertLabelsInOrganization(labelIds, input.organizationId);
   }
@@ -103,6 +107,11 @@ export async function create(input: CreateTaskInput, actorId?: string | null) {
     if (labelIds?.length) {
       await tx.taskLabel.createMany({
         data: labelIds.map((labelId) => ({ taskId: task.id, labelId })),
+      });
+    }
+    if (assigneeIds.length) {
+      await tx.taskAssignee.createMany({
+        data: assigneeIds.map((userId) => ({ taskId: task.id, userId })),
       });
     }
     await recordActivity(tx, task.id, actorId, [
@@ -125,10 +134,10 @@ export async function update(
       organizationId: true,
       projectId: true,
       status: true,
-      ownerId: true,
       dueDate: true,
       startDate: true,
       labels: { select: { labelId: true } },
+      assignees: { select: { userId: true } },
     },
   });
   if (!current) throw notFound('Tarea no encontrada');
@@ -138,8 +147,11 @@ export async function update(
     input.businessUnitId,
     input.projectId,
   );
-  await assertAssignableUser(input.ownerId);
-  const { labelIds, ...data } = input;
+  const assigneeIds = input.assigneeIds
+    ? [...new Set(input.assigneeIds)]
+    : undefined;
+  if (assigneeIds) await assertAssignableUsers(assigneeIds);
+  const { labelIds, assigneeIds: _ignore, ...data } = input;
   if (labelIds) {
     await assertLabelsInOrganization(labelIds, current.organizationId);
   }
@@ -155,11 +167,20 @@ export async function update(
         });
       }
     }
+    // assigneeIds (si viene) reemplaza el set completo de responsables.
+    if (assigneeIds) {
+      await tx.taskAssignee.deleteMany({ where: { taskId: id } });
+      if (assigneeIds.length) {
+        await tx.taskAssignee.createMany({
+          data: assigneeIds.map((userId) => ({ taskId: id, userId })),
+        });
+      }
+    }
     await recordActivity(
       tx,
       id,
       actorId,
-      await buildUpdateEvents(tx, current, input, labelIds),
+      await buildUpdateEvents(tx, current, input, labelIds, assigneeIds),
     );
     // Si la tarea se movió de proyecto, hay que recalcular ambos.
     const affected = new Set<string>();
@@ -178,44 +199,76 @@ async function buildUpdateEvents(
   tx: Prisma.TransactionClient,
   prev: {
     status: Prisma.TaskGetPayload<object>['status'];
-    ownerId: string | null;
     projectId: string | null;
     dueDate: Date | null;
     startDate: Date | null;
     labels: { labelId: string }[];
+    assignees: { userId: string }[];
   },
   input: UpdateTaskInput,
   labelIds: string[] | undefined,
+  assigneeIds: string[] | undefined,
 ): Promise<ActivityEvent[]> {
   const events = diffScalarEvents(prev, input);
-  if (!labelIds) return events;
 
-  const before = new Set(prev.labels.map((l) => l.labelId));
-  const after = new Set(labelIds);
-  const added = labelIds.filter((l) => !before.has(l));
-  const removed = [...before].filter((l) => !after.has(l));
-  if (added.length === 0 && removed.length === 0) return events;
+  if (labelIds) {
+    const before = new Set(prev.labels.map((l) => l.labelId));
+    const after = new Set(labelIds);
+    const added = labelIds.filter((l) => !before.has(l));
+    const removed = [...before].filter((l) => !after.has(l));
+    if (added.length || removed.length) {
+      const names = new Map(
+        (
+          await tx.label.findMany({
+            where: { id: { in: [...added, ...removed] } },
+            select: { id: true, name: true },
+          })
+        ).map((l) => [l.id, l.name]),
+      );
+      for (const labelId of added) {
+        events.push({
+          type: TaskActivityType.LABEL_ADDED,
+          data: { labelId, name: names.get(labelId) ?? null },
+        });
+      }
+      for (const labelId of removed) {
+        events.push({
+          type: TaskActivityType.LABEL_REMOVED,
+          data: { labelId, name: names.get(labelId) ?? null },
+        });
+      }
+    }
+  }
 
-  const names = new Map(
-    (
-      await tx.label.findMany({
-        where: { id: { in: [...added, ...removed] } },
-        select: { id: true, name: true },
-      })
-    ).map((l) => [l.id, l.name]),
-  );
-  for (const labelId of added) {
-    events.push({
-      type: TaskActivityType.LABEL_ADDED,
-      data: { labelId, name: names.get(labelId) ?? null },
-    });
+  if (assigneeIds) {
+    const before = new Set(prev.assignees.map((a) => a.userId));
+    const after = new Set(assigneeIds);
+    const added = assigneeIds.filter((u) => !before.has(u));
+    const removed = [...before].filter((u) => !after.has(u));
+    if (added.length || removed.length) {
+      const names = new Map(
+        (
+          await tx.user.findMany({
+            where: { id: { in: [...added, ...removed] } },
+            select: { id: true, name: true },
+          })
+        ).map((u) => [u.id, u.name]),
+      );
+      for (const userId of added) {
+        events.push({
+          type: TaskActivityType.ASSIGNEE_ADDED,
+          data: { userId, name: names.get(userId) ?? null },
+        });
+      }
+      for (const userId of removed) {
+        events.push({
+          type: TaskActivityType.ASSIGNEE_REMOVED,
+          data: { userId, name: names.get(userId) ?? null },
+        });
+      }
+    }
   }
-  for (const labelId of removed) {
-    events.push({
-      type: TaskActivityType.LABEL_REMOVED,
-      data: { labelId, name: names.get(labelId) ?? null },
-    });
-  }
+
   return events;
 }
 
