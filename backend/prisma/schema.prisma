@@ -271,7 +271,7 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  ownedTasks    Task[]    @relation("TaskOwner")
+  assignedTasks TaskAssignee[] @relation("TaskAssignee")
   ownedProjects Project[] @relation("ProjectOwner")
   taskComments  TaskComment[]  @relation("CommentAuthor")
   taskActivity  TaskActivity[] @relation("ActivityActor")
@@ -396,7 +396,6 @@ model Task {
   priority       Priority   @default(MEDIUM)
   dueDate        DateTime?
   startDate      DateTime?
-  ownerId        String?
   source         TaskSource @default(MANUAL)
   notes          String?
   createdAt      DateTime   @default(now())
@@ -405,8 +404,8 @@ model Task {
   organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
   project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  owner        User?         @relation("TaskOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   labels       TaskLabel[]
+  assignees      TaskAssignee[]
   checklistItems ChecklistItem[]
   comments       TaskComment[]
   activity       TaskActivity[]
@@ -415,8 +414,20 @@ model Task {
   @@index([projectId])
   @@index([status])
   @@index([dueDate])
-  @@index([ownerId])
   @@map("tasks")
+}
+
+/// Responsable de una tarea. Relación N–N entre Task y User (set plano).
+model TaskAssignee {
+  taskId String
+  userId String
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation("TaskAssignee", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@index([userId])
+  @@map("task_assignees")
 }
 
 /// Etiqueta reutilizable de tareas, por empresa.
@@ -474,6 +485,8 @@ enum TaskActivityType {
   LABEL_ADDED
   LABEL_REMOVED
   MOVED_PROJECT
+  ASSIGNEE_ADDED
+  ASSIGNEE_REMOVED
 }
 
 /// Comentario manual de un usuario sobre una tarea.
