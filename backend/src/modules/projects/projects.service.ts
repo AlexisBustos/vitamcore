@@ -69,7 +69,12 @@ export async function getById(id: string) {
       organization: { select: { id: true, name: true } },
       businessUnit: { select: { id: true, name: true } },
       owner: { select: { id: true, name: true } },
-      tasks: { orderBy: [{ status: 'asc' }, { dueDate: 'asc' }] },
+      tasks: {
+        orderBy: [{ status: 'asc' }, { dueDate: 'asc' }],
+        include: {
+          assignees: { include: { user: { select: { id: true, name: true } } } },
+        },
+      },
     },
   });
   if (!project) throw notFound('Proyecto no encontrado');
