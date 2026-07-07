@@ -204,12 +204,8 @@ export function LedgerTab<T extends IncomeRecord | ExpenseRecord>({
           if (reconciling) registrar.mutate({ id: reconciling.id, bankTransactionId });
           setReconciling(null);
         }}
-        onPayManual={() => {
-          if (reconciling)
-            registrar.mutate({
-              id: reconciling.id,
-              paidDate: new Date().toLocaleDateString('en-CA'),
-            });
+        onPayManual={(paidDate) => {
+          if (reconciling) registrar.mutate({ id: reconciling.id, paidDate });
           setReconciling(null);
         }}
       />

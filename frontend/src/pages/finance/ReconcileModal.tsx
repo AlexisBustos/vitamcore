@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,9 +29,15 @@ export function ReconcileModal({
   record: ReconcileRecord | null;
   pending: boolean;
   onReconcile: (bankTransactionId: string) => void;
-  onPayManual: () => void;
+  onPayManual: (paidDate: string) => void;
 }) {
   const [search, setSearch] = useState('');
+  // Fecha de pago para el marcado manual; por defecto hoy (formato YYYY-MM-DD),
+  // se reinicia cada vez que se abre el modal.
+  const [paidDate, setPaidDate] = useState(() => new Date().toLocaleDateString('en-CA'));
+  useEffect(() => {
+    if (open) setPaidDate(new Date().toLocaleDateString('en-CA'));
+  }, [open]);
   const candidates = useReconciliationCandidates(
     { recordType, recordId: record?.id ?? '', search: search || undefined },
     open && !!record,
@@ -94,8 +100,23 @@ export function ReconcileModal({
           </ul>
         )}
 
-        <div className="flex justify-end border-t border-[var(--color-border)] pt-3">
-          <Button variant="outline" onClick={onPayManual} disabled={pending}>
+        <div className="flex flex-wrap items-end justify-end gap-3 border-t border-[var(--color-border)] pt-3">
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-[var(--color-muted-foreground)]">
+              Fecha de pago
+            </label>
+            <Input
+              type="date"
+              value={paidDate}
+              onChange={(e) => setPaidDate(e.target.value)}
+              className="w-44"
+            />
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => onPayManual(paidDate)}
+            disabled={pending || !paidDate}
+          >
             Marcar pagada sin movimiento
           </Button>
         </div>
