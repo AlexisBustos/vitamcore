@@ -47,6 +47,8 @@ export const listExpenseQuery = z.object({
   status: expenseStatusEnum.optional(),
   isRecurring: z.enum(['true', 'false']).optional(),
   paymentState: z.enum(['payable', 'overdue', 'paid', 'cancelled']).optional(),
+  // Búsqueda libre por nombre de proveedor, folio o RUT del documento.
+  search: z.string().trim().min(1).optional(),
   month: z
     .string()
     .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Formato de mes inválido (YYYY-MM)')
@@ -62,3 +64,12 @@ export const registerPaymentSchema = z.object({
   bankTransactionId: z.string().optional().nullable(),
 });
 export type RegisterPaymentInput = z.infer<typeof registerPaymentSchema>;
+
+// Pago/conciliación en lote: N gastos contra un movimiento, o marcado/reversión
+// masiva con fecha. Misma semántica que registerPaymentSchema pero con varios ids.
+export const bulkRegisterPaymentSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1, 'Debes seleccionar al menos un gasto'),
+  paidDate: dateInput,
+  bankTransactionId: z.string().optional().nullable(),
+});
+export type BulkRegisterPaymentInput = z.infer<typeof bulkRegisterPaymentSchema>;

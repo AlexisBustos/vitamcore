@@ -66,3 +66,25 @@ export function useRegisterExpensePayment() {
     },
   });
 }
+
+// Conciliación/pago en lote: N gastos contra un movimiento (bankTransactionId),
+// marcado con fecha (paidDate) o reversión (ambos null).
+export function useBulkRegisterExpensePayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: {
+      ids: string[];
+      paidDate?: string | null;
+      bankTransactionId?: string | null;
+    }) =>
+      api.post('/expenses/payments/bulk', {
+        ids: payload.ids,
+        paidDate: payload.paidDate ?? null,
+        bankTransactionId: payload.bankTransactionId ?? null,
+      }),
+    onSuccess: () => {
+      invalidateFinance(qc);
+      qc.invalidateQueries({ queryKey: ['finance-imports'] });
+    },
+  });
+}

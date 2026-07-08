@@ -14,7 +14,14 @@ import type {
 import { invalidateFinance } from './finance-shared';
 
 export function useReconciliationCandidates(
-  filters: { recordType: 'income' | 'expense'; recordId: string; search?: string },
+  filters: {
+    recordType: 'income' | 'expense';
+    recordId?: string;
+    // Modo por monto: conciliar varias facturas contra la suma seleccionada.
+    organizationId?: string;
+    amount?: number;
+    search?: string;
+  },
   enabled: boolean,
 ) {
   return useQuery({
@@ -23,7 +30,13 @@ export function useReconciliationCandidates(
     queryFn: () =>
       api
         .get<{ data: ReconciliationCandidate[] }>(
-          `/finance/imports/reconciliation/candidates${toQuery(filters)}`,
+          `/finance/imports/reconciliation/candidates${toQuery({
+            recordType: filters.recordType,
+            recordId: filters.recordId,
+            organizationId: filters.organizationId,
+            amount: filters.amount != null ? String(filters.amount) : undefined,
+            search: filters.search,
+          })}`,
         )
         .then((r) => r.data),
   });

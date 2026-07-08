@@ -1,7 +1,12 @@
 // Wrapper delgado de LedgerTab para el libro de cuentas por cobrar (ingresos).
 import { Receipt } from 'lucide-react';
 import { LedgerTab, type LedgerTabConfig } from '@/components/finance/LedgerTab';
-import { useIncome, useIncomeMonths, useRegisterPayment } from '@/hooks/useFinance';
+import {
+  useIncome,
+  useIncomeMonths,
+  useRegisterPayment,
+  useBulkRegisterPayment,
+} from '@/hooks/useFinance';
 import type { IncomeRecord } from '@/types/domain';
 
 const config: LedgerTabConfig<IncomeRecord> = {
@@ -17,6 +22,7 @@ const config: LedgerTabConfig<IncomeRecord> = {
   listHook: useIncome,
   monthsHook: useIncomeMonths,
   registerHook: useRegisterPayment,
+  bulkRegisterHook: useBulkRegisterPayment,
   rowTotal: (r) => r.netAmount ?? r.amount,
   issueDate: (r) => r.incomeDate,
   partyName: (r) => r.clientName ?? '—',

@@ -78,11 +78,20 @@ export const bulkCategorySchema = z.object({
 
 export type BulkCategoryInput = z.infer<typeof bulkCategorySchema>;
 
-export const reconciliationCandidatesQuery = z.object({
-  recordType: z.enum(['income', 'expense']),
-  recordId: z.string().min(1),
-  search: z.string().trim().optional(),
-});
+// Candidatos: por una factura concreta (recordId) o por un monto objetivo
+// (organizationId + amount) cuando se concilian varias facturas contra un solo
+// movimiento (la suma de lo seleccionado).
+export const reconciliationCandidatesQuery = z
+  .object({
+    recordType: z.enum(['income', 'expense']),
+    recordId: z.string().min(1).optional(),
+    organizationId: z.string().min(1).optional(),
+    amount: z.coerce.number().int().nonnegative().optional(),
+    search: z.string().trim().optional(),
+  })
+  .refine((d) => !!d.recordId || (!!d.organizationId && d.amount !== undefined), {
+    message: 'Se requiere recordId, o bien organizationId + amount',
+  });
 export type ReconciliationCandidatesFilters = z.infer<typeof reconciliationCandidatesQuery>;
 
 export type CreateBankAccountInput = z.infer<typeof createBankAccountSchema>;

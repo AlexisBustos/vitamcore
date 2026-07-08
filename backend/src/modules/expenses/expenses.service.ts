@@ -13,6 +13,7 @@ import {
   PAYABLE_EXPENSE_STATUSES,
 } from '../shared/ledger';
 import type {
+  BulkRegisterPaymentInput,
   CreateExpenseInput,
   ListExpenseFilters,
   RegisterPaymentInput,
@@ -50,6 +51,23 @@ export async function list(filters: ListExpenseFilters) {
   }
 
   if (filters.month) where.expenseDate = monthRange(filters.month);
+
+  // Búsqueda por nombre/folio/RUT, combinada con AND para no pisar un eventual
+  // where.OR (mismo patrón que income; hoy expenses no fija OR, pero queda seguro).
+  if (filters.search) {
+    const s = filters.search;
+    where.AND = [
+      ...(where.OR ? [{ OR: where.OR }] : []),
+      {
+        OR: [
+          { vendorName: { contains: s, mode: 'insensitive' } },
+          { sourceFolio: { contains: s, mode: 'insensitive' } },
+          { sourceRut: { contains: s, mode: 'insensitive' } },
+        ],
+      },
+    ];
+    delete where.OR;
+  }
 
   return prisma.expenseRecord.findMany({
     where,
@@ -152,6 +170,61 @@ export async function registerPayment(id: string, input: RegisterPaymentInput) {
       paidByBankTransactionId: null,
     },
   });
+}
+
+// Conciliación/pago en lote. Reusa las mismas guardas y semántica que
+// registerPayment, pero para varios gastos en una sola escritura atómica
+// (updateMany). Con bankTransactionId concilia N gastos ↔ 1 movimiento; con
+// paidDate marca pagados; con ambos en null revierte/desconcilia.
+export async function bulkRegisterPayment(input: BulkRegisterPaymentInput) {
+  const { ids, bankTransactionId, paidDate: inputPaidDate } = input;
+  const recs = await prisma.expenseRecord.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, organizationId: true, status: true },
+  });
+  if (recs.length !== ids.length) throw notFound('Algún gasto no fue encontrado');
+
+  const orgIds = new Set(recs.map((r) => r.organizationId));
+  if (orgIds.size > 1) {
+    throw badRequest('Los gastos seleccionados deben ser de la misma empresa');
+  }
+  for (const r of recs) {
+    if (r.status === 'CANCELLED') {
+      throw badRequest('La selección incluye un gasto anulado, que no se paga');
+    }
+  }
+
+  if (bankTransactionId) {
+    const mov = await prisma.bankTransaction.findUnique({
+      where: { id: bankTransactionId },
+      select: { id: true, organizationId: true, chargeAmount: true, transactionDate: true },
+    });
+    if (!mov) throw notFound('Movimiento no encontrado');
+    if (mov.organizationId !== recs[0].organizationId) {
+      throw badRequest('El movimiento no pertenece a la empresa de los gastos');
+    }
+    if (mov.chargeAmount <= 0) throw badRequest('El movimiento no es un cargo');
+    await prisma.expenseRecord.updateMany({
+      where: { id: { in: ids } },
+      data: {
+        paidByBankTransactionId: mov.id,
+        paidDate: mov.transactionDate,
+        status: 'PAID',
+      },
+    });
+    return { count: ids.length };
+  }
+
+  const paidDate = inputPaidDate ?? null;
+  await prisma.expenseRecord.updateMany({
+    where: { id: { in: ids } },
+    data: {
+      paidDate,
+      status: paidDate ? 'PAID' : 'PENDING',
+      paidByBankTransactionId: null,
+    },
+  });
+  return { count: ids.length };
 }
 
 /// Meses (YYYY-MM) que tienen gastos, ordenados descendente. Alimenta el filtro por mes.

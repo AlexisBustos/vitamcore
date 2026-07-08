@@ -7,6 +7,7 @@ import {
   makeImportBatch,
   makeBankTransaction,
 } from './fixtures';
+import { prisma } from '../src/lib/prisma';
 import * as expenses from '../src/modules/expenses/expenses.service';
 
 beforeEach(resetDb);
@@ -189,6 +190,121 @@ describe('expenses.registerPayment', () => {
     await expect(
       expenses.registerPayment(rec.id, { bankTransactionId: mov.id } as never),
     ).rejects.toThrow('El movimiento no es un cargo');
+  });
+});
+
+describe('expenses.list — search', () => {
+  test('encuentra por vendorName (insensible a mayúsculas)', async () => {
+    const org = await makeOrg();
+    await makeExpense(org.id, { vendorName: 'Ferretería El Roble' });
+    await makeExpense(org.id, { vendorName: 'Otro Proveedor' });
+    const res = await expenses.list({ organizationId: org.id, search: 'roble' } as never);
+    expect(res).toHaveLength(1);
+    expect(res[0].vendorName).toBe('Ferretería El Roble');
+  });
+
+  test('encuentra por folio y por RUT', async () => {
+    const org = await makeOrg();
+    await makeExpense(org.id, { vendorName: 'A', sourceFolio: '99887' });
+    await makeExpense(org.id, { vendorName: 'B', sourceRut: '77.222.333-4' });
+    expect(await expenses.list({ organizationId: org.id, search: '99887' } as never)).toHaveLength(1);
+    expect(await expenses.list({ organizationId: org.id, search: '77.222' } as never)).toHaveLength(1);
+  });
+
+  test('compone search con paymentState payable', async () => {
+    const org = await makeOrg();
+    await makeExpense(org.id, { vendorName: 'Proveedor X', status: 'PENDING', paidDate: null });
+    await makeExpense(org.id, { vendorName: 'Proveedor X', status: 'PAID', paidDate: new Date('2026-07-02') });
+    await makeExpense(org.id, { vendorName: 'Proveedor Y', status: 'PENDING', paidDate: null });
+    const res = await expenses.list({
+      organizationId: org.id,
+      paymentState: 'payable',
+      search: 'proveedor x',
+    } as never);
+    expect(res).toHaveLength(1);
+    expect(res[0].status).toBe('PENDING');
+  });
+});
+
+describe('expenses.bulkRegisterPayment', () => {
+  async function movimiento(orgId: string, overrides: Record<string, unknown>) {
+    const account = await makeBankAccount(orgId);
+    const batch = await makeImportBatch(orgId);
+    return makeBankTransaction(
+      { organizationId: orgId, bankAccountId: account.id, importBatchId: batch.id },
+      overrides,
+    );
+  }
+
+  test('concilia varios gastos contra un movimiento (misma fecha del movimiento)', async () => {
+    const org = await makeOrg();
+    const g1 = await makeExpense(org.id, { status: 'PENDING', amount: 30000, paidDate: null });
+    const g2 = await makeExpense(org.id, { status: 'PENDING', amount: 20000, paidDate: null });
+    const transactionDate = new Date('2026-07-05');
+    const mov = await movimiento(org.id, { chargeAmount: 50000, transactionDate });
+    const res = await expenses.bulkRegisterPayment({ ids: [g1.id, g2.id], bankTransactionId: mov.id } as never);
+    expect(res.count).toBe(2);
+    const rows = await prisma.expenseRecord.findMany({ where: { id: { in: [g1.id, g2.id] } } });
+    expect(rows.every((r) => r.status === 'PAID')).toBe(true);
+    expect(rows.every((r) => r.paidByBankTransactionId === mov.id)).toBe(true);
+    expect(rows.every((r) => r.paidDate?.toISOString() === transactionDate.toISOString())).toBe(true);
+  });
+
+  test('marca varios como pagados con fecha manual', async () => {
+    const org = await makeOrg();
+    const g1 = await makeExpense(org.id, { status: 'PENDING', paidDate: null });
+    const g2 = await makeExpense(org.id, { status: 'PENDING', paidDate: null });
+    const paidDate = new Date('2026-07-11');
+    const res = await expenses.bulkRegisterPayment({ ids: [g1.id, g2.id], paidDate } as never);
+    expect(res.count).toBe(2);
+    const rows = await prisma.expenseRecord.findMany({ where: { id: { in: [g1.id, g2.id] } } });
+    expect(rows.every((r) => r.status === 'PAID' && r.paidDate?.toISOString() === paidDate.toISOString())).toBe(true);
+  });
+
+  test('revierte varios (paidDate y bankTransactionId null → PENDING)', async () => {
+    const org = await makeOrg();
+    const g1 = await makeExpense(org.id, { status: 'PAID', paidDate: new Date('2026-07-01') });
+    const g2 = await makeExpense(org.id, { status: 'PAID', paidDate: new Date('2026-07-01') });
+    const res = await expenses.bulkRegisterPayment({ ids: [g1.id, g2.id], paidDate: null, bankTransactionId: null } as never);
+    expect(res.count).toBe(2);
+    const rows = await prisma.expenseRecord.findMany({ where: { id: { in: [g1.id, g2.id] } } });
+    expect(rows.every((r) => r.status === 'PENDING' && r.paidDate === null && r.paidByBankTransactionId === null)).toBe(true);
+  });
+
+  test('rechaza si los gastos son de distinta empresa', async () => {
+    const org = await makeOrg();
+    const otra = await makeOrg('Otra Empresa');
+    const g1 = await makeExpense(org.id, { status: 'PENDING', paidDate: null });
+    const g2 = await makeExpense(otra.id, { status: 'PENDING', paidDate: null });
+    await expect(
+      expenses.bulkRegisterPayment({ ids: [g1.id, g2.id], paidDate: new Date('2026-07-11') } as never),
+    ).rejects.toThrow('misma empresa');
+  });
+
+  test('rechaza si la selección incluye un gasto anulado', async () => {
+    const org = await makeOrg();
+    const g1 = await makeExpense(org.id, { status: 'PENDING', paidDate: null });
+    const anulado = await makeExpense(org.id, { status: 'CANCELLED', paidDate: null });
+    await expect(
+      expenses.bulkRegisterPayment({ ids: [g1.id, anulado.id], paidDate: new Date('2026-07-11') } as never),
+    ).rejects.toThrow('anulado');
+  });
+
+  test('rama bancaria: rechaza un movimiento que no es un cargo', async () => {
+    const org = await makeOrg();
+    const g1 = await makeExpense(org.id, { status: 'PENDING', paidDate: null });
+    const mov = await movimiento(org.id, { chargeAmount: 0, creditAmount: 50000 });
+    await expect(
+      expenses.bulkRegisterPayment({ ids: [g1.id], bankTransactionId: mov.id } as never),
+    ).rejects.toThrow('no es un cargo');
+  });
+
+  test('rechaza ids inexistentes', async () => {
+    const org = await makeOrg();
+    const g1 = await makeExpense(org.id, { status: 'PENDING', paidDate: null });
+    await expect(
+      expenses.bulkRegisterPayment({ ids: [g1.id, 'inexistente'], paidDate: new Date('2026-07-11') } as never),
+    ).rejects.toThrow('no fue encontrado');
   });
 });
 

@@ -13,6 +13,7 @@ import {
   PENDING_INCOME_STATUSES,
 } from '../shared/ledger';
 import type {
+  BulkRegisterPaymentInput,
   CreateIncomeInput,
   ListIncomeFilters,
   RegisterPaymentInput,
@@ -66,6 +67,23 @@ export async function list(filters: ListIncomeFilters) {
 
   if (filters.month) {
     where.incomeDate = monthRange(filters.month);
+  }
+
+  // Búsqueda por nombre/folio/RUT. paymentState ya pudo fijar where.OR (RECEIVABLE_OR),
+  // así que combinamos ambos con AND para no pisarnos.
+  if (filters.search) {
+    const s = filters.search;
+    where.AND = [
+      ...(where.OR ? [{ OR: where.OR }] : []),
+      {
+        OR: [
+          { clientName: { contains: s, mode: 'insensitive' } },
+          { sourceFolio: { contains: s, mode: 'insensitive' } },
+          { sourceRut: { contains: s, mode: 'insensitive' } },
+        ],
+      },
+    ];
+    delete where.OR;
   }
 
   return prisma.incomeRecord.findMany({
@@ -167,6 +185,64 @@ export async function registerPayment(id: string, input: RegisterPaymentInput) {
       paidByBankTransactionId: null,
     },
   });
+}
+
+// Conciliación/pago en lote. Reusa las mismas guardas y semántica que
+// registerPayment, pero para varias facturas en una sola escritura atómica
+// (updateMany). Con bankTransactionId concilia N facturas ↔ 1 movimiento; con
+// paidDate marca pagadas; con ambos en null revierte/desconcilia.
+export async function bulkRegisterPayment(input: BulkRegisterPaymentInput) {
+  const { ids, bankTransactionId, paidDate: inputPaidDate } = input;
+  const recs = await prisma.incomeRecord.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, organizationId: true, documentKind: true, netAmount: true },
+  });
+  if (recs.length !== ids.length) throw notFound('Alguna factura no fue encontrada');
+
+  const orgIds = new Set(recs.map((r) => r.organizationId));
+  if (orgIds.size > 1) {
+    throw badRequest('Las facturas seleccionadas deben ser de la misma empresa');
+  }
+  for (const r of recs) {
+    if (r.documentKind === 'CREDIT_NOTE') {
+      throw badRequest('La selección incluye una nota de crédito, que no se cobra');
+    }
+    if (r.netAmount === 0) {
+      throw badRequest('La selección incluye una factura anulada, que no se cobra');
+    }
+  }
+
+  if (bankTransactionId) {
+    const mov = await prisma.bankTransaction.findUnique({
+      where: { id: bankTransactionId },
+      select: { id: true, organizationId: true, creditAmount: true, transactionDate: true },
+    });
+    if (!mov) throw notFound('Movimiento no encontrado');
+    if (mov.organizationId !== recs[0].organizationId) {
+      throw badRequest('El movimiento no pertenece a la empresa de las facturas');
+    }
+    if (mov.creditAmount <= 0) throw badRequest('El movimiento no es un abono');
+    await prisma.incomeRecord.updateMany({
+      where: { id: { in: ids } },
+      data: {
+        paidByBankTransactionId: mov.id,
+        paidDate: mov.transactionDate,
+        status: 'PAID',
+      },
+    });
+    return { count: ids.length };
+  }
+
+  const paidDate = inputPaidDate ?? null;
+  await prisma.incomeRecord.updateMany({
+    where: { id: { in: ids } },
+    data: {
+      paidDate,
+      status: paidDate ? 'PAID' : 'INVOICED',
+      paidByBankTransactionId: null,
+    },
+  });
+  return { count: ids.length };
 }
 
 export async function remove(id: string) {

@@ -70,3 +70,25 @@ export function useRegisterPayment() {
     },
   });
 }
+
+// Conciliación/pago en lote: N facturas contra un movimiento (bankTransactionId),
+// marcado con fecha (paidDate) o reversión (ambos null).
+export function useBulkRegisterPayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: {
+      ids: string[];
+      paidDate?: string | null;
+      bankTransactionId?: string | null;
+    }) =>
+      api.post('/income/payments/bulk', {
+        ids: payload.ids,
+        paidDate: payload.paidDate ?? null,
+        bankTransactionId: payload.bankTransactionId ?? null,
+      }),
+    onSuccess: () => {
+      invalidateFinance(qc);
+      qc.invalidateQueries({ queryKey: ['finance-imports'] });
+    },
+  });
+}

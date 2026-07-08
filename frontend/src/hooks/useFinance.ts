@@ -1,8 +1,8 @@
 // Barrel de compatibilidad: re-exporta los hooks de finanzas ya divididos en
 // módulos propios (income, expenses, resumen, categorías/reglas, importaciones
 // bancarias y conciliación) para no romper los imports existentes de `useFinance`.
-export { useIncome, useIncomeMonths, useSaveIncome, useDeleteIncome, useRegisterPayment } from './useIncome';
-export { useExpenses, useExpenseMonths, useSaveExpense, useDeleteExpense, useRegisterExpensePayment } from './useExpenses';
+export { useIncome, useIncomeMonths, useSaveIncome, useDeleteIncome, useRegisterPayment, useBulkRegisterPayment } from './useIncome';
+export { useExpenses, useExpenseMonths, useSaveExpense, useDeleteExpense, useRegisterExpensePayment, useBulkRegisterExpensePayment } from './useExpenses';
 export type { FinanceFilters } from './finance-shared';
 export { useFinanceSummary, useConsolidated } from './useFinanceSummary';
 export {

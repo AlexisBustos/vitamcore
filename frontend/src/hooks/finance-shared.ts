@@ -11,6 +11,7 @@ export type FinanceFilters = {
   documentKind?: string;
   paymentState?: 'receivable' | 'payable' | 'overdue' | 'paid' | 'cancelled';
   month?: string;
+  search?: string;
 };
 
 export function invalidateFinance(qc: ReturnType<typeof useQueryClient>) {

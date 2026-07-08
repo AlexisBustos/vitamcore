@@ -7,18 +7,22 @@ import { EmptyState, Spinner } from '@/components/ui/feedback';
 import { formatDate, formatMoney } from '@/lib/domain';
 import { useReconciliationCandidates } from '@/hooks/useFinance';
 
-export type ReconcileRecord = {
-  id: string;
-  name: string;
-  folio: string | null;
+// Objetivo de conciliación: una factura (recordId → ranking por fecha) o un
+// conjunto de facturas contra un movimiento (sin recordId, se buscan candidatos
+// por la suma `amount`). `ids` son las facturas a marcar/conciliar.
+export type ReconcileTarget = {
+  ids: string[];
+  recordId?: string;
+  organizationId: string;
   amount: number;
+  label: string;
 };
 
 export function ReconcileModal({
   open,
   onClose,
   recordType,
-  record,
+  target,
   pending,
   onReconcile,
   onPayManual,
@@ -26,7 +30,7 @@ export function ReconcileModal({
   open: boolean;
   onClose: () => void;
   recordType: 'income' | 'expense';
-  record: ReconcileRecord | null;
+  target: ReconcileTarget | null;
   pending: boolean;
   onReconcile: (bankTransactionId: string) => void;
   onPayManual: (paidDate: string) => void;
@@ -36,11 +40,25 @@ export function ReconcileModal({
   // se reinicia cada vez que se abre el modal.
   const [paidDate, setPaidDate] = useState(() => new Date().toLocaleDateString('en-CA'));
   useEffect(() => {
-    if (open) setPaidDate(new Date().toLocaleDateString('en-CA'));
+    if (open) {
+      setPaidDate(new Date().toLocaleDateString('en-CA'));
+      setSearch('');
+    }
   }, [open]);
+
+  const multiple = (target?.ids.length ?? 0) > 1;
   const candidates = useReconciliationCandidates(
-    { recordType, recordId: record?.id ?? '', search: search || undefined },
-    open && !!record,
+    target
+      ? target.recordId
+        ? { recordType, recordId: target.recordId, search: search || undefined }
+        : {
+            recordType,
+            organizationId: target.organizationId,
+            amount: target.amount,
+            search: search || undefined,
+          }
+      : { recordType },
+    open && !!target,
   );
 
   return (
@@ -50,9 +68,7 @@ export function ReconcileModal({
       size="lg"
       title="Conciliar con un movimiento"
       description={
-        record
-          ? `${record.name} · ${record.folio ?? 's/folio'} · ${formatMoney(record.amount)}`
-          : undefined
+        target ? `${target.label} · ${formatMoney(target.amount)}` : undefined
       }
     >
       <div className="space-y-4">
@@ -85,10 +101,10 @@ export function ReconcileModal({
                   <span className="text-xs text-[var(--color-muted-foreground)]">
                     {formatDate(c.transactionDate)} · {formatMoney(c.amount)}
                   </span>
-                  {record && !c.exact && (
+                  {target && !c.exact && (
                     <span className="mt-0.5 block text-xs text-[var(--color-warning)]">
-                      ⚠ movimiento {formatMoney(c.amount)} ≠ factura{' '}
-                      {formatMoney(record.amount)}
+                      ⚠ movimiento {formatMoney(c.amount)} ≠ {multiple ? 'suma' : 'factura'}{' '}
+                      {formatMoney(target.amount)}
                     </span>
                   )}
                 </div>
@@ -117,7 +133,7 @@ export function ReconcileModal({
             onClick={() => onPayManual(paidDate)}
             disabled={pending || !paidDate}
           >
-            Marcar pagada sin movimiento
+            {multiple ? 'Marcar pagadas sin movimiento' : 'Marcar pagada sin movimiento'}
           </Button>
         </div>
       </div>

@@ -49,6 +49,8 @@ export const listIncomeQuery = z.object({
   isRecurring: z.enum(['true', 'false']).optional(),
   documentKind: z.enum(['SALE', 'CREDIT_NOTE', 'DEBIT_NOTE']).optional(),
   paymentState: z.enum(['receivable', 'overdue', 'paid', 'cancelled']).optional(),
+  // Búsqueda libre por nombre de cliente, folio o RUT del documento.
+  search: z.string().trim().min(1).optional(),
   month: z
     .string()
     .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Formato de mes inválido (YYYY-MM)')
@@ -60,7 +62,16 @@ export const registerPaymentSchema = z.object({
   bankTransactionId: z.string().optional().nullable(),
 });
 
+// Pago/conciliación en lote: N facturas contra un movimiento, o marcado/reversión
+// masiva con fecha. Misma semántica que registerPaymentSchema pero con varios ids.
+export const bulkRegisterPaymentSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1, 'Debes seleccionar al menos una factura'),
+  paidDate: dateInput,
+  bankTransactionId: z.string().optional().nullable(),
+});
+
 export type CreateIncomeInput = z.infer<typeof createIncomeSchema>;
 export type UpdateIncomeInput = z.infer<typeof updateIncomeSchema>;
 export type ListIncomeFilters = z.infer<typeof listIncomeQuery>;
 export type RegisterPaymentInput = z.infer<typeof registerPaymentSchema>;
+export type BulkRegisterPaymentInput = z.infer<typeof bulkRegisterPaymentSchema>;

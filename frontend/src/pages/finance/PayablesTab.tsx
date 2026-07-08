@@ -6,6 +6,7 @@ import {
   useExpenses,
   useExpenseMonths,
   useRegisterExpensePayment,
+  useBulkRegisterExpensePayment,
 } from '@/hooks/useFinance';
 import type { ExpenseRecord } from '@/types/domain';
 
@@ -22,6 +23,7 @@ const config: LedgerTabConfig<ExpenseRecord> = {
   listHook: useExpenses,
   monthsHook: useExpenseMonths,
   registerHook: useRegisterExpensePayment,
+  bulkRegisterHook: useBulkRegisterExpensePayment,
   rowTotal: (r) => r.amount,
   issueDate: (r) => r.expenseDate,
   partyName: (r) => r.vendorName ?? '—',

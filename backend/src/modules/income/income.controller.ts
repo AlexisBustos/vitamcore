@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import {
+  bulkRegisterPaymentSchema,
   createIncomeSchema,
   listIncomeQuery,
   registerPaymentSchema,
@@ -39,4 +40,9 @@ export async function removeController(req: Request, res: Response) {
 export async function registerPaymentController(req: Request, res: Response) {
   const input = registerPaymentSchema.parse(req.body);
   res.json({ data: await service.registerPayment(req.params.id, input) });
+}
+
+export async function bulkRegisterPaymentController(req: Request, res: Response) {
+  const input = bulkRegisterPaymentSchema.parse(req.body);
+  res.json({ data: await service.bulkRegisterPayment(input) });
 }
