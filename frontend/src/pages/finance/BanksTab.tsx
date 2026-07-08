@@ -270,7 +270,7 @@ export function BanksTab({
           }
         />
         <Input
-          placeholder="Buscar descripción…"
+          placeholder="Buscar descripción o contraparte…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -406,9 +406,19 @@ export function BanksTab({
                     </td>
                     <td className="px-4 py-3">
                       {t.reconciled ? (
-                        <span className="inline-flex items-center rounded-full bg-[var(--color-success)]/10 px-2 py-0.5 text-xs font-medium text-[var(--color-success)]">
-                          Conciliado
-                        </span>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="inline-flex w-fit items-center rounded-full bg-[var(--color-success)]/10 px-2 py-0.5 text-xs font-medium text-[var(--color-success)]">
+                            Conciliado
+                          </span>
+                          {t.counterparties.length > 0 && (
+                            <span
+                              className="text-xs text-[var(--color-muted-foreground)]"
+                              title={t.counterparties.join(', ')}
+                            >
+                              {t.counterparties.join(', ')}
+                            </span>
+                          )}
+                        </div>
                       ) : t.internal ? (
                         <span className="inline-flex items-center rounded-full bg-[var(--color-accent)]/10 px-2 py-0.5 text-xs font-medium text-[var(--color-accent)]">
                           Interno

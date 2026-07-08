@@ -19,21 +19,38 @@ export async function listBankTransactions(filters: ListTransactionsFilters) {
     };
   }
 
-  if (filters.search) {
-    where.description = { contains: filters.search, mode: 'insensitive' };
-  }
-
   if (filters.category) {
     where.category = filters.category === '__none__' ? null : filters.category;
   }
 
+  // Grupos de condiciones que usan `OR` internamente; se combinan vía `AND`
+  // para no pisarse entre sí (búsqueda y "conciliado" son ambos OR).
+  const and: Prisma.BankTransactionWhereInput[] = [];
+
+  // Búsqueda: por la descripción cruda del banco (que NO trae el nombre de la
+  // contraparte) o por el cliente/proveedor de la factura conciliada. Así
+  // buscar "weir" encuentra su abono aunque el banco lo rotule genérico
+  // ("Pago: Proveedores 0916…").
+  if (filters.search) {
+    const q = filters.search;
+    and.push({
+      OR: [
+        { description: { contains: q, mode: 'insensitive' } },
+        { paidIncomes: { some: { clientName: { contains: q, mode: 'insensitive' } } } },
+        { paidExpenses: { some: { vendorName: { contains: q, mode: 'insensitive' } } } },
+      ],
+    });
+  }
+
   // Conciliado = referenciado por alguna factura/gasto vía paidByBankTransactionId.
   if (filters.reconciliation === 'linked') {
-    where.OR = [{ paidIncomes: { some: {} } }, { paidExpenses: { some: {} } }];
+    and.push({ OR: [{ paidIncomes: { some: {} } }, { paidExpenses: { some: {} } }] });
   } else if (filters.reconciliation === 'unlinked') {
     where.paidIncomes = { none: {} };
     where.paidExpenses = { none: {} };
   }
+
+  if (and.length) where.AND = and;
 
   const [transactions, accounts] = await Promise.all([
     prisma.bankTransaction.findMany({
@@ -42,7 +59,8 @@ export async function listBankTransactions(filters: ListTransactionsFilters) {
       take: 300,
       include: {
         bankAccount: refs.bankAccount,
-        _count: { select: { paidIncomes: true, paidExpenses: true } },
+        paidIncomes: { select: { clientName: true } },
+        paidExpenses: { select: { vendorName: true } },
       },
     }),
     prisma.bankAccount.findMany({
@@ -63,11 +81,24 @@ export async function listBankTransactions(filters: ListTransactionsFilters) {
     { charges: 0, credits: 0 },
   );
 
-  const rows = transactions.map(({ _count, ...t }) => ({
-    ...t,
-    reconciled: _count.paidIncomes > 0 || _count.paidExpenses > 0,
-    internal: isInternalTransfer(t.description, ownAccounts),
-  }));
+  const rows = transactions.map(({ paidIncomes, paidExpenses, ...t }) => {
+    // Nombres de la(s) contraparte(s) enlazada(s): permiten mostrar y ubicar el
+    // movimiento por cliente/proveedor aunque el banco no lo nombre.
+    const counterparties = [
+      ...new Set(
+        [
+          ...paidIncomes.map((i) => i.clientName),
+          ...paidExpenses.map((e) => e.vendorName),
+        ].filter((n): n is string => !!n && n.trim().length > 0),
+      ),
+    ];
+    return {
+      ...t,
+      reconciled: paidIncomes.length > 0 || paidExpenses.length > 0,
+      counterparties,
+      internal: isInternalTransfer(t.description, ownAccounts),
+    };
+  });
 
   return {
     transactions: rows,

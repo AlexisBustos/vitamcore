@@ -101,6 +101,7 @@ export interface BankTransaction {
   category: string | null;
   categoryManual: boolean;
   reconciled: boolean;
+  counterparties: string[]; // cliente/proveedor de la(s) factura(s) conciliada(s)
   internal: boolean;
   createdAt: string;
   organization?: Ref;
