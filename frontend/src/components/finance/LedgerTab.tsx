@@ -187,11 +187,13 @@ export function LedgerTab<T extends IncomeRecord | ExpenseRecord>({
           <div className="flex flex-wrap items-center gap-2">
             {isPaidState ? (
               <Button variant="outline" onClick={bulkRevert} disabled={busy}>
-                Revertir seleccionadas
+                Revertir {selectedRows.length} seleccionada{selectedRows.length > 1 ? 's' : ''}
               </Button>
             ) : (
               <Button onClick={openBulkReconcile} disabled={busy}>
-                Conciliar / marcar pagadas
+                Conciliar {selectedRows.length}{' '}
+                {config.recordType === 'income' ? 'factura' : 'gasto'}
+                {selectedRows.length > 1 ? 's' : ''} con un movimiento
               </Button>
             )}
             <button
@@ -294,7 +296,14 @@ export function LedgerTab<T extends IncomeRecord | ExpenseRecord>({
                         {formatMoney(config.rowTotal(r))}
                       </td>
                       <td className="px-4 py-3">
-                        {r.paidDate ? (
+                        {/* Con una selección activa, la única acción es la barra
+                            masiva de arriba: se ocultan los botones por fila para
+                            no conciliar una sola factura por error. */}
+                        {selected.size > 0 ? (
+                          <span className="text-xs text-[var(--color-muted-foreground)]">
+                            {checked ? '↑ en selección' : '—'}
+                          </span>
+                        ) : r.paidDate ? (
                           <Button
                             variant="outline"
                             onClick={() =>

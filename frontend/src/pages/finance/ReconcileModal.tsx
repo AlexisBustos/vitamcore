@@ -46,7 +46,8 @@ export function ReconcileModal({
     }
   }, [open]);
 
-  const multiple = (target?.ids.length ?? 0) > 1;
+  const count = target?.ids.length ?? 0;
+  const multiple = count > 1;
   const candidates = useReconciliationCandidates(
     target
       ? target.recordId
@@ -66,7 +67,11 @@ export function ReconcileModal({
       open={open}
       onClose={onClose}
       size="lg"
-      title="Conciliar con un movimiento"
+      title={
+        multiple
+          ? `Conciliar ${count} documentos con un movimiento`
+          : 'Conciliar con un movimiento'
+      }
       description={
         target ? `${target.label} · ${formatMoney(target.amount)}` : undefined
       }
