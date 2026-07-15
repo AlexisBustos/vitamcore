@@ -275,6 +275,7 @@ model User {
   ownedProjects Project[] @relation("ProjectOwner")
   taskComments  TaskComment[]  @relation("CommentAuthor")
   taskActivity  TaskActivity[] @relation("ActivityActor")
+  projectMemberships ProjectMember[] @relation("ProjectMember")
 
   @@map("users")
 }
@@ -375,6 +376,7 @@ model Project {
   expenseRecords     ExpenseRecord[]
   documents          Document[]
   strategicDecisions StrategicDecision[]
+  members            ProjectMember[]
 
   @@unique([organizationId, name])
   @@index([organizationId])
@@ -428,6 +430,21 @@ model TaskAssignee {
   @@id([taskId, userId])
   @@index([userId])
   @@map("task_assignees")
+}
+
+/// Miembro con visibilidad de un proyecto. Relación N–N entre Project y User.
+/// Un proyecto SIN miembros es público (visible para todos); ver
+/// docs/superpowers/specs/2026-07-15-visibilidad-proyectos-design.md.
+model ProjectMember {
+  projectId String
+  userId    String
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation("ProjectMember", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@index([userId])
+  @@map("project_members")
 }
 
 /// Etiqueta reutilizable de tareas, por empresa.
