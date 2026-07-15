@@ -10,6 +10,8 @@ import {
   makeUser,
 } from './fixtures';
 import * as tasks from '../src/modules/tasks/tasks.service';
+import * as checklist from '../src/modules/tasks/checklist.service';
+import * as comments from '../src/modules/tasks/comments.service';
 
 beforeEach(resetDb);
 afterAll(disconnect);
@@ -121,5 +123,31 @@ describe('tasks.create/update — projectId hacia proyecto oculto', () => {
     await expect(tasks.remove(t.id, asAuthUser(colab))).rejects.toMatchObject({
       statusCode: 404,
     });
+  });
+});
+
+describe('subrecursos — visibilidad', () => {
+  test('checklist y comentarios de una tarea oculta => 404 para colaborador', async () => {
+    const { org, colab, oculto } = await setup();
+    const t = await makeTask(org.id, { projectId: oculto.id });
+
+    await expect(
+      checklist.addItem(t.id, { text: 'Item' }, asAuthUser(colab)),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    await expect(
+      comments.list(t.id, asAuthUser(colab)),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    await expect(
+      comments.create(t.id, { body: 'Hola' }, colab.id, asAuthUser(colab)),
+    ).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  test('miembro del proyecto sí puede comentar (camino feliz)', async () => {
+    const { org, otro, oculto } = await setup();
+    const t = await makeTask(org.id, { projectId: oculto.id });
+    const comment = await comments.create(
+      t.id, { body: 'Ok' }, otro.id, asAuthUser(otro),
+    );
+    expect(comment.body).toBe('Ok');
   });
 });
