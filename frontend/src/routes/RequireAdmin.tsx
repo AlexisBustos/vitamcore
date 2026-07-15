@@ -4,7 +4,7 @@ import { isAdmin, landingPath } from '@/lib/permissions';
 
 /**
  * Envuelve las rutas solo-admin. Un colaborador que intente entrar
- * (por URL directa) es redirigido a su landing (/proyectos).
+ * (por URL directa) es redirigido a su landing (/tareas).
  * Va dentro de ProtectedRoute, así que ya hay sesión validada.
  */
 export function RequireAdmin() {

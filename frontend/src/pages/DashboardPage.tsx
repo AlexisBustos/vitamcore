@@ -54,6 +54,7 @@ export function DashboardPage() {
         // Sin fecha al final; el resto por vencimiento ascendente.
         const av = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
         const bv = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+        if (av === bv) return 0; // ambas sin fecha (Infinity) → evita NaN
         return av - bv;
       })
       .slice(0, 8);
