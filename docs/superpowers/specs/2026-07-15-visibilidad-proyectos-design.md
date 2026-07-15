@@ -42,6 +42,8 @@ model ProjectMember {
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([projectId, userId])
+  @@index([userId])
+  @@map("project_members")
 }
 ```
 
@@ -53,7 +55,7 @@ Back-relations: `Project.members ProjectMember[]` y `User.projectMemberships Pro
 
 ### Propagación del usuario
 
-Los controllers de `modules/projects/` y `modules/tasks/` hoy no leen `req.user`; pasarán `req.user` (id + rol, tipo `AuthUser` de `middleware/auth.ts`) a los services. Para CEO/ADMIN no se añade ningún filtro (cero impacto en lo existente).
+Los controllers de `modules/projects/` y `modules/tasks/` pasarán `req.user` completo (id + rol, tipo `AuthUser` de `middleware/auth.ts`) a los services. Nota: los controllers de tareas ya pasan `req.user?.id` como `actorId` para la actividad; ahora se necesita también el rol para decidir el filtrado. Para CEO/ADMIN no se añade ningún filtro (cero impacto en lo existente).
 
 ### Helper compartido
 
@@ -68,26 +70,29 @@ OR: [
 ]
 ```
 
+**Composición con `AND`:** tanto `projects.service.list()` como (sobre todo) `tasks.service.list()` pueden tener ya un `OR` propio en el `where` (la búsqueda por texto en tareas usa `where.OR`). La condición de visibilidad se añade siempre dentro de `where.AND = [...]` para no pisar ni ser pisada por otros `OR`.
+
 ### Puntos de aplicación
 
 | Punto | Cambio |
 |---|---|
-| `projects.service.list()` | añade el `OR` al `where` si es colaborador |
+| `projects.service.list()` | añade la condición de visibilidad dentro de `where.AND` si es colaborador |
 | `projects.service.getById()` | proyecto no visible para colaborador → `notFound` (404, no 403: no revelar que existe) |
 | `projects.service.update()` / `remove()` | misma comprobación que `getById` |
-| `tasks.service.list()` | para colaborador: `OR: [{ projectId: null }, { project: <regla> }]` |
+| `tasks.service.list()` | para colaborador, dentro de `where.AND`: `OR: [{ projectId: null }, { project: <regla> }]` |
 | `tasks.service.getById()` / `update()` / `remove()` y subrecursos (checklist, comentarios) | tarea de proyecto no visible → `notFound` |
+| `tasks.service.create()` / `update()` con `projectId` de entrada | si el colaborador no puede ver ese proyecto → `notFound` (mismo 404 que `getById`, no revelar que existe). Sin esto, un colaborador podría sondear IDs de proyectos ocultos o **ganarse visibilidad implícita autoasignándose una tarea** (regla 4). La UI ya no ofrece esos proyectos en el selector; esta validación lo impone en el servidor. |
 
 ### Escritura de miembros
 
 - `createProjectSchema` / `updateProjectSchema` (`projects.schema.ts`) aceptan `memberIds: string[]` opcional.
 - El service los gestiona como `assigneeIds` en `tasks.service.ts` (reemplazo del set completo: `deleteMany` + `createMany`).
 - Solo se procesa si `req.user` es CEO/ADMIN; si un colaborador manda `memberIds`, se **ignora silenciosamente** (el campo no existe en su UI).
-- `memberIds` con un userId inexistente → 400 (`badRequest`) validando contra la BD antes de escribir.
+- `memberIds` con un userId inexistente → 400 (`badRequest`), reutilizando `assertAssignableUsers` de `modules/shared/relations.ts` (la misma validación que usan los assignees de tareas). Como esa validación solo comprueba existencia, se aceptan usuarios inactivos en la lista — intencional y coherente con el caso borde de desactivación.
 
 ### Respuestas
 
-`list` y `getById` de proyectos incluyen `members` (`{ id, name }[]`) para que la UI muestre quién tiene acceso.
+`list` y `getById` de proyectos incluyen `members` (`{ id, name }[]`) para que la UI muestre quién tiene acceso. El `getById` sigue incluyendo las `tasks` embebidas del proyecto: es intencional y coherente con la regla "proyecto visible ⇒ tareas visibles".
 
 ### Fuera de alcance
 
@@ -117,6 +122,8 @@ Dashboard, agente IA (`agent/tools.ts`) y finanzas/ventas/documentos/decisiones 
   - no ve restringidos ajenos (`list` los excluye, `getById` → 404);
   - admin ve todo;
   - `memberIds` ignorado si lo manda un colaborador;
-  - tareas de proyecto oculto excluidas de `GET /tasks` y su `getById` → 404.
+  - tareas de proyecto oculto excluidas de `GET /tasks` y su `getById` → 404;
+  - colaborador no puede crear/mover una tarea hacia un proyecto no visible (→ 404), y un colaborador miembro/owner sí puede (camino feliz);
+  - la búsqueda por texto en tareas sigue funcionando combinada con el filtro de visibilidad (composición `AND`/`OR`).
 - **Typecheck**: `npm run build` (backend) y `npm run lint` (frontend).
 - **Prueba manual**: login como colaborador, verificar listado filtrado y 404 en detalle restringido.
