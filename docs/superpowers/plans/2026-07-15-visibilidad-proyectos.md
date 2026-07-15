@@ -1144,6 +1144,135 @@ git commit -m "feat(back): visibilidad en checklist y comentarios de tareas"
 
 ---
 
+### Task 6b: Cerrar el leak de proyectos embebidos en empresas y unidades
+
+**Contexto:** hallazgo de la revisión de la Task 3. `GET /organizations/:id` y `GET /business-units/:id` son legibles por COLABORADOR (`allowRoles read: ALL_ROLES` en `routes/index.ts`) y embeben la lista completa de `projects` — un colaborador podía enumerar proyectos ocultos esquivando todo el filtrado. Los `_count` agregados NO se filtran (solo revelan cantidades; aceptado, ver spec).
+
+**Files:**
+- Modify: `backend/src/modules/organizations/organizations.service.ts:21-38` (`getById`)
+- Modify: `backend/src/modules/organizations/organizations.controller.ts` (getController pasa `req.user`)
+- Modify: `backend/src/modules/business-units/business-units.service.ts:32-42` (`getById`)
+- Modify: `backend/src/modules/business-units/business-units.controller.ts` (getController pasa `req.user`)
+- Test: `backend/test/orgs-units-visibility.test.ts` (nuevo)
+
+- [ ] **Step 1: Escribir los tests que fallan**
+
+Crea `backend/test/orgs-units-visibility.test.ts`:
+
+```ts
+import { beforeEach, afterAll, describe, expect, test } from 'vitest';
+import { resetDb, disconnect } from './db';
+import { prisma } from '../src/lib/prisma';
+import {
+  addProjectMember,
+  asAuthUser,
+  makeOrg,
+  makeProject,
+  makeUser,
+} from './fixtures';
+import * as organizations from '../src/modules/organizations/organizations.service';
+import * as businessUnits from '../src/modules/business-units/business-units.service';
+
+beforeEach(resetDb);
+afterAll(disconnect);
+
+describe('organizations.getById — proyectos embebidos filtrados', () => {
+  test('colaborador no ve proyectos ocultos embebidos; admin sí', async () => {
+    const org = await makeOrg();
+    const colab = await makeUser({ role: 'COLABORADOR' });
+    const otro = await makeUser({ role: 'COLABORADOR' });
+    const admin = await makeUser({ role: 'ADMIN' });
+    await makeProject(org.id, { name: 'Público' });
+    const oculto = await makeProject(org.id, { name: 'Oculto' });
+    await addProjectMember(oculto.id, otro.id);
+
+    const vistoColab = await organizations.getById(org.id, asAuthUser(colab));
+    expect(vistoColab.projects.map((p) => p.name)).toEqual(['Público']);
+
+    const vistoAdmin = await organizations.getById(org.id, asAuthUser(admin));
+    expect(vistoAdmin.projects).toHaveLength(2);
+  });
+});
+
+describe('businessUnits.getById — proyectos embebidos filtrados', () => {
+  test('colaborador no ve proyectos ocultos embebidos; admin sí', async () => {
+    const org = await makeOrg();
+    const unit = await prisma.businessUnit.create({
+      data: { organizationId: org.id, name: 'Unidad Test' },
+    });
+    const colab = await makeUser({ role: 'COLABORADOR' });
+    const otro = await makeUser({ role: 'COLABORADOR' });
+    const admin = await makeUser({ role: 'ADMIN' });
+    await makeProject(org.id, { name: 'Público', businessUnitId: unit.id });
+    const oculto = await makeProject(org.id, { name: 'Oculto', businessUnitId: unit.id });
+    await addProjectMember(oculto.id, otro.id);
+
+    const vistoColab = await businessUnits.getById(unit.id, asAuthUser(colab));
+    expect(vistoColab.projects.map((p) => p.name)).toEqual(['Público']);
+
+    const vistoAdmin = await businessUnits.getById(unit.id, asAuthUser(admin));
+    expect(vistoAdmin.projects).toHaveLength(2);
+  });
+});
+```
+
+- [ ] **Step 2: Correr y verificar que fallan**
+
+```bash
+npx vitest run test/orgs-units-visibility.test.ts
+```
+
+Expected: FAIL por aserciones (los embebidos devuelven también el oculto).
+
+- [ ] **Step 3: Filtrar los `projects` embebidos en ambos services**
+
+En ambos services añade junto a los imports existentes:
+
+```ts
+import type { AuthUser } from '../../middleware/auth';
+import { isRestrictedUser, projectVisibilityWhere } from '../shared/visibility';
+```
+
+`organizations.service.ts` — firma `getById(id: string, user?: AuthUser)` y en el include:
+
+```ts
+      projects: {
+        // Visibilidad row-level: un colaborador no debe enumerar ocultos aquí.
+        where: isRestrictedUser(user)
+          ? { AND: [projectVisibilityWhere(user.id)] }
+          : undefined,
+        orderBy: { updatedAt: 'desc' },
+        include: { businessUnit: { select: { id: true, name: true } } },
+      },
+```
+
+`business-units.service.ts` — firma `getById(id: string, user?: AuthUser)` y en el include:
+
+```ts
+      projects: {
+        where: isRestrictedUser(user)
+          ? { AND: [projectVisibilityWhere(user.id)] }
+          : undefined,
+        orderBy: { updatedAt: 'desc' },
+      },
+```
+
+- [ ] **Step 4: Controllers pasan `req.user`**
+
+En `organizations.controller.ts` y `business-units.controller.ts`, el `getController` pasa `req.user` como segundo argumento a `service.getById`.
+
+- [ ] **Step 5: Correr todo y commit**
+
+```bash
+npx vitest run test/orgs-units-visibility.test.ts && npm test && npm run build
+git add src/modules/organizations src/modules/business-units test/orgs-units-visibility.test.ts
+git commit -m "fix(back): filtrar proyectos embebidos en empresas/unidades por visibilidad"
+```
+
+Expected: PASS todo, build limpio.
+
+---
+
 ## Chunk 3: Frontend y verificación final
 
 ### Task 7: Tipos + picker de visibilidad en `ProjectForm` (solo admin)

@@ -82,6 +82,7 @@ OR: [
 | `tasks.service.list()` | para colaborador, dentro de `where.AND`: `OR: [{ projectId: null }, { project: <regla> }]` |
 | `tasks.service.getById()` / `update()` / `remove()` y subrecursos (checklist, comentarios) | tarea de proyecto no visible → `notFound` |
 | `tasks.service.create()` / `update()` con `projectId` de entrada | si el colaborador no puede ver ese proyecto → `notFound` (mismo 404 que `getById`, no revelar que existe). Sin esto, un colaborador podría sondear IDs de proyectos ocultos o **ganarse visibilidad implícita autoasignándose una tarea** (regla 4). La UI ya no ofrece esos proyectos en el selector; esta validación lo impone en el servidor. |
+| `organizations.service.getById()` / `business-units.service.getById()` | filtran los `projects` embebidos con la misma regla (hallazgo de revisión: estas rutas son legibles por COLABORADOR — `allowRoles read: ALL_ROLES` — y embebían la lista completa de proyectos, esquivando todo el filtrado). Los `_count` agregados NO se filtran: revelan solo cantidades, no nombres — aceptado para una herramienta interna. |
 
 ### Escritura de miembros
 
