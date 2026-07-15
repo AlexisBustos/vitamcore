@@ -120,3 +120,18 @@ export async function makeLabel(organizationId: string, overrides: Record<string
     data: { organizationId, name: 'Etiqueta Test', color: 'blue', ...overrides } as Prisma.LabelUncheckedCreateInput,
   });
 }
+
+export async function addProjectMember(projectId: string, userId: string) {
+  return prisma.projectMember.create({ data: { projectId, userId } });
+}
+
+/** Convierte un User de BD al AuthUser que adjunta requireAuth. */
+export function asAuthUser(u: { id: string; name: string; email: string; role: string }) {
+  return {
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    role: u.role,
+    mustChangePassword: false,
+  };
+}
