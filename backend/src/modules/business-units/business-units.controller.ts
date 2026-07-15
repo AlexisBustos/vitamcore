@@ -12,7 +12,7 @@ export async function listController(req: Request, res: Response) {
 }
 
 export async function getController(req: Request, res: Response) {
-  res.json({ data: await service.getById(req.params.id) });
+  res.json({ data: await service.getById(req.params.id, req.user) });
 }
 
 export async function createController(req: Request, res: Response) {

@@ -5,6 +5,8 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { badRequest, notFound } from '../../utils/http-error';
 import { assertOrganization } from '../shared/relations';
+import type { AuthUser } from '../../middleware/auth';
+import { isRestrictedUser, projectVisibilityWhere } from '../shared/visibility';
 import type {
   CreateBusinessUnitInput,
   UpdateBusinessUnitInput,
@@ -29,12 +31,17 @@ export async function list(filters: ListFilters) {
   });
 }
 
-export async function getById(id: string) {
+export async function getById(id: string, user?: AuthUser) {
   const unit = await prisma.businessUnit.findUnique({
     where: { id },
     include: {
       organization: { select: { id: true, name: true } },
-      projects: { orderBy: { updatedAt: 'desc' } },
+      projects: {
+        where: isRestrictedUser(user)
+          ? { AND: [projectVisibilityWhere(user.id)] }
+          : undefined,
+        orderBy: { updatedAt: 'desc' },
+      },
     },
   });
   if (!unit) throw notFound('Unidad de negocio no encontrada');

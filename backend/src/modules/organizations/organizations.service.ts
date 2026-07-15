@@ -4,6 +4,8 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { badRequest, notFound } from '../../utils/http-error';
+import type { AuthUser } from '../../middleware/auth';
+import { isRestrictedUser, projectVisibilityWhere } from '../shared/visibility';
 import type {
   CreateOrganizationInput,
   UpdateOrganizationInput,
@@ -18,7 +20,7 @@ export async function list() {
   });
 }
 
-export async function getById(id: string) {
+export async function getById(id: string, user?: AuthUser) {
   const org = await prisma.organization.findUnique({
     where: { id },
     include: {
@@ -27,6 +29,10 @@ export async function getById(id: string) {
         include: { _count: { select: { projects: true } } },
       },
       projects: {
+        // Visibilidad row-level: un colaborador no debe enumerar ocultos aquí.
+        where: isRestrictedUser(user)
+          ? { AND: [projectVisibilityWhere(user.id)] }
+          : undefined,
         orderBy: { updatedAt: 'desc' },
         include: { businessUnit: { select: { id: true, name: true } } },
       },
