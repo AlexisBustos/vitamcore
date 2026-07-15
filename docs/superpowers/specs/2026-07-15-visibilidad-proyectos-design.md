@@ -92,7 +92,7 @@ OR: [
 
 ### Respuestas
 
-`list` y `getById` de proyectos incluyen `members` (`{ id, name }[]`) para que la UI muestre quién tiene acceso. El `getById` sigue incluyendo las `tasks` embebidas del proyecto: es intencional y coherente con la regla "proyecto visible ⇒ tareas visibles".
+`list` y `getById` de proyectos incluyen `members` (`{ user: { id, name } }[]`, la misma forma que `assignees` en tareas) para que la UI muestre quién tiene acceso. El `getById` sigue incluyendo las `tasks` embebidas del proyecto: es intencional y coherente con la regla "proyecto visible ⇒ tareas visibles".
 
 ### Fuera de alcance
 
