@@ -31,6 +31,9 @@ export const createProjectSchema = z.object({
   startDate: dateInput,
   targetDate: dateInput,
   ownerId: z.string().min(1).optional().nullable(),
+  // Lista de visibilidad; vacía u omitida = proyecto público.
+  // Solo la procesan CEO/ADMIN (el service la ignora para colaboradores).
+  memberIds: z.array(z.string().min(1)).optional(),
   nextAction: optionalText,
   risks: optionalText,
   notes: optionalText,

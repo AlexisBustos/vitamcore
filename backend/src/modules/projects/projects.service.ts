@@ -7,9 +7,11 @@ import { prisma } from '../../lib/prisma';
 import { badRequest, notFound } from '../../utils/http-error';
 import {
   assertAssignableUser,
+  assertAssignableUsers,
   assertBusinessUnitInOrganization,
   assertOrganization,
 } from '../shared/relations';
+import { isAdminRole } from '../shared/roles';
 import type { AuthUser } from '../../middleware/auth';
 import {
   assertProjectVisible,
@@ -97,23 +99,43 @@ export async function getById(id: string, user?: AuthUser) {
   return project;
 }
 
-export async function create(input: CreateProjectInput) {
-  await assertOrganization(input.organizationId);
-  if (input.businessUnitId) {
+export async function create(input: CreateProjectInput, user?: AuthUser) {
+  const { memberIds, ...data } = input;
+  await assertOrganization(data.organizationId);
+  if (data.businessUnitId) {
     await assertBusinessUnitInOrganization(
-      input.businessUnitId,
-      input.organizationId,
+      data.businessUnitId,
+      data.organizationId,
     );
   }
-  await assertAssignableUser(input.ownerId);
+  await assertAssignableUser(data.ownerId);
+  // Solo un admin gestiona la visibilidad; si un colaborador manda
+  // memberIds se ignora silenciosamente (spec: el campo no existe en su UI).
+  const members =
+    user && isAdminRole(user.role) ? [...new Set(memberIds ?? [])] : [];
+  await assertAssignableUsers(members);
   try {
-    return await prisma.project.create({ data: input });
+    return await prisma.$transaction(async (tx) => {
+      const project = await tx.project.create({ data });
+      if (members.length) {
+        await tx.projectMember.createMany({
+          data: members.map((userId) => ({ projectId: project.id, userId })),
+        });
+      }
+      return project;
+    });
   } catch (err) {
     throw handleUniqueError(err);
   }
 }
 
-export async function update(id: string, input: UpdateProjectInput) {
+export async function update(
+  id: string,
+  input: UpdateProjectInput,
+  user?: AuthUser,
+) {
+  await assertProjectVisible(id, user);
+  const { memberIds, ...data } = input;
   const current = await prisma.project.findUnique({
     where: { id },
     select: { id: true, organizationId: true },
@@ -121,22 +143,40 @@ export async function update(id: string, input: UpdateProjectInput) {
   if (!current) throw notFound('Proyecto no encontrado');
 
   // Si se cambia la unidad, debe pertenecer a la empresa del proyecto.
-  if (input.businessUnitId) {
+  if (data.businessUnitId) {
     await assertBusinessUnitInOrganization(
-      input.businessUnitId,
+      data.businessUnitId,
       current.organizationId,
     );
   }
-  await assertAssignableUser(input.ownerId);
+  await assertAssignableUser(data.ownerId);
+  // memberIds (si viene) reemplaza el set completo; solo lo gestionan admins.
+  const members =
+    user && isAdminRole(user.role) && memberIds
+      ? [...new Set(memberIds)]
+      : undefined;
+  if (members) await assertAssignableUsers(members);
 
   try {
-    return await prisma.project.update({ where: { id }, data: input });
+    return await prisma.$transaction(async (tx) => {
+      const project = await tx.project.update({ where: { id }, data });
+      if (members) {
+        await tx.projectMember.deleteMany({ where: { projectId: id } });
+        if (members.length) {
+          await tx.projectMember.createMany({
+            data: members.map((userId) => ({ projectId: id, userId })),
+          });
+        }
+      }
+      return project;
+    });
   } catch (err) {
     throw handleUniqueError(err);
   }
 }
 
-export async function remove(id: string) {
+export async function remove(id: string, user?: AuthUser) {
+  await assertProjectVisible(id, user);
   const exists = await prisma.project.findUnique({
     where: { id },
     select: { id: true },

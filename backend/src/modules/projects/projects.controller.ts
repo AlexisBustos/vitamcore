@@ -17,15 +17,15 @@ export async function getController(req: Request, res: Response) {
 
 export async function createController(req: Request, res: Response) {
   const input = createProjectSchema.parse(req.body);
-  res.status(201).json({ data: await service.create(input) });
+  res.status(201).json({ data: await service.create(input, req.user) });
 }
 
 export async function updateController(req: Request, res: Response) {
   const input = updateProjectSchema.parse(req.body);
-  res.json({ data: await service.update(req.params.id, input) });
+  res.json({ data: await service.update(req.params.id, input, req.user) });
 }
 
 export async function removeController(req: Request, res: Response) {
-  await service.remove(req.params.id);
+  await service.remove(req.params.id, req.user);
   res.json({ ok: true });
 }
