@@ -108,10 +108,11 @@ export async function getById(id: string, user?: AuthUser) {
 
 export async function create(input: CreateTaskInput, user?: AuthUser) {
   await assertOrganization(input.organizationId);
-  await assertRelations(input.organizationId, input.businessUnitId, input.projectId);
-  // Un colaborador no puede colgar tareas de un proyecto que no ve (404,
-  // el mismo error que si no existiera).
+  // La visibilidad va ANTES de assertRelations: para un colaborador, un
+  // proyecto oculto y uno inexistente deben dar el mismo 404 "Proyecto no
+  // encontrado" (no-enumeración). Coherente con el orden en update().
   if (input.projectId) await assertProjectVisible(input.projectId, user);
+  await assertRelations(input.organizationId, input.businessUnitId, input.projectId);
   const assigneeIds = [...new Set(input.assigneeIds ?? [])];
   await assertAssignableUsers(assigneeIds);
   const { labelIds, assigneeIds: _ignore, ...data } = input;

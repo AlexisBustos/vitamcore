@@ -91,6 +91,23 @@ describe('tasks.create/update — projectId hacia proyecto oculto', () => {
     ).rejects.toMatchObject({ statusCode: 404 });
   });
 
+  test('crear tarea en proyecto oculto e inexistente dan el mismo 404 (no-enumeración)', async () => {
+    const { org, colab, oculto } = await setup();
+    const base = {
+      organizationId: org.id, title: 'X',
+      status: 'TODO', priority: 'MEDIUM', source: 'MANUAL',
+    };
+    const errOculto = await tasks
+      .create({ ...base, projectId: oculto.id } as never, asAuthUser(colab))
+      .catch((e) => e);
+    const errInexistente = await tasks
+      .create({ ...base, projectId: 'no-existe' } as never, asAuthUser(colab))
+      .catch((e) => e);
+    expect(errOculto.statusCode).toBe(404);
+    expect(errInexistente.statusCode).toBe(404);
+    expect(errOculto.message).toBe(errInexistente.message);
+  });
+
   test('miembro del proyecto restringido SÍ puede crear tareas en él (camino feliz)', async () => {
     const { org, otro, oculto } = await setup();
     const t = await tasks.create(
