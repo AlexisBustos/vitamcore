@@ -81,6 +81,13 @@ export function ProjectDetailPage() {
     { label: 'Empresa', value: project.organization?.name ?? '—' },
     { label: 'Unidad', value: project.businessUnit?.name ?? '—' },
     { label: 'Responsable', value: project.owner?.name ?? '—' },
+    {
+      label: 'Visibilidad',
+      value:
+        project.members && project.members.length > 0
+          ? project.members.map((m) => m.user.name).join(', ')
+          : 'Todos',
+    },
     { label: 'Inicio', value: formatDate(project.startDate) },
     { label: 'Objetivo', value: formatDate(project.targetDate) },
   ];

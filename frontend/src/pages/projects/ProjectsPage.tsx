@@ -4,6 +4,7 @@ import {
   ArrowDown,
   ArrowUp,
   ChevronsUpDown,
+  Lock,
   Pencil,
   Plus,
   Search,
@@ -293,6 +294,15 @@ export function ProjectsPage() {
                         >
                           {p.name}
                         </Link>
+                        {(p.members?.length ?? 0) > 0 && (
+                          <span
+                            title={`Visible solo para: ${(p.members ?? [])
+                              .map((m) => m.user.name)
+                              .join(', ')}`}
+                          >
+                            <Lock className="ml-1 inline h-3.5 w-3.5 text-[var(--color-muted-foreground)]" />
+                          </span>
+                        )}
                         {p.nextAction && (
                           <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
                             → {p.nextAction}
