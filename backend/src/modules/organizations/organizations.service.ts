@@ -36,6 +36,9 @@ export async function getById(id: string, user?: AuthUser) {
         orderBy: { updatedAt: 'desc' },
         include: { businessUnit: { select: { id: true, name: true } } },
       },
+      // Los _count agregados NO se filtran por visibilidad: revelan solo
+      // cantidades (no nombres) y Prisma no admite `where` en _count.select.
+      // Aceptado para esta herramienta interna (ver spec de visibilidad).
       _count: { select: { businessUnits: true, projects: true, tasks: true } },
     },
   });
