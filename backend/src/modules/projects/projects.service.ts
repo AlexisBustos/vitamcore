@@ -10,6 +10,12 @@ import {
   assertBusinessUnitInOrganization,
   assertOrganization,
 } from '../shared/relations';
+import type { AuthUser } from '../../middleware/auth';
+import {
+  assertProjectVisible,
+  isRestrictedUser,
+  projectVisibilityWhere,
+} from '../shared/visibility';
 import type {
   CreateProjectInput,
   ListProjectsFilters,
@@ -26,20 +32,28 @@ const STATUS_AUTO: ProjectStatus[] = [
   'COMPLETED',
 ];
 
-export async function list(filters: ListProjectsFilters) {
+export async function list(filters: ListProjectsFilters, user?: AuthUser) {
+  const where: Prisma.ProjectWhereInput = {
+    organizationId: filters.organizationId,
+    ownerId: filters.ownerId,
+    businessUnitId: filters.businessUnitId,
+    status: filters.status,
+    priority: filters.priority,
+  };
+  // Visibilidad row-level: solo restringe a colaboradores. Va en AND para
+  // no colisionar con otros OR (convención de shared/visibility.ts).
+  if (isRestrictedUser(user)) {
+    where.AND = [projectVisibilityWhere(user.id)];
+  }
+
   const projects = await prisma.project.findMany({
-    where: {
-      organizationId: filters.organizationId,
-      ownerId: filters.ownerId,
-      businessUnitId: filters.businessUnitId,
-      status: filters.status,
-      priority: filters.priority,
-    },
+    where,
     orderBy: { updatedAt: 'desc' },
     include: {
       organization: { select: { id: true, name: true } },
       businessUnit: { select: { id: true, name: true } },
       owner: { select: { id: true, name: true } },
+      members: { include: { user: { select: { id: true, name: true } } } },
       _count: { select: { tasks: true } },
     },
   });
@@ -62,13 +76,15 @@ export async function list(filters: ListProjectsFilters) {
   });
 }
 
-export async function getById(id: string) {
+export async function getById(id: string, user?: AuthUser) {
+  await assertProjectVisible(id, user);
   const project = await prisma.project.findUnique({
     where: { id },
     include: {
       organization: { select: { id: true, name: true } },
       businessUnit: { select: { id: true, name: true } },
       owner: { select: { id: true, name: true } },
+      members: { include: { user: { select: { id: true, name: true } } } },
       tasks: {
         orderBy: [{ status: 'asc' }, { dueDate: 'asc' }],
         include: {

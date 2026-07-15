@@ -8,11 +8,11 @@ import * as service from './projects.service';
 
 export async function listController(req: Request, res: Response) {
   const filters = listProjectsQuery.parse(req.query);
-  res.json({ data: await service.list(filters) });
+  res.json({ data: await service.list(filters, req.user) });
 }
 
 export async function getController(req: Request, res: Response) {
-  res.json({ data: await service.getById(req.params.id) });
+  res.json({ data: await service.getById(req.params.id, req.user) });
 }
 
 export async function createController(req: Request, res: Response) {
