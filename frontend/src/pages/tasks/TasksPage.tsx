@@ -18,6 +18,7 @@ import {
   type TaskFilters,
 } from '@/hooks/useTasks';
 import { useAuth } from '@/context/AuthContext';
+import { isAdmin } from '@/lib/permissions';
 import type { Task } from '@/types/domain';
 import { TaskForm } from './TaskForm';
 import { TaskBoard } from './TaskBoard';
@@ -25,7 +26,12 @@ import { TasksTableView } from '@/components/tasks/TasksTableView';
 import { TaskPanel } from '@/components/tasks/TaskPanel';
 
 export function TasksPage() {
-  const [filters, setFilters] = useState<TaskFilters>({});
+  const { user } = useAuth();
+  // El colaborador aterriza aquí como pantalla de inicio: arranca viendo
+  // sus tareas asignadas. El admin entra sin filtro, como hasta ahora.
+  const [filters, setFilters] = useState<TaskFilters>(() =>
+    !isAdmin(user?.role) && user?.id ? { assigneeId: user.id } : {},
+  );
   const [taskForm, setTaskForm] = useState<{ open: boolean; task: Task | null }>(
     { open: false, task: null },
   );
@@ -34,7 +40,6 @@ export function TasksPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const openTaskId = searchParams.get('tarea');
 
-  const { user } = useAuth();
   const { data: organizations } = useOrganizations();
   const { data: projects } = useProjects(
     filters.organizationId ? { organizationId: filters.organizationId } : {},

@@ -15,7 +15,7 @@ export function canAccessPath(path: string, role?: string): boolean {
   return COLLABORATOR_PATHS.some((p) => path === p || path.startsWith(p + '/'));
 }
 
-/** Ruta de aterrizaje según rol (admin → dashboard; colaborador → proyectos). */
+/** Ruta de aterrizaje según rol (admin → dashboard; colaborador → sus tareas). */
 export function landingPath(role?: string): string {
-  return isAdmin(role) ? '/' : '/proyectos';
+  return isAdmin(role) ? '/' : '/tareas';
 }
