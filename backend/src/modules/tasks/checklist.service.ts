@@ -7,6 +7,8 @@ import type { CreateChecklistItemInput, UpdateChecklistItemInput } from './check
 import type { AuthUser } from '../../middleware/auth';
 import { assertTaskVisible } from '../shared/visibility';
 
+// Sin guarda de visibilidad a propósito: no tiene ruta HTTP propia; los ítems
+// se sirven embebidos por tasks.getById, que ya valida la visibilidad.
 export function listByTask(taskId: string) {
   return prisma.checklistItem.findMany({
     where: { taskId },

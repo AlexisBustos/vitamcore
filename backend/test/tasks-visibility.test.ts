@@ -142,6 +142,20 @@ describe('subrecursos — visibilidad', () => {
     ).rejects.toMatchObject({ statusCode: 404 });
   });
 
+  test('editar y borrar ítems de checklist de una tarea oculta => 404 para colaborador', async () => {
+    const { org, admin, colab, oculto } = await setup();
+    const t = await makeTask(org.id, { projectId: oculto.id });
+    // El admin crea el ítem (ve todo); el colaborador no debería poder tocarlo.
+    const item = await checklist.addItem(t.id, { text: 'Item' }, asAuthUser(admin));
+
+    await expect(
+      checklist.updateItem(t.id, item.id, { done: true } as never, asAuthUser(colab)),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    await expect(
+      checklist.removeItem(t.id, item.id, asAuthUser(colab)),
+    ).rejects.toMatchObject({ statusCode: 404 });
+  });
+
   test('miembro del proyecto sí puede comentar (camino feliz)', async () => {
     const { org, otro, oculto } = await setup();
     const t = await makeTask(org.id, { projectId: oculto.id });
