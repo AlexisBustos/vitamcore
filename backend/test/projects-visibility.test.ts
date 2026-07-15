@@ -137,6 +137,22 @@ describe('projects.create/update — memberIds', () => {
     const detail2 = await projects.getById(p.id, asAuthUser(admin));
     expect(detail2.members).toHaveLength(0);
   });
+
+  test('colaborador que ve el proyecto no puede alterar la membresía con memberIds', async () => {
+    const org = await makeOrg();
+    const admin = await makeUser({ role: 'ADMIN' });
+    const ana = await makeUser({ name: 'Ana', role: 'COLABORADOR' });
+    const intruso = await makeUser({ name: 'Intruso', role: 'COLABORADOR' });
+    // Proyecto restringido donde el intruso SÍ es miembro (puede verlo/editarlo).
+    const p = await makeProject(org.id, { name: 'Restringido' });
+    await addProjectMember(p.id, ana.id);
+    await addProjectMember(p.id, intruso.id);
+
+    // El intruso intenta reescribir la lista para quedarse solo él: se ignora.
+    await projects.update(p.id, { memberIds: [intruso.id] } as never, asAuthUser(intruso));
+    const detail = await projects.getById(p.id, asAuthUser(admin));
+    expect(detail.members.map((m) => m.user.id).sort()).toEqual([ana.id, intruso.id].sort());
+  });
 });
 
 describe('projects.update/remove — guarda de visibilidad', () => {
