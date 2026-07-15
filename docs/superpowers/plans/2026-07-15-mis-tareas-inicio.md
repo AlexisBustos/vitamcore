@@ -33,7 +33,7 @@ export function landingPath(role?: string): string {
 }
 ```
 
-(Único consumidor: `RequireAdmin.tsx`, que reenvía al no-admin. `LoginPage` navega a `/` y desde ahí `RequireAdmin` lo reenvía a `/tareas`. No hay que tocar `LoginPage`.)
+(Consumidores: `RequireAdmin.tsx` (reenvía al no-admin tras `login → /`) y `ChangePasswordPage.tsx` (a dónde va tras cambiar la clave). En ambos, el efecto de mandar al colaborador a `/tareas` en vez de `/proyectos` es el deseado por esta feature. `LoginPage` navega siempre a `/` y no usa `landingPath` — no hay que tocarlo.)
 
 - [ ] **Step 2: Filtro "Mis tareas" por defecto para colaboradores en `TasksPage`**
 
@@ -119,7 +119,7 @@ Dentro de `DashboardPage`, tras `const { user } = useAuth();` (añadir esta lín
 
 - [ ] **Step 3: Renderizar la tarjeta**
 
-Añadir la tarjeta junto a "Próximos vencimientos" (buscar el comentario `{/* Próximos vencimientos */}` y colocar la nueva tarjeta antes o después, en el mismo contenedor de grid). Estructura, imitando la de "Próximos vencimientos":
+Añadir la tarjeta junto a "Próximos vencimientos" (buscar el comentario `{/* Próximos vencimientos */}`, que es un `<Card>` suelto a ancho completo dentro del fragmento; colocar la nueva tarjeta antes o después — se apila igual). Estructura, imitando la de "Próximos vencimientos":
 
 ```tsx
           {/* Mis tareas pendientes */}
