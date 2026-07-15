@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils';
 import {
   formatDate,
   formatMoney,
+  isOverdue,
   documentType as documentTypeMap,
   projectStatus as projectStatusMap,
   taskStatus as taskStatusMap,
@@ -31,12 +32,32 @@ import {
 import { getErrorMessage } from '@/lib/errors';
 import { useOrganizations } from '@/hooks/useOrganizations';
 import { useDashboard } from '@/hooks/useDashboard';
+import { useTasks } from '@/hooks/useTasks';
+import { useAuth } from '@/context/AuthContext';
 import type { ProjectStatus, TaskStatus } from '@/types/domain';
 
 export function DashboardPage() {
   const [orgId, setOrgId] = useState<string | undefined>(undefined);
+  const { user } = useAuth();
   const { data: organizations } = useOrganizations();
   const { data, isLoading, isError, error } = useDashboard(orgId);
+
+  // Tareas asignadas al usuario que ingresó, sin terminar, por vencimiento.
+  const { data: myTasksRaw } = useTasks(
+    user?.id ? { assigneeId: user.id } : {},
+  );
+  const myTasks = useMemo(() => {
+    if (!user?.id) return [];
+    return (myTasksRaw ?? [])
+      .filter((t) => t.status !== 'DONE')
+      .sort((a, b) => {
+        // Sin fecha al final; el resto por vencimiento ascendente.
+        const av = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+        const bv = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+        return av - bv;
+      })
+      .slice(0, 8);
+  }, [myTasksRaw, user?.id]);
 
   const tabs = useMemo(
     () => [
@@ -233,6 +254,59 @@ export function DashboardPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Mis tareas pendientes */}
+          <Card>
+            <CardHeader className="flex flex-row items-center gap-2">
+              <CheckSquare className="h-4 w-4 text-[var(--color-accent)]" />
+              <CardTitle>Mis tareas</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {myTasks.length === 0 ? (
+                <EmptyState title="No tienes tareas pendientes" />
+              ) : (
+                <div className="divide-y divide-[var(--color-border)]">
+                  {myTasks.map((t) => (
+                    <Link
+                      key={t.id}
+                      to={`/tareas?tarea=${t.id}`}
+                      className="flex items-center justify-between py-2.5 hover:bg-[var(--color-muted)]/40"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-[var(--color-foreground)]">
+                          {t.title}
+                        </p>
+                        <p className="text-xs text-[var(--color-muted-foreground)]">
+                          {t.organization?.name ?? '—'}
+                          {t.project ? ` · ${t.project.name}` : ''}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <PriorityBadge value={t.priority} />
+                        <span
+                          className={
+                            isOverdue(t.dueDate)
+                              ? 'text-sm text-[var(--color-danger)]'
+                              : 'text-sm text-[var(--color-muted-foreground)]'
+                          }
+                        >
+                          {formatDate(t.dueDate)}
+                        </span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+              <div className="pt-3">
+                <Link
+                  to="/tareas"
+                  className="text-xs text-[var(--color-accent)] hover:underline"
+                >
+                  Ver todas
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Próximos vencimientos */}
           <Card>
