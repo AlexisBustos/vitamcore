@@ -11,6 +11,9 @@ import { useOrganizations } from '@/hooks/useOrganizations';
 import { useBusinessUnits } from '@/hooks/useBusinessUnits';
 import { useAssignees } from '@/hooks/useAssignees';
 import { useSaveProject } from '@/hooks/useProjects';
+import { AssigneePicker } from '@/components/tasks/AssigneePicker';
+import { useAuth } from '@/context/AuthContext';
+import { isAdmin } from '@/lib/permissions';
 import type { Project } from '@/types/domain';
 
 interface Props {
@@ -33,6 +36,11 @@ export function ProjectForm({
 }: Props) {
   const editing = !!project;
   const save = useSaveProject();
+  const { user } = useAuth();
+  const admin = isAdmin(user?.role);
+  const [memberIds, setMemberIds] = useState<string[]>(
+    (project?.members ?? []).map((m) => m.user.id),
+  );
   const { data: organizations } = useOrganizations();
   const { data: assignees } = useAssignees();
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +95,8 @@ export function ProjectForm({
       risks: form.risks || null,
       startDate: form.startDate || null,
       targetDate: form.targetDate || null,
+      // Visibilidad: solo la envían admins (el backend la ignora para otros).
+      ...(admin ? { memberIds } : {}),
     };
     try {
       await save.mutateAsync({
@@ -183,6 +193,16 @@ export function ProjectForm({
             onChange={(e) => set('ownerId', e.target.value)}
           />
         </Field>
+        {admin && (
+          <Field label="Visibilidad">
+            <AssigneePicker selected={memberIds} onChange={setMemberIds} />
+            <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+              {memberIds.length === 0
+                ? 'Sin selección: visible para todos los usuarios.'
+                : 'Solo los seleccionados verán el proyecto (además de administradores, el responsable y quienes tengan tareas asignadas en él).'}
+            </p>
+          </Field>
+        )}
         <Field label="Próxima acción">
           <Input
             value={form.nextAction}

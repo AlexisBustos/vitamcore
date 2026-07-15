@@ -102,6 +102,8 @@ export interface Project {
   businessUnit?: Ref | null;
   _count?: { tasks: number };
   taskStats?: { total: number; done: number }; // avance según tareas (solo en listado)
+  // Lista de visibilidad; vacía = visible para todos. Misma forma que Task.assignees.
+  members?: { user: Ref }[];
 }
 
 export interface ProjectDetail extends Project {
