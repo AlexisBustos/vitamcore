@@ -4,6 +4,7 @@
 import { Prisma, TaskActivityType } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { notFound } from '../../utils/http-error';
+import type { AuthUser } from '../../middleware/auth';
 import {
   assertAssignableUsers,
   assertBusinessUnitInOrganization,
@@ -11,6 +12,11 @@ import {
   assertOrganization,
   assertProjectInOrganization,
 } from '../shared/relations';
+import {
+  assertProjectVisible,
+  isRestrictedUser,
+  projectVisibilityWhere,
+} from '../shared/visibility';
 import { syncProjectStatus } from '../projects/projects.service';
 import {
   diffScalarEvents,
@@ -28,7 +34,7 @@ const OPEN_STATUSES: Prisma.TaskWhereInput['status'] = {
   not: 'DONE',
 };
 
-export async function list(filters: ListTasksFilters) {
+export async function list(filters: ListTasksFilters, user?: AuthUser) {
   const where: Prisma.TaskWhereInput = {
     organizationId: filters.organizationId,
     businessUnitId: filters.businessUnitId,
@@ -53,6 +59,14 @@ export async function list(filters: ListTasksFilters) {
     ];
   }
 
+  // Visibilidad row-level (colaboradores): la tarea es visible si no tiene
+  // proyecto o si su proyecto es visible. En AND para no pisar el OR de búsqueda.
+  if (isRestrictedUser(user)) {
+    where.AND = [
+      { OR: [{ projectId: null }, { project: projectVisibilityWhere(user.id) }] },
+    ];
+  }
+
   return prisma.task.findMany({
     where,
     orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
@@ -67,7 +81,7 @@ export async function list(filters: ListTasksFilters) {
   });
 }
 
-export async function getById(id: string) {
+export async function getById(id: string, user?: AuthUser) {
   const task = await prisma.task.findUnique({
     where: { id },
     include: {
@@ -88,12 +102,16 @@ export async function getById(id: string) {
     },
   });
   if (!task) throw notFound('Tarea no encontrada');
+  if (task.projectId) await assertProjectVisible(task.projectId, user);
   return task;
 }
 
-export async function create(input: CreateTaskInput, actorId?: string | null) {
+export async function create(input: CreateTaskInput, user?: AuthUser) {
   await assertOrganization(input.organizationId);
   await assertRelations(input.organizationId, input.businessUnitId, input.projectId);
+  // Un colaborador no puede colgar tareas de un proyecto que no ve (404,
+  // el mismo error que si no existiera).
+  if (input.projectId) await assertProjectVisible(input.projectId, user);
   const assigneeIds = [...new Set(input.assigneeIds ?? [])];
   await assertAssignableUsers(assigneeIds);
   const { labelIds, assigneeIds: _ignore, ...data } = input;
@@ -114,7 +132,7 @@ export async function create(input: CreateTaskInput, actorId?: string | null) {
         data: assigneeIds.map((userId) => ({ taskId: task.id, userId })),
       });
     }
-    await recordActivity(tx, task.id, actorId, [
+    await recordActivity(tx, task.id, user?.id, [
       { type: TaskActivityType.CREATED, data: {} },
     ]);
     if (task.projectId) await syncProjectStatus(task.projectId, tx);
@@ -125,7 +143,7 @@ export async function create(input: CreateTaskInput, actorId?: string | null) {
 export async function update(
   id: string,
   input: UpdateTaskInput,
-  actorId?: string | null,
+  user?: AuthUser,
 ) {
   const current = await prisma.task.findUnique({
     where: { id },
@@ -141,6 +159,10 @@ export async function update(
     },
   });
   if (!current) throw notFound('Tarea no encontrada');
+
+  // La tarea actual debe ser visible, y también el proyecto destino si se mueve.
+  if (current.projectId) await assertProjectVisible(current.projectId, user);
+  if (input.projectId) await assertProjectVisible(input.projectId, user);
 
   await assertRelations(
     current.organizationId,
@@ -179,7 +201,7 @@ export async function update(
     await recordActivity(
       tx,
       id,
-      actorId,
+      user?.id,
       await buildUpdateEvents(tx, current, input, labelIds, assigneeIds),
     );
     // Si la tarea se movió de proyecto, hay que recalcular ambos.
@@ -272,12 +294,13 @@ async function buildUpdateEvents(
   return events;
 }
 
-export async function remove(id: string) {
+export async function remove(id: string, user?: AuthUser) {
   const existing = await prisma.task.findUnique({
     where: { id },
     select: { id: true, projectId: true },
   });
   if (!existing) throw notFound('Tarea no encontrada');
+  if (existing.projectId) await assertProjectVisible(existing.projectId, user);
   await prisma.$transaction(async (tx) => {
     await tx.task.delete({ where: { id } });
     if (existing.projectId) await syncProjectStatus(existing.projectId, tx);

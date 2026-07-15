@@ -50,7 +50,7 @@ describe('tasks — responsables (assignees)', () => {
       organizationId: org.id, title: 'T', assigneeIds: [ana.id],
       status: 'TODO', priority: 'MEDIUM', source: 'MANUAL',
     } as never);
-    await tasks.update(created.id, { assigneeIds: [beto.id] } as never, null);
+    await tasks.update(created.id, { assigneeIds: [beto.id] } as never, undefined);
     const detail = await tasks.getById(created.id);
     const names = detail.assignees.map((a: { user: { name: string } }) => a.user.name);
     expect(names).toEqual(['Beto']);
@@ -83,7 +83,7 @@ describe('tasks — responsables (assignees)', () => {
       organizationId: org.id, title: 'T', assigneeIds: [ana.id],
       status: 'TODO', priority: 'MEDIUM', source: 'MANUAL',
     } as never);
-    await tasks.update(created.id, { assigneeIds: [beto.id] } as never, null);
+    await tasks.update(created.id, { assigneeIds: [beto.id] } as never, undefined);
     const detail = await tasks.getById(created.id);
     const types = detail.activity.map((a: { type: string }) => a.type);
     expect(types).toContain('ASSIGNEE_ADDED');

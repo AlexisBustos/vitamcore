@@ -1,6 +1,6 @@
 import { beforeEach, afterAll, describe, expect, test } from 'vitest';
 import { resetDb, disconnect } from './db';
-import { makeOrg, makeUser, makeTask } from './fixtures';
+import { asAuthUser, makeOrg, makeUser, makeTask } from './fixtures';
 import { diffScalarEvents } from '../src/modules/tasks/task-activity.service';
 import * as tasks from '../src/modules/tasks/tasks.service';
 import { prisma } from '../src/lib/prisma';
@@ -45,7 +45,7 @@ describe('actividad — integración', () => {
   test('create registra CREATED con actor', async () => {
     const org = await makeOrg();
     const user = await makeUser();
-    await tasks.create({ organizationId: org.id, title: 'T', status: 'TODO', priority: 'MEDIUM', source: 'MANUAL' } as never, user.id);
+    await tasks.create({ organizationId: org.id, title: 'T', status: 'TODO', priority: 'MEDIUM', source: 'MANUAL' } as never, asAuthUser(user));
     const detail = await tasks.getById((await prisma.task.findFirst())!.id);
     expect(detail.activity.map((a: { type: string }) => a.type)).toContain('CREATED');
     expect(detail.activity[detail.activity.length - 1].actorId).toBe(user.id);
@@ -54,7 +54,7 @@ describe('actividad — integración', () => {
   test('update de estado registra STATUS_CHANGED', async () => {
     const org = await makeOrg();
     const task = await makeTask(org.id, { status: 'TODO' });
-    await tasks.update(task.id, { status: 'DOING' } as never, null);
+    await tasks.update(task.id, { status: 'DOING' } as never, undefined);
     const detail = await tasks.getById(task.id);
     expect(detail.activity.map((a: { type: string }) => a.type)).toContain('STATUS_CHANGED');
   });
