@@ -306,7 +306,7 @@ export function periodSeries(g: Granularity, fromKey: string, toKey: string): st
 ```bash
 npx vitest run test/period.test.ts
 ```
-Expected: PASS, 20 tests.
+Expected: PASS, 21 tests (3 + 4 + 7 + 3 + 4).
 
 Si `2026-W53` falla, revisa `semanasDelAño`: 2026 empieza en jueves, y un año que empieza en jueves tiene 53 semanas ISO. No "arregles" el test.
 
@@ -315,7 +315,7 @@ Si `2026-W53` falla, revisa `semanasDelAño`: 2026 empieza en jueves, y un año 
 ```bash
 npm test
 ```
-Expected: 199 + 20 = 219 verdes.
+Expected: 220 verdes (199 previos + 21 nuevos).
 
 - [ ] **Step 6: Commit**
 
@@ -341,8 +341,22 @@ Añade a `backend/test/period.test.ts`. Estos **sí** tocan BD:
 ```ts
 import { beforeEach, afterAll } from 'vitest';
 import { resetDb, disconnect } from './db';
-import { makeOrg, makeIncome, makeExpense, makeBankAccount, makeBankTransaction } from './fixtures';
+import {
+  makeOrg, makeIncome, makeExpense, makeBankAccount, makeBankTransaction, makeImportBatch,
+} from './fixtures';
 import { listPeriods } from '../src/modules/shared/period';
+
+// makeBankTransaction (fixtures.ts:77) recibe un OBJETO, no posicionales, y
+// exige importBatchId: es FK obligatoria (schema.prisma:791) y no tiene default.
+// Este helper crea el lote una vez y devuelve un atajo por cuenta.
+async function movimientosDe(organizationId: string) {
+  const lote = await makeImportBatch(organizationId, { type: 'BANK_STATEMENT' });
+  return (bankAccountId: string, overrides: Record<string, unknown> = {}) =>
+    makeBankTransaction(
+      { organizationId, bankAccountId, importBatchId: lote.id },
+      overrides,
+    );
+}
 
 describe('listPeriods', () => {
   beforeEach(resetDb);
@@ -378,8 +392,9 @@ describe('listPeriods', () => {
     const org = await makeOrg();
     const a = await makeBankAccount(org.id, { accountNumber: '111' });
     const b = await makeBankAccount(org.id, { accountNumber: '222' });
-    await makeBankTransaction(org.id, a.id, { transactionDate: new Date('2026-07-06') });
-    await makeBankTransaction(org.id, b.id, { transactionDate: new Date('2026-06-10') });
+    const mov = await movimientosDe(org.id);
+    await mov(a.id, { transactionDate: new Date('2026-07-06') });
+    await mov(b.id, { transactionDate: new Date('2026-06-10') });
     expect(await listPeriods('month', { source: 'bank', bankAccountId: a.id }))
       .toEqual(['2026-07']);
     expect(await listPeriods('month', { source: 'bank', organizationId: org.id }))
@@ -387,11 +402,13 @@ describe('listPeriods', () => {
   });
 
   // El borde de año ISO tiene que salir bien también desde Postgres (IYYY/IW),
-  // no solo desde la aritmética de JS.
+  // no solo desde la aritmética de JS. Con 'YYYY-WW' esto daría 2027-W01 y las
+  // dos capas discreparían justo en el borde.
   test('bank: el 1-ene-2027 se agrupa en 2026-W53, como en periodKey', async () => {
     const org = await makeOrg();
     const acc = await makeBankAccount(org.id);
-    await makeBankTransaction(org.id, acc.id, { transactionDate: new Date('2027-01-01') });
+    const mov = await movimientosDe(org.id);
+    await mov(acc.id, { transactionDate: new Date('2027-01-01') });
     expect(await listPeriods('week', { source: 'bank', organizationId: org.id }))
       .toEqual(['2026-W53']);
   });
@@ -480,7 +497,7 @@ Nota sobre el `IS NOT NULL`: `ledger.ts:51` lo emite porque `incomeDate`/`expens
 ```bash
 npx vitest run test/period.test.ts
 ```
-Expected: PASS, 26 tests.
+Expected: PASS, 27 tests en el archivo (21 de la Task 1 + 6 de listPeriods).
 
 - [ ] **Step 5: Commit**
 
@@ -546,7 +563,7 @@ Expected: sin errores. Los consumidores (`income.service.ts:12,259`, `expenses.s
 ```bash
 npm test
 ```
-Expected: 225 verdes (199 + 26).
+Expected: 226 verdes (199 + 27).
 
 - [ ] **Step 5: Commit**
 
@@ -584,7 +601,7 @@ Añade el import: `import { listPeriods } from '../shared/period';`
 ```bash
 npm run build && npm test
 ```
-Expected: sin errores, 225 verdes.
+Expected: sin errores, 226 verdes (esta tarea no añade tests).
 
 - [ ] **Step 3: Commit**
 
@@ -600,7 +617,7 @@ git commit -m "refactor(finanzas): listBankTransactionMonths delega en listPerio
 **Files:**
 - Test: `backend/test/bank-monthly.test.ts` (crear)
 
-`listBankMonthly` (`bank-transactions.service.ts:172-275`) es la lógica más intrincada del módulo —arrastra saldos hacia adelante rellenando meses sin movimiento— y **no tiene un solo test**. La Task 6 la va a tocar. Primero la red.
+`listBankMonthly` (`bank-transactions.service.ts:171-276`) es la lógica más intrincada del módulo —arrastra saldos hacia adelante rellenando meses sin movimiento— y **no tiene un solo test**. La Task 6 la va a tocar. Primero la red.
 
 - [ ] **Step 1: Escribe los tests de caracterización**
 
@@ -609,8 +626,21 @@ Crea `backend/test/bank-monthly.test.ts`. Estos tests describen el comportamient
 ```ts
 import { beforeEach, afterAll, describe, expect, test } from 'vitest';
 import { resetDb, disconnect } from './db';
-import { makeOrg, makeBankAccount, makeBankTransaction } from './fixtures';
+import {
+  makeOrg, makeBankAccount, makeBankTransaction, makeImportBatch,
+} from './fixtures';
 import { listBankMonthly } from '../src/modules/finance-imports/bank-transactions.service';
+
+// makeBankTransaction (fixtures.ts:77) recibe un OBJETO, no posicionales, y
+// exige importBatchId: es FK obligatoria (schema.prisma:791) y no tiene default.
+async function movimientosDe(organizationId: string) {
+  const lote = await makeImportBatch(organizationId, { type: 'BANK_STATEMENT' });
+  return (bankAccountId: string, overrides: Record<string, unknown> = {}) =>
+    makeBankTransaction(
+      { organizationId, bankAccountId, importBatchId: lote.id },
+      overrides,
+    );
+}
 
 describe('listBankMonthly', () => {
   beforeEach(resetDb);
@@ -624,10 +654,11 @@ describe('listBankMonthly', () => {
   test('un mes: flujos y saldo de cierre', async () => {
     const org = await makeOrg();
     const acc = await makeBankAccount(org.id);
-    await makeBankTransaction(org.id, acc.id, {
+    const mov = await movimientosDe(org.id);
+    await mov(acc.id, {
       transactionDate: new Date('2026-07-05'), creditAmount: 1000, chargeAmount: 0, balance: 1000,
     });
-    await makeBankTransaction(org.id, acc.id, {
+    await mov(acc.id, {
       transactionDate: new Date('2026-07-20'), creditAmount: 0, chargeAmount: 300, balance: 700,
     });
     const res = await listBankMonthly({ organizationId: org.id });
@@ -639,10 +670,11 @@ describe('listBankMonthly', () => {
   test('devuelve el más reciente primero', async () => {
     const org = await makeOrg();
     const acc = await makeBankAccount(org.id);
-    await makeBankTransaction(org.id, acc.id, {
+    const mov = await movimientosDe(org.id);
+    await mov(acc.id, {
       transactionDate: new Date('2026-06-10'), creditAmount: 500, chargeAmount: 0, balance: 500,
     });
-    await makeBankTransaction(org.id, acc.id, {
+    await mov(acc.id, {
       transactionDate: new Date('2026-07-10'), creditAmount: 200, chargeAmount: 0, balance: 700,
     });
     const res = await listBankMonthly({ organizationId: org.id });
@@ -654,10 +686,11 @@ describe('listBankMonthly', () => {
   test('carry-forward: un mes sin movimientos hereda el saldo anterior', async () => {
     const org = await makeOrg();
     const acc = await makeBankAccount(org.id);
-    await makeBankTransaction(org.id, acc.id, {
+    const mov = await movimientosDe(org.id);
+    await mov(acc.id, {
       transactionDate: new Date('2026-05-10'), creditAmount: 900, chargeAmount: 0, balance: 900,
     });
-    await makeBankTransaction(org.id, acc.id, {
+    await mov(acc.id, {
       transactionDate: new Date('2026-07-10'), creditAmount: 100, chargeAmount: 0, balance: 1000,
     });
     const res = await listBankMonthly({ organizationId: org.id });
@@ -668,16 +701,18 @@ describe('listBankMonthly', () => {
     ]);
   });
 
-  // La otra mitad de la regla: antes de su primer movimiento la cuenta aporta 0,
-  // el saldo NO se arrastra hacia atrás.
+  // La otra mitad de la regla (el flag `started`, bank-transactions.service.ts:241):
+  // antes de su primer movimiento la cuenta aporta 0; el saldo NO se arrastra
+  // hacia atrás.
   test('antes del primer movimiento de una cuenta, esa cuenta aporta 0', async () => {
     const org = await makeOrg();
     const vieja = await makeBankAccount(org.id, { accountNumber: '111' });
     const nueva = await makeBankAccount(org.id, { accountNumber: '222' });
-    await makeBankTransaction(org.id, vieja.id, {
+    const mov = await movimientosDe(org.id);
+    await mov(vieja.id, {
       transactionDate: new Date('2026-06-10'), creditAmount: 500, chargeAmount: 0, balance: 500,
     });
-    await makeBankTransaction(org.id, nueva.id, {
+    await mov(nueva.id, {
       transactionDate: new Date('2026-07-10'), creditAmount: 300, chargeAmount: 0, balance: 300,
     });
     const res = await listBankMonthly({ organizationId: org.id });
@@ -690,10 +725,11 @@ describe('listBankMonthly', () => {
   test('el saldo de cierre del mes es el del último movimiento, no la suma', async () => {
     const org = await makeOrg();
     const acc = await makeBankAccount(org.id);
-    await makeBankTransaction(org.id, acc.id, {
+    const mov = await movimientosDe(org.id);
+    await mov(acc.id, {
       transactionDate: new Date('2026-07-05'), creditAmount: 1000, chargeAmount: 0, balance: 1000,
     });
-    await makeBankTransaction(org.id, acc.id, {
+    await mov(acc.id, {
       transactionDate: new Date('2026-07-25'), creditAmount: 0, chargeAmount: 250, balance: 750,
     });
     const res = await listBankMonthly({ organizationId: org.id });
@@ -704,10 +740,11 @@ describe('listBankMonthly', () => {
     const org = await makeOrg();
     const a = await makeBankAccount(org.id, { accountNumber: '111' });
     const b = await makeBankAccount(org.id, { accountNumber: '222' });
-    await makeBankTransaction(org.id, a.id, {
+    const mov = await movimientosDe(org.id);
+    await mov(a.id, {
       transactionDate: new Date('2026-07-05'), creditAmount: 100, chargeAmount: 0, balance: 100,
     });
-    await makeBankTransaction(org.id, b.id, {
+    await mov(b.id, {
       transactionDate: new Date('2026-07-05'), creditAmount: 900, chargeAmount: 0, balance: 900,
     });
     const res = await listBankMonthly({ bankAccountId: a.id });
@@ -727,8 +764,6 @@ Expected: PASS, 7 tests, **sin tocar código de producción**.
 
 Si alguno falla, **no cambies el código**: el test describe mal el comportamiento actual. Corrige el test hasta que refleje lo que el código hace hoy. Ese es el punto de una red de caracterización — congela la conducta real, no la deseada.
 
-Si `makeBankTransaction` no acepta alguno de esos campos, mira su firma en `test/fixtures.ts:77`.
-
 - [ ] **Step 3: Commit**
 
 ```bash
@@ -741,13 +776,13 @@ git commit -m "test(finanzas): red de caracterización de listBankMonthly"
 ### Task 6: `periodSeries` absorbe el generador local de meses
 
 **Files:**
-- Modify: `backend/src/modules/finance-imports/bank-transactions.service.ts:317-331` (borrar) y `:216` (usar `periodSeries`)
+- Modify: `backend/src/modules/finance-imports/bank-transactions.service.ts:317-331` (borrar) y `:220` (usar `periodSeries`)
 
 Ojo: la función local `monthRange(min, max)` de `:317` **no es** la `monthRange(month)` de `ledger.ts`. Mismo nombre, cosas distintas: esta genera una *serie* de claves. Es la que `periodSeries` reemplaza.
 
 - [ ] **Step 1: Sustituye la llamada**
 
-En `listBankMonthly`, línea ~216:
+En `listBankMonthly`, línea **220**:
 
 ```diff
 - const months = monthRange(minMonth, maxMonth);
@@ -778,7 +813,7 @@ Expected: PASS, 7 tests. **Aquí es donde la red gana su sueldo**: el carry-forw
 ```bash
 npm test
 ```
-Expected: 232 verdes.
+Expected: 233 verdes (226 + los 7 de la Task 5).
 
 ```bash
 git add backend/src/modules/finance-imports/bank-transactions.service.ts
@@ -876,7 +911,7 @@ Expected: **sin resultados**. Si algo aparece, es una sexta copia que el spec no
 ```bash
 npm run build && npm test
 ```
-Expected: sin errores, 232 verdes. `finance.service.test.ts` y `finance-imports.service.test.ts` cubren estas rutas: si se ponen rojos, `periodRange` no es equivalente a la copia que sustituyó.
+Expected: sin errores, 233 verdes. `finance.service.test.ts` y `finance-imports.service.test.ts` cubren estas rutas: si se ponen rojos, `periodRange` no es equivalente a la copia que sustituyó.
 
 - [ ] **Step 8: Commit**
 
@@ -901,7 +936,7 @@ Expected: **solo archivos nuevos** (`period.test.ts`, `bank-monthly.test.ts`). N
 ```bash
 npm test && npm run build
 ```
-Expected: 232 verdes, typecheck limpio.
+Expected: 233 verdes, typecheck limpio.
 
 - [ ] **Step 3: Merge a develop**
 
@@ -952,6 +987,12 @@ SELECT b.id, b.\"originalFileName\", b.\"periodMonth\",
 
 La misma consulta con `expense_records` y `type = 'PURCHASE_REPORT'`.
 
+> Nota sobre el guardia `jsonb_typeof(...) = 'array'`: **no protege al `CROSS JOIN LATERAL`**,
+> porque se evalúa después de expandirlo. Si algún lote tuviera `previewData` no-array, la
+> consulta erraría en vez de saltárselo. En la práctica da igual —`serializeRows` siempre
+> emite un array— pero no hace lo que aparenta: si la query falla con
+> `cannot extract elements from an object`, esa es la causa y no un lote corrupto.
+
 - [ ] **Step 4: Interpreta el resultado**
 
 - **`(0 rows)` en ambas** → el defecto nunca causó daño. Sigue a la Task 10.
@@ -959,17 +1000,123 @@ La misma consulta con `expense_records` y `type = 'PURCHASE_REPORT'`.
 
 ---
 
-### Task 10: Dedupe intra-lote
+### Task 10: `organizationId` en la `dedupeKey`
 
 **Files:**
-- Modify: `backend/src/modules/finance-imports/finance-imports.parser.ts` (`parseSalesRows` ~128, `parsePurchaseRows` ~198, `parseBankRows` ~270)
+- Modify: `backend/src/modules/finance-imports/finance-imports.parser.ts` (`parseSalesRows` `:128`, clave `:153-160`; `parsePurchaseRows` `:205`, clave `:223-230`)
+- Modify: `backend/src/modules/finance-imports/import-pipeline.service.ts` (`parseRows` `:251-262`, llamada en `:53`)
 - Test: `backend/test/finance-imports.parser.test.ts`
 
-El preview dedupea contra la BD pero no contra sí mismo: dos filas idénticas en un archivo quedan ambas `VALID` y chocan en el confirm, abortando el lote entero con un 25P02.
+> **Esta tarea va antes que el dedupe intra-lote a propósito.** Añade el parámetro
+> `organizationId` al parser; si se hiciera al revés, los tests del dedupe tendrían que
+> pasar un argumento que aún no existe y el commit intermedio dejaría `npm run build`
+> roto (Vitest transpila sin typecheck, así que los tests pasarían y el build no).
 
 - [ ] **Step 1: Escribe el test que falla**
 
 Añade a `backend/test/finance-imports.parser.test.ts`:
+
+```ts
+test('la clave de ventas lleva la empresa delante', () => {
+  const fila = {
+    DOCUMENTO: 'FACTURA', FOLIO: '100', RUT: '76.543.210-9',
+    FECHA: '2026-07-06', TOTAL: '119000', EMITIDO: 'SI',
+  };
+  const a = parseSalesRows([fila], 'org-A').rows[0].dedupeKey;
+  const b = parseSalesRows([fila], 'org-B').rows[0].dedupeKey;
+  expect(a).toBe('org-A|SALES_REPORT|FACTURA|100|76.543.210-9|2026-07-06|119000');
+  // El punto entero del arreglo: la MISMA factura en dos empresas ya no colisiona.
+  expect(a).not.toBe(b);
+});
+```
+
+- [ ] **Step 2: Verifica que falla**
+
+```bash
+npx vitest run test/finance-imports.parser.test.ts -t "empresa delante"
+```
+Expected: FAIL.
+
+- [ ] **Step 3: Añade el parámetro**
+
+- `parseSalesRows(rows, organizationId: string)`: en la `dedupeKey` (`:153-160`), antepón `organizationId` al array.
+- `parsePurchaseRows(rows, organizationId: string)`: ídem (`:223-230`).
+- `parseBankRows`: **no se toca.** Su unique es `@@unique([bankAccountId, dedupeKey])` y `bankAccountId` ya está acotado a una empresa.
+- `parseRows` (`import-pipeline.service.ts:251-262`): propaga `organizationId` a los dos primeros.
+- En `previewImport`, la llamada a `parseRows` está en **`:53`**: pásale `input.organizationId`.
+
+**No añadas un filtro `organizationId` a `getExistingDedupeKeys`.** Con la empresa dentro de la clave, su `where: { sourceDedupeKey: { in: dedupeKeys } }` queda acotado por empresa gratis: las claves de otra empresa ya no pueden coincidir. Añadirlo sería redundante y haría creer que hacían falta dos arreglos.
+
+- [ ] **Step 4: Arregla los tests que este cambio rompe**
+
+Están **todos en `test/finance-imports.parser.test.ts`**, no en `finance-imports.service.test.ts` (ese escribe `previewData` a mano y nunca llama al parser, así que no se entera):
+
+- `:70`, `:100`, `:117` — llamadas `parseSalesRows([...])` / `parsePurchaseRows([...])` con un solo argumento: dejan de compilar. Pásales un `organizationId` cualquiera (`'org-1'`).
+- `:93-95`, `:139-141` — aserciones de `dedupeKey` hardcodeadas: antepón `org-1|` al valor esperado.
+- `:168` — la de `parseBankRows` **no cambia** (`acc-1|2026-01-30|…`): ese parser no lleva empresa.
+
+```bash
+npx vitest run test/finance-imports.parser.test.ts && npm run build
+```
+Expected: PASS y typecheck limpio.
+
+- [ ] **Step 5: El test de la pérdida silenciosa (el que justifica la fase)**
+
+Añade a `backend/test/finance-imports.service.test.ts`:
+
+```ts
+test('dos empresas con la misma factura: ambas se guardan', async () => {
+  // Antes de este arreglo, getExistingDedupeKeys (sin filtro de empresa) marcaba
+  // la segunda como DUPLICATE en el preview y confirmImport la descartaba: el
+  // ingreso desaparecía de los números sin aviso. Ver spec §2.
+  const orgA = await makeOrg('Vitam Healthcare');
+  const orgB = await makeOrg('Vitam Tech');
+  const fila = {
+    DOCUMENTO: 'FACTURA', FOLIO: '100', RUT: '76.543.210-9',
+    FECHA: '2026-07-06', TOTAL: '119000', EMITIDO: 'SI',
+  };
+
+  // CLAVE: las dedupeKey se DERIVAN del parser, no se escriben a mano. Si las
+  // escribieras a mano ya saldrían distintas y el test pasaría incluso sin el
+  // arreglo: probaría que dos strings distintos insertan dos filas, que es
+  // cierto hoy. Lo que se prueba aquí es que el PARSER las hace distintas.
+  for (const org of [orgA, orgB]) {
+    const preview = parseSalesRows([fila], org.id);
+    const lote = await makeImportBatch(org.id, {
+      type: 'SALES_REPORT',
+      previewData: serializeRows(preview.rows),
+    });
+    await confirmImport(lote.id);
+  }
+
+  expect(await prisma.incomeRecord.count()).toBe(2); // antes del arreglo: 1
+});
+```
+
+Importa `parseSalesRows` del parser y `serializeRows` de `finance-imports.serde.ts`. El resto del andamiaje (`makeImportBatch`, `confirmImport`) sigue el patrón de `describe('confirmImport (ventas)')` (`:116`).
+
+- [ ] **Step 6: Verifica y commitea**
+
+```bash
+npm test && npm run build
+```
+
+```bash
+git add backend/src/modules/finance-imports/ backend/test/
+git commit -m "fix(finanzas): la dedupeKey de ventas y compras lleva organizationId"
+```
+
+---
+
+### Task 11: Dedupe intra-lote
+
+**Files:**
+- Modify: `backend/src/modules/finance-imports/finance-imports.parser.ts` (`parseSalesRows` `:128`, `parsePurchaseRows` `:205`, `parseBankRows` `:260`)
+- Test: `backend/test/finance-imports.parser.test.ts`
+
+El preview dedupea contra la BD pero no contra sí mismo: dos filas idénticas en un archivo quedan ambas `VALID` y chocan en el confirm, abortando el lote entero con un 25P02.
+
+- [ ] **Step 1: Escribe los tests que fallan**
 
 ```ts
 test('dos filas idénticas: la segunda se marca DUPLICATE', () => {
@@ -999,19 +1146,19 @@ test('filas distintas no se marcan duplicadas', () => {
 - [ ] **Step 2: Verifica que falla**
 
 ```bash
-npx vitest run test/finance-imports.parser.test.ts
+npx vitest run test/finance-imports.parser.test.ts -t "idénticas"
 ```
-Expected: FAIL — la segunda fila sale `VALID`. (También fallará por el argumento extra: es lo esperado, lo arregla la Task 11.)
+Expected: FAIL — la segunda fila sale `VALID`.
 
 - [ ] **Step 3: Implementa el dedupe intra-lote**
 
 En `finance-imports.parser.ts`, tras construir las filas y **antes** de `buildPreview`, en cada uno de los tres parsers:
 
 ```ts
-// Dedupe intra-lote: el preview solo compara contra la BD, así que dos filas
-// idénticas dentro del MISMO archivo llegarían ambas al insert y abortarían la
-// transacción entera (25P02). La primera gana; las repetidas se marcan aquí,
-// donde el CEO las ve y las entiende.
+// Dedupe intra-lote: el preview solo compara contra la BD (getExistingDedupeKeys),
+// así que dos filas idénticas dentro del MISMO archivo llegarían ambas al insert
+// y abortarían la transacción entera (25P02). La primera gana; las repetidas se
+// marcan aquí, donde el CEO las ve y las entiende.
 const vistas = new Set<string>();
 const deduped = parsedRows.map((row) => {
   if (row.status === 'ERROR') return row;
@@ -1027,97 +1174,16 @@ Y pasa `deduped` a `buildPreview` en vez de `parsedRows`.
 
 Las filas `ERROR` se saltan a propósito: ya están descartadas y su `dedupeKey` puede estar incompleta (falta folio o RUT), así que no deben reservar la clave.
 
-- [ ] **Step 4: Verifica**
+- [ ] **Step 4: Verifica y commitea**
 
 ```bash
-npx vitest run test/finance-imports.parser.test.ts
+npm test && npm run build
 ```
-Expected: PASS.
-
-- [ ] **Step 5: Commit**
+Expected: verde.
 
 ```bash
 git add backend/src/modules/finance-imports/finance-imports.parser.ts backend/test/finance-imports.parser.test.ts
 git commit -m "fix(finanzas): dedupe intra-lote en el preview"
-```
-
----
-
-### Task 11: `organizationId` en la `dedupeKey`
-
-**Files:**
-- Modify: `backend/src/modules/finance-imports/finance-imports.parser.ts:128,153-160,198,223-230,251-262`
-- Modify: `backend/src/modules/finance-imports/import-pipeline.service.ts:57` (llamada a `parseRows`)
-- Test: `backend/test/finance-imports.parser.test.ts`
-
-- [ ] **Step 1: Escribe el test que falla**
-
-```ts
-test('la clave de ventas lleva la empresa delante', () => {
-  const fila = {
-    DOCUMENTO: 'FACTURA', FOLIO: '100', RUT: '76.543.210-9',
-    FECHA: '2026-07-06', TOTAL: '119000', EMITIDO: 'SI',
-  };
-  const a = parseSalesRows([fila], 'org-A').rows[0].dedupeKey;
-  const b = parseSalesRows([fila], 'org-B').rows[0].dedupeKey;
-  expect(a).toBe('org-A|SALES_REPORT|FACTURA|100|76.543.210-9|2026-07-06|119000');
-  // El punto entero del arreglo: la MISMA factura en dos empresas ya no colisiona.
-  expect(a).not.toBe(b);
-});
-```
-
-- [ ] **Step 2: Verifica que falla**
-
-```bash
-npx vitest run test/finance-imports.parser.test.ts -t "empresa delante"
-```
-Expected: FAIL.
-
-- [ ] **Step 3: Añade el parámetro**
-
-- `parseSalesRows(rows, organizationId: string)`: en la `dedupeKey` (`:153-160`), antepón `organizationId` al array.
-- `parsePurchaseRows(rows, organizationId: string)`: ídem (`:223-230`).
-- `parseBankRows`: **no se toca.** Su unique es `@@unique([bankAccountId, dedupeKey])` y `bankAccountId` ya está acotado a una empresa.
-- `parseRows` (`import-pipeline.service.ts:251-262`): propaga `organizationId` a los dos primeros.
-- En `previewImport` (`:57`), pásale `input.organizationId`.
-
-**No añadas un filtro `organizationId` a `getExistingDedupeKeys`.** Con la empresa dentro de la clave, su `where: { sourceDedupeKey: { in: dedupeKeys } }` queda acotado por empresa gratis: las claves de otra empresa ya no pueden coincidir. Añadirlo sería redundante y haría creer que hacían falta dos arreglos.
-
-- [ ] **Step 4: Verifica**
-
-```bash
-npx vitest run test/finance-imports.parser.test.ts && npm run build
-```
-Expected: PASS y typecheck limpio. Otros tests de `finance-imports.service.test.ts` fallarán si tienen claves hardcodeadas: **actualízalos**, esta fase sí permite tocar tests (a diferencia de la Fase 0).
-
-- [ ] **Step 5: Test de la pérdida silenciosa (el que justifica la fase)**
-
-Añade a `backend/test/finance-imports.service.test.ts`:
-
-```ts
-test('dos empresas con la misma factura: ambas se guardan', async () => {
-  // Antes de este arreglo la segunda se descartaba en silencio como duplicada
-  // y el ingreso desaparecía de los números. Ver spec §2.
-  const orgA = await makeOrg('Vitam Healthcare');
-  const orgB = await makeOrg('Vitam Tech');
-  const fila = {
-    DOCUMENTO: 'FACTURA', FOLIO: '100', RUT: '76.543.210-9',
-    FECHA: '2026-07-06', TOTAL: '119000', EMITIDO: 'SI',
-  };
-  // Importa y confirma el mismo contenido en ambas empresas.
-  // (Sigue el patrón de los tests de confirmImport existentes en este archivo.)
-  // ...
-  expect(await prisma.incomeRecord.count()).toBe(2); // hoy daría 1
-});
-```
-
-Complétalo siguiendo el patrón de `confirmImport (ventas)` (`:116`).
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add backend/src/modules/finance-imports/ backend/test/
-git commit -m "fix(finanzas): la dedupeKey de ventas y compras lleva organizationId"
 ```
 
 ---
@@ -1142,16 +1208,16 @@ En `createRow` (`:425-432`):
 -     return false;
 +     // No se puede "saltar" una fila dentro de una transacción: en Postgres la
 +     // sentencia fallida ya la abortó (25P02) y Prisma no pone savepoint por
-+     // query. El rollback del lote es lo correcto —la importación es atómica—;
-+     // lo que estaba mal era prometer un salto imposible y morir con un código
-+     // críptico. Con el dedupe intra-lote y el de BD esto no debería ocurrir.
++     // query, así que este catch nunca pudo cumplir lo que prometía. El
++     // rollback del lote es lo correcto —la importación es atómica—; lo que
++     // estaba mal era la falsa promesa y morir con un código críptico.
 +     throw badRequest(`Fila duplicada en el lote: ${row.dedupeKey}`);
     }
     throw error;
   }
 ```
 
-`createRow` pasa a devolver `true` siempre (o `void`); ajusta `confirmImport` (`:145-150`) en consecuencia: `duplicated` ya se calcula desde la clasificación del preview, que es exacta.
+**`createRow` sigue devolviendo `boolean`. No lo cambies a `void`.** Hay un **segundo** `return false` en `:401` (`if (!batch.bankAccountId) return false;`) que no tiene nada que ver con P2002: es la guarda de un lote bancario sin cuenta. Si quitaras el booleano y con él el `if (created) inserted += 1; else duplicated += 1;` de `confirmImport` (`:145-150`), ese caso se contaría como insertado sin haber insertado nada. Es inalcanzable hoy (`previewImport` llama a `assertBankAccount`), pero no es esta tarea la que debe decidir sobre él: tocar solo el camino del P2002 deja el cambio acotado a lo que se está arreglando.
 
 `badRequest` ya está importado en el archivo.
 
@@ -1169,18 +1235,52 @@ if (batch.status === FinancialImportStatus.FAILED) {
 
 La Task 13 cierra los lotes en `PREVIEW` que sobrevivan a la migración, y sin esta rama el CEO recibiría "El lote ya fue confirmado", que es falso y desconcertante.
 
-- [ ] **Step 3: Actualiza el test que caracteriza el 25P02**
+- [ ] **Step 3: Actualiza el test que caracteriza el 25P02 — y NO cambies lo que afirma**
 
-`test/finance-imports.service.test.ts:229` (`confirmImport (guardas)`) espera hoy el `prisma:error 25P02`. Ese escenario ya no puede darse: el dedupe intra-lote lo previene. Cambia el test para verificar que **el lote se inserta bien** (una sola fila) en vez de reventar.
+El test es **`test/finance-imports.service.test.ts:167`** (`'dedupe: un sourceDedupeKey ya existente aborta la transacción y confirmImport falla'`, dentro de `describe('confirmImport (ventas)')`). **No es el `:229`**, que prueba otra cosa (un lote ya confirmado no se reconfirma).
 
-- [ ] **Step 4: Verifica**
+Y ojo con la premisa: **el dedupe intra-lote de la Task 11 NO previene este escenario.** El test crea un `incomeRecord` preexistente en BD con `sourceDedupeKey: 'sale-dup'` y luego arma `previewData` **a mano**, sin pasar por el parser. Es una colisión contra la BD, no dentro del lote. Sigue siendo alcanzable si alguien confirma un preview obsoleto.
+
+Así que el test **debe seguir rechazando**. Lo que cambia es *cómo*: antes moría con `prisma:error 25P02`, ahora lanza un `badRequest` legible. Aprovecha para afinarlo:
+
+```diff
+- await expect(imports.confirmImport(batch.id)).rejects.toThrow();
++ await expect(imports.confirmImport(batch.id)).rejects.toThrow(/Fila duplicada en el lote/);
+```
+
+Y reescribe su comentario (`:168-172`), que hoy describe el defecto como comportamiento esperado:
+
+```ts
+// Una clave ya existente en BD hace fallar el insert. La transacción hace
+// rollback completo (la importación es atómica) pero ahora con un mensaje
+// legible en vez del 25P02 críptico de antes: createRow ya no finge que
+// puede "saltar" la fila.
+```
+
+- [ ] **Step 4: Corrige la cabecera del archivo de tests**
+
+`test/finance-imports.service.test.ts:10-15` documenta la mentira que acabas de borrar:
+
+```diff
+- // El dedupe real se produce por el @unique global de `sourceDedupeKey`
+- // (IncomeRecord/ExpenseRecord): un choque lanza P2002 y createRow lo cuenta
+- // como duplicado (no inserta).
++ // El dedupe real ocurre en el PREVIEW (getExistingDedupeKeys contra la BD, y
++ // el dedupe intra-lote del parser): confirmImport solo inserta lo que llega
++ // marcado VALID/WARNING. El @unique de `sourceDedupeKey` es la última red: si
++ // salta, el lote entero hace rollback con un badRequest legible.
+```
+
+Un comentario que describe el bug como si fuera el diseño es cómo el bug sobrevive a su propio arreglo.
+
+- [ ] **Step 5: Verifica**
 
 ```bash
 npm test && npm run build
 ```
-Expected: verde, y **sin `prisma:error 25P02` en la salida**. Esa línea desapareciendo es la señal de que el defecto murió.
+Expected: verde, y **sin `prisma:error 25P02` en la salida**. Esa línea desapareciendo del log es la señal de que el defecto murió.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add backend/src/modules/finance-imports/import-pipeline.service.ts backend/test/finance-imports.service.test.ts

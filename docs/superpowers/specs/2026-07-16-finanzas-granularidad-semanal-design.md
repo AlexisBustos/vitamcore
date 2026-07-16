@@ -199,7 +199,9 @@ necesitan lógica especial.
 
 **Semana ISO 8601:** la semana 1 es la que contiene el 4 de enero; empieza el lunes. El
 borde de año es el caso traicionero: `2026-W01` empieza el **29 de diciembre de 2025**, y
-el 31 de diciembre de 2026 cae en `2027-W01`. Va cubierto con tests explícitos en ambos
+y el 31 de diciembre de 2026 **no** cae en `2027-W01` sino en `2026-W53`, porque 2026 empieza
+en jueves y por tanto tiene 53 semanas ISO (el 1 de enero de 2027 también es `2026-W53`).
+Va cubierto con tests explícitos en ambos
 sentidos.
 
 **"Hoy" en Santiago:** `Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(now)`
@@ -261,7 +263,8 @@ configuración— y `to_char(…, 'IYYY-"W"IW')` produce año-semana **ISO** (`I
 pura de fechas, testeable sin BD.
 
 **Tests** (`backend/test/period.test.ts`):
-- Bordes de año en ambos sentidos (`2026-W01` empieza 2025-12-29; 2026-12-31 → `2027-W01`).
+- Bordes de año en ambos sentidos (`2026-W01` empieza 2025-12-29; 2026-12-31 y 2027-01-01
+  son ambos `2026-W53`; `2025-W53` no existe y debe lanzar `badRequest`).
 - Semanas que cruzan meses.
 - `currentPeriod` con reloj congelado a las 23:00 de Santiago (UTC ya es el día siguiente)
   y a las 00:30 de Santiago.
