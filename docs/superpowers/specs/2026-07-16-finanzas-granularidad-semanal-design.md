@@ -179,11 +179,12 @@ export function currentPeriod(g: Granularity, now?: Date): string
 /** Serie contigua de claves entre dos períodos, inclusive. Para carry-forward y tendencia. */
 export function periodSeries(g: Granularity, fromKey: string, toKey: string): string[]
 
-/** Claves con datos, desc. Generaliza ledger.ts:listMonths. */
+/** Claves con datos, desc. Absorbe ledger.ts:listMonths Y listBankTransactionMonths. */
 export function listPeriods(
-  source: 'income' | 'expense',
   g: Granularity,
-  organizationId?: string,
+  q:
+    | { source: 'income' | 'expense'; organizationId?: string }
+    | { source: 'bank'; organizationId?: string; bankAccountId?: string },
 ): Promise<string[]>
 
 /** Etiqueta legible: '2026-W28' → 'Semana del 6 al 12 jul'; '2026-07' → 'Julio 2026'. */
@@ -218,8 +219,31 @@ const TRUNC = {
   week:  { unit: 'week',  format: 'IYYY-"W"IW' },
   month: { unit: 'month', format: 'YYYY-MM' },
 } as const;
+
+const PERIOD_SOURCES = {
+  income:  { table: 'income_records',    column: 'incomeDate' },
+  expense: { table: 'expense_records',   column: 'expenseDate' },
+  bank:    { table: 'bank_transactions', column: 'transactionDate' },
+} as const;
 // → date_trunc('week', "incomeDate")  y  to_char(…, 'IYYY-"W"IW')
 ```
+
+**`listPeriods` absorbe tres copias, no dos.** Además de `ledger.ts:listMonths`
+(income/expense) existe `listBankTransactionMonths` (`bank-transactions.service.ts:151-168`),
+una tercera implementación del mismo `date_trunc('month')` + `to_char` sobre
+`bank_transactions`, con filtros `organizationId?` y `bankAccountId?`. Es el respaldo de
+`GET /finance/imports/transactions/months`, el tercer endpoint estilo `/months` (§4).
+Dejarla fuera y darle su propio interruptor de granularidad sería justo lo que la Decisión 5
+existe para evitar.
+
+La absorción es limpia porque **`BankTransaction` tiene `organizationId` propio**
+(`schema.prisma:789`): no hace falta un join a `BankAccount`, y la tercera entrada de la
+whitelist tiene la misma forma que las otras dos.
+
+**Por qué la unión discriminada** en vez de un `bankAccountId?` suelto: `income_records` y
+`expense_records` **no tienen** columna `bankAccountId`. Con la unión, pasar `bankAccountId`
+junto a `source: 'income'` es un **error de tipos**, no un filtro que se ignora en silencio.
+El typecheck hace de guardia y no hace falta comprobación en tiempo de ejecución.
 
 `date_trunc('week', …)` de Postgres trunca al lunes por defecto —coincide con ISO sin
 configuración— y `to_char(…, 'IYYY-"W"IW')` produce año-semana **ISO** (`IYYY`/`IW`, no
@@ -236,9 +260,10 @@ pura de fechas, testeable sin BD.
 - **Caracterización del mes**: `periodRange('month', k)` contra una batería de meses con
   los valores **literales** que devuelve el `monthRange` de hoy (capturados antes del
   refactor), incluyendo el borde diciembre→enero. Literales, no una comparación contra
-  `monthRange` en vivo: como la Fase 0 deja a `ledger.ts` reexportando `monthRange` desde
-  `period.ts` (ver Fases), compararlos sería comparar una función consigo misma. Los
-  literales sí prueban que la absorción no cambió ningún resultado.
+  `monthRange` en vivo: como la Fase 0 deja `monthRange` convertido en un alias de
+  `periodRange('month', …)` dentro de `ledger.ts` (ver Fases), compararlos sería comparar
+  una función consigo misma. Los literales sí prueban que la absorción no cambió ningún
+  resultado.
 - `periodSeries` contigua a través de bordes de año.
 
 ### 2. Deduplicación correcta
@@ -435,6 +460,14 @@ habla. La comprobación real vive en `periodRange`, que lanza
 `badRequest('Semana inexistente: 2025-W53')` cuando el número excede las semanas ISO de ese
 año. Silenciosamente rodar a `2026-W01` sería peor que fallar.
 
+**`periodRange` valida también los meses, desde la Fase 0.** Hoy `monthRange('2026-13')`
+devuelve enero de 2027 en silencio; `periodRange('month', '2026-13')` lanzará `badRequest`.
+Formalmente es un cambio de comportamiento dentro de una fase que promete no tener ninguno,
+así que conviene dejarlo dicho en vez de que aparezca por sorpresa: **es inobservable** —la
+regex de Zod impide que una clave así llegue al backend, y ningún test existente la ejerce—.
+Se hace igualmente porque dejar una granularidad validada y la otra no es la clase de
+asimetría que alguien "arregla" seis meses después sin saber por qué estaba así.
+
 Rutas **reales** (el router de imports se monta en `/finance/imports`, `routes/index.ts:60`;
 el de finance en `/finance`, `:59`):
 
@@ -531,29 +564,46 @@ punto, lo entregado sigue en pie y tiene valor.
 
 | # | Qué | Por qué en ese orden | Verificación |
 |---|---|---|---|
-| **0** | `shared/period.ts` + tests. Las 5 copias inline pasan a `periodRange('month', …)`. **`ledger.ts` reexporta `monthRange` desde `period.ts`** (shim, ver abajo). Tests de caracterización de `listBankMonthly`. | **Cero cambio de comportamiento.** Refactor puro con los 199 tests actuales de red. Si algo se pone rojo, es un error de implementación, no una ambigüedad del diseño. | `npm test` verde (199) **sin modificar tests existentes** |
+| **0** | `shared/period.ts` + tests. Las 5 copias inline pasan a `periodRange('month', …)`. `listMonths` y `listBankTransactionMonths` se absorben en `listPeriods`. **`ledger.ts` conserva `monthRange` y `listMonths` como shims** (ver abajo). Tests de caracterización de `listBankMonthly`. | **Cero cambio de comportamiento.** Refactor puro con los 199 tests actuales de red. Si algo se pone rojo, es un error de implementación, no una ambigüedad del diseño. | `npm test` verde (199) **sin modificar tests existentes** |
 | **1** | Deduplicación: diagnóstico → `organizationId` en la clave → dedupe intra-lote → confirm honesto → backfill SQL. | Sobre la BD **antes** de multiplicar por ~4 el número de importaciones. Aislada del resto. | `npm test` + conteos antes/después del backfill |
 | **2** | `periodMonth` → `periodStart`/`periodEnd` + `dataStart`/`dataEnd`. Advertencias del preview. Selectores de fecha en el frontend. | **Aquí el sistema ya hace lo pedido** (carga semanal), aunque el análisis siga mensual. | `npm test` + `npm run lint` + `/verify` |
-| **3** | Granularidad semanal en endpoints + `PeriodFilter`. Dashboard, libros, bancos, conciliación. **Eliminar `currentMonthRange`** (→ `currentPeriod('month')`) **y el shim de `monthRange`**, moviendo su `describe` a `period.test.ts`. | La lente semanal. La fase más ancha, pero mecánica y con el typecheck cazando cada sitio. Aquí `finance-summary` empieza a aceptar período, que es donde el cambio de zona horaria tiene sentido y test. | `npm test` + `npm run lint` + `/verify` |
+| **3** | Granularidad semanal en endpoints + `PeriodFilter`. Dashboard, libros, bancos, conciliación. **Eliminar `currentMonthRange`** (→ `currentPeriod('month')`) **y los dos shims de `ledger.ts`**, moviendo sus `describe` a `period.test.ts`. | La lente semanal. La fase más ancha, pero mecánica y con el typecheck cazando cada sitio. Aquí `finance-summary` empieza a aceptar período, que es donde el cambio de zona horaria tiene sentido y test. | `npm test` + `npm run lint` + `/verify` |
 | **4** | Tendencia de 12 semanas + grilla de cobertura. | Lo único nuevo. Va al final porque se apoya en todo lo anterior. | `npm test` + `npm run lint` + `/verify` |
 
-### El shim de `monthRange` en la Fase 0
+### Los shims de `ledger.ts` en la Fase 0
 
-`test/ledger.test.ts:4` importa `monthRange` desde `shared/ledger` y `:34-40` es un
-`describe('monthRange')` que lo prueba directamente. Si la Fase 0 lo *moviera* a
-`period.ts`, ese import se rompería y el criterio "sin modificar tests existentes" sería
+`test/ledger.test.ts:4` importa **`monthRange` y `listMonths`** desde `shared/ledger`, y los
+prueba directamente en sendos `describe` (`:34-40` y `:42-60`). Si la Fase 0 los *moviera*
+a `period.ts`, ese import se rompería y el criterio "sin modificar tests existentes" sería
 imposible de cumplir: la fase no podría verificarse contra su propia definición.
 
-Solución: en la Fase 0, `ledger.ts` **reexporta** `monthRange` desde `period.ts`
-(`export { monthRange } from './period'`, donde `monthRange = (k) => periodRange('month', k)`).
-`ledger.test.ts` no se toca, los 199 tests siguen verdes y la absorción es real —hay una
-sola implementación— aunque el símbolo siga visible desde su casa antigua.
+Solución: en la Fase 0, `ledger.ts` conserva **ambos nombres** como alias delgados sobre
+`period.ts`:
 
-Es exactamente la **estrategia de barrel re-export** que ya se usó en las Fases 2 y 3 del
-refactor anterior de Finanzas: el archivo original reexporta los símbolos públicos y sus
-consumidores quedan intactos. El shim muere en la Fase 3, cuando `ledger.ts` deja de tener
-razones para existir como fachada del mes y el `describe('monthRange')` se muda a
-`period.test.ts`.
+```ts
+import { periodRange, listPeriods } from './period';
+
+export const monthRange = (month: string) => periodRange('month', month);
+export const listMonths = (source: 'income' | 'expense', organizationId?: string) =>
+  listPeriods('month', { source, organizationId });
+```
+
+`ledger.test.ts` no se toca, los 199 tests siguen verdes y la absorción es real —hay una
+sola implementación de cada cosa— aunque los símbolos sigan visibles desde su casa antigua.
+
+**Los alias viven en `ledger.ts`, no reexportados desde `period.ts`.** Así `period.ts` nunca
+carga los nombres heredados que viene a jubilar, su interfaz es la de arriba y nada más, y
+borrar los shims en la Fase 3 es editar un solo archivo.
+
+**`listBankTransactionMonths` no necesita shim:** ningún test lo importa (verificado), así
+que en la Fase 0 pasa a delegar en `listPeriods('month', { source: 'bank', … })`
+directamente. Su único consumidor es el controller.
+
+Es la **estrategia de barrel re-export** que ya usa este código: `frontend/src/hooks/useFinance.ts:1-3`
+lo dice en su propia cabecera —*"Barrel de compatibilidad… para no romper los imports
+existentes"*— y así se hicieron las Fases 2 y 3 del refactor anterior de Finanzas. Los shims
+mueren en la **Fase 3**, cuando `ledger.ts` deja de tener razones para existir como fachada
+del mes y los dos `describe` se mudan a `period.test.ts`.
 
 **Punto de corte:** si hay que recortar, las fases **0 → 2 → 3** entregan carga y análisis
 semanal, y dejan fuera el backfill de deduplicación (Fase 1) y la cobertura (Fase 4).
