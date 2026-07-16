@@ -233,8 +233,12 @@ pura de fechas, testeable sin BD.
 - Semanas que cruzan meses.
 - `currentPeriod` con reloj congelado a las 23:00 de Santiago (UTC ya es el día siguiente)
   y a las 00:30 de Santiago.
-- **Equivalencia**: `periodRange('month', k)` idéntico al `monthRange(k)` actual para una
-  batería de meses — prueba que la absorción no cambia ningún resultado.
+- **Caracterización del mes**: `periodRange('month', k)` contra una batería de meses con
+  los valores **literales** que devuelve el `monthRange` de hoy (capturados antes del
+  refactor), incluyendo el borde diciembre→enero. Literales, no una comparación contra
+  `monthRange` en vivo: como la Fase 0 deja a `ledger.ts` reexportando `monthRange` desde
+  `period.ts` (ver Fases), compararlos sería comparar una función consigo misma. Los
+  literales sí prueban que la absorción no cambió ningún resultado.
 - `periodSeries` contigua a través de bordes de año.
 
 ### 2. Deduplicación correcta
@@ -249,6 +253,12 @@ después: <orgId>|SALES_REPORT|FACTURA|100|76.543.210-9|2026-07-06|119000
 
 `parseSalesRows(rows, organizationId)` y `parsePurchaseRows(rows, organizationId)`.
 `parseBankRows` **no cambia**: ya está acotado por `bankAccountId`.
+
+**Un solo cambio arregla los dos síntomas.** `getExistingDedupeKeys` **no** necesita que se
+le añada un filtro `organizationId`: con la empresa dentro de la clave, su
+`where: { sourceDedupeKey: { in: dedupeKeys } }` queda acotado por empresa gratis —las
+claves de otra empresa ya no pueden coincidir—. Añadir además el filtro sería redundante y
+haría creer a un lector futuro que hacían falta dos arreglos.
 
 **Backfill** (migración SQL, solo dos tablas):
 
@@ -296,7 +306,9 @@ SELECT b.id, b."originalFileName", b."periodMonth",
 
 `previewData` es un **array JSON en la raíz** (`serializeRows` devuelve `rows.map(...)`,
 `finance-imports.serde.ts:9-15`), no un objeto con clave `rows`: de ahí
-`jsonb_array_elements(b."previewData")` directo.
+`jsonb_array_elements(b."previewData")` directo, sin cast ni `->'rows'`. Los dos guardias
+(`IS NOT NULL` y `jsonb_typeof = 'array'`) son defensa redundante —`serializeRows` siempre
+emite un array— y no llegarán a dispararse; se dejan por baratos, no porque hagan falta.
 
 Si aparecen filas, cada una nombra el archivo y el período de un ingreso que se perdió.
 La recuperación es reimportar ese archivo **después** del backfill: con la deduplicación ya
@@ -338,9 +350,20 @@ UPDATE financial_import_batches SET status = 'FAILED' WHERE status = 'PREVIEW';
 ```
 Un lote en `PREVIEW` es un archivo subido y no confirmado: material desechable, sin ninguna
 fila en la BD. Cerrarlo no pierde nada —el archivo se vuelve a subir en diez segundos— y
-`FAILED` ya existe en `FinancialImportStatus` (`schema.prisma:138`). La alternativa
+`FAILED` ya existe en `FinancialImportStatus` (`schema.prisma:138-142`). La alternativa
 (rechazar en el confirm los lotes anteriores a la migración) exige comparar timestamps
 contra la fecha de despliegue: más código y más frágil, para el mismo resultado.
+
+**Dos consecuencias, aceptadas a conciencia:**
+- `FAILED` pasa a significar dos cosas: "el archivo no se pudo parsear" y "el lote quedó
+  obsoleto por una actualización". Se acepta antes que añadir un estado nuevo al enum por
+  un evento que ocurre dos veces en la vida del proyecto. Como `listBatches` no filtra por
+  estado, tras cada despliegue el historial mostrará algún `FAILED` extra.
+- `confirmImport:132` lanza `'El lote ya fue confirmado o no está disponible'`, que para
+  este caso es técnicamente cierto pero confuso: el lote ni se confirmó ni falló al
+  parsear. Se añade una rama para `status === 'FAILED'` con un mensaje honesto —*"Este lote
+  quedó obsoleto por una actualización del sistema; vuelve a subir el archivo"*—. Dos
+  líneas, y evitan un rato de desconcierto justo después de un despliegue.
 
 ### 3. El lote con rango explícito
 
@@ -508,11 +531,29 @@ punto, lo entregado sigue en pie y tiene valor.
 
 | # | Qué | Por qué en ese orden | Verificación |
 |---|---|---|---|
-| **0** | `shared/period.ts` + tests. Absorber `monthRange` y las 5 copias inline (a `periodRange('month', …)`). Tests de caracterización de `listBankMonthly`. | **Cero cambio de comportamiento.** Refactor puro con los 199 tests actuales de red. Si algo se pone rojo, es un error de implementación, no una ambigüedad del diseño. | `npm test` verde (199) **sin modificar tests existentes** |
+| **0** | `shared/period.ts` + tests. Las 5 copias inline pasan a `periodRange('month', …)`. **`ledger.ts` reexporta `monthRange` desde `period.ts`** (shim, ver abajo). Tests de caracterización de `listBankMonthly`. | **Cero cambio de comportamiento.** Refactor puro con los 199 tests actuales de red. Si algo se pone rojo, es un error de implementación, no una ambigüedad del diseño. | `npm test` verde (199) **sin modificar tests existentes** |
 | **1** | Deduplicación: diagnóstico → `organizationId` en la clave → dedupe intra-lote → confirm honesto → backfill SQL. | Sobre la BD **antes** de multiplicar por ~4 el número de importaciones. Aislada del resto. | `npm test` + conteos antes/después del backfill |
 | **2** | `periodMonth` → `periodStart`/`periodEnd` + `dataStart`/`dataEnd`. Advertencias del preview. Selectores de fecha en el frontend. | **Aquí el sistema ya hace lo pedido** (carga semanal), aunque el análisis siga mensual. | `npm test` + `npm run lint` + `/verify` |
-| **3** | Granularidad semanal en endpoints + `PeriodFilter`. Dashboard, libros, bancos, conciliación. **Eliminar `currentMonthRange`** en favor de `currentPeriod('month')`. | La lente semanal. La fase más ancha, pero mecánica y con el typecheck cazando cada sitio. Aquí `finance-summary` empieza a aceptar período, que es donde el cambio de zona horaria tiene sentido y test. | `npm test` + `npm run lint` + `/verify` |
+| **3** | Granularidad semanal en endpoints + `PeriodFilter`. Dashboard, libros, bancos, conciliación. **Eliminar `currentMonthRange`** (→ `currentPeriod('month')`) **y el shim de `monthRange`**, moviendo su `describe` a `period.test.ts`. | La lente semanal. La fase más ancha, pero mecánica y con el typecheck cazando cada sitio. Aquí `finance-summary` empieza a aceptar período, que es donde el cambio de zona horaria tiene sentido y test. | `npm test` + `npm run lint` + `/verify` |
 | **4** | Tendencia de 12 semanas + grilla de cobertura. | Lo único nuevo. Va al final porque se apoya en todo lo anterior. | `npm test` + `npm run lint` + `/verify` |
+
+### El shim de `monthRange` en la Fase 0
+
+`test/ledger.test.ts:4` importa `monthRange` desde `shared/ledger` y `:34-40` es un
+`describe('monthRange')` que lo prueba directamente. Si la Fase 0 lo *moviera* a
+`period.ts`, ese import se rompería y el criterio "sin modificar tests existentes" sería
+imposible de cumplir: la fase no podría verificarse contra su propia definición.
+
+Solución: en la Fase 0, `ledger.ts` **reexporta** `monthRange` desde `period.ts`
+(`export { monthRange } from './period'`, donde `monthRange = (k) => periodRange('month', k)`).
+`ledger.test.ts` no se toca, los 199 tests siguen verdes y la absorción es real —hay una
+sola implementación— aunque el símbolo siga visible desde su casa antigua.
+
+Es exactamente la **estrategia de barrel re-export** que ya se usó en las Fases 2 y 3 del
+refactor anterior de Finanzas: el archivo original reexporta los símbolos públicos y sus
+consumidores quedan intactos. El shim muere en la Fase 3, cuando `ledger.ts` deja de tener
+razones para existir como fachada del mes y el `describe('monthRange')` se muda a
+`period.test.ts`.
 
 **Punto de corte:** si hay que recortar, las fases **0 → 2 → 3** entregan carga y análisis
 semanal, y dejan fuera el backfill de deduplicación (Fase 1) y la cobertura (Fase 4).
@@ -522,10 +563,22 @@ semanal, y dejan fuera el backfill de deduplicación (Fase 1) y la cobertura (Fa
 **1. El backfill sobre finanzas reales (Fase 1).** Único paso genuinamente irreversible.
 El VPS despliega con `prisma migrate deploy`, sin ventana de confirmación: la migración
 tiene que estar bien a la primera.
-*Mitigación:* `pg_dump` antes; query de diagnóstico que diga exactamente qué se va a tocar;
-`UPDATE` idempotente (cláusula `NOT LIKE`); conteo de filas antes/después que debe cuadrar
-exacto. Si el diagnóstico revela colisiones o lotes con `rowsValid` descuadrado, **se para
-y se informa antes de seguir**.
+
+*Mitigación:* `pg_dump` antes de nada. El `UPDATE` no puede violar el unique **por
+construcción** (§2), así que el riesgo no es que la migración falle: es que oculte un daño
+anterior. Por eso la fase **empieza** por la query de diagnóstico sobre `previewData` (§2),
+que busca ingresos ya perdidos por la deduplicación sin empresa; si arroja > 0 filas, **se
+para y se informa al CEO antes de seguir**, porque cada fila nombra un archivo a reimportar
+después del backfill. El `UPDATE` es idempotente (cláusula `NOT LIKE`) y el alcance es
+conocido y total: toca **todas** las filas con `sourceDedupeKey` no nulo de `income_records`
+y `expense_records`. Verificación posterior: el conteo de filas de ambas tablas no cambia
+(el backfill reescribe claves, no inserta ni borra) y ninguna clave queda sin prefijo.
+
+**1b. La ventana del despliegue (aceptada, no mitigada).** `deploy.sh` corre
+`prisma migrate deploy` y después reinicia el servicio: entre ambos, el parser viejo está
+vivo contra una BD ya migrada, y una importación en ese hueco escribiría claves sin prefijo.
+Dura segundos, hay un solo usuario y ese usuario es quien despliega. Se acepta a
+conciencia; construir para esto sería desproporcionado.
 
 **2. `listBankMonthly` y su arrastre de saldos.** La lógica más intrincada del módulo, sin
 un solo test, y se va a generalizar a semanas.
