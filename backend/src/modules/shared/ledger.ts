@@ -3,8 +3,7 @@
  * mes y listado de meses con datos. Extraídos de income.service/expenses.service
  * para no duplicar la lógica entre ambos dominios.
  */
-import { Prisma } from '@prisma/client';
-import { prisma } from '../../lib/prisma';
+import { periodRange, listPeriods } from './period';
 
 // Estados de un ingreso aún por cobrar.
 export const PENDING_INCOME_STATUSES = ['EXPECTED', 'INVOICED', 'OVERDUE'] as const;
@@ -24,32 +23,20 @@ export function reconcilePaidStatus<T extends { status?: string | null }>(
   return { ...input, paidDate: null, paidByBankTransactionId: null };
 }
 
-// Rango [gte, lt) del mes YYYY-MM en UTC, para filtrar por fecha.
+// Shims de compatibilidad: la implementación real vive en period.ts. Se
+// conservan aquí para no tocar los imports de ledger.test.ts durante la Fase 0
+// (misma estrategia que el barrel de frontend/src/hooks/useFinance.ts).
+// Mueren en la Fase 3, cuando sus describe se muden a period.test.ts.
+
+/** @deprecated usa periodRange('month', …) */
 export function monthRange(month: string): { gte: Date; lt: Date } {
-  const [y, m] = month.split('-').map(Number);
-  return { gte: new Date(Date.UTC(y, m - 1, 1)), lt: new Date(Date.UTC(y, m, 1)) };
+  return periodRange('month', month);
 }
 
-// Whitelist tipada: el identificador de tabla/columna NO puede ir como parámetro.
-const MONTHS_SOURCES = {
-  income: { table: 'income_records', column: 'incomeDate' },
-  expense: { table: 'expense_records', column: 'expenseDate' },
-} as const;
-
-// Meses (YYYY-MM) con datos, desc. `organizationId` sí va parametrizado.
-export async function listMonths(
-  source: keyof typeof MONTHS_SOURCES,
+/** @deprecated usa listPeriods('month', { source, organizationId }) */
+export function listMonths(
+  source: 'income' | 'expense',
   organizationId?: string,
 ): Promise<string[]> {
-  const { table, column } = MONTHS_SOURCES[source];
-  const orgClause = organizationId
-    ? Prisma.sql`AND "organizationId" = ${organizationId}`
-    : Prisma.empty;
-  const rows = await prisma.$queryRaw<{ mes: string }[]>(Prisma.sql`
-    SELECT DISTINCT to_char(date_trunc('month', ${Prisma.raw(`"${column}"`)}), 'YYYY-MM') AS mes
-    FROM ${Prisma.raw(`"${table}"`)}
-    WHERE ${Prisma.raw(`"${column}"`)} IS NOT NULL ${orgClause}
-    ORDER BY mes DESC
-  `);
-  return rows.map((r) => r.mes);
+  return listPeriods('month', { source, organizationId });
 }
