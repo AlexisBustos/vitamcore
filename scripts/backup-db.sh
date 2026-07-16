@@ -20,6 +20,9 @@ TS="$(date +%Y%m%d-%H%M%S)"
 FILE="$BACKUP_DIR/vitamcore-$TS.sql.gz"
 
 mkdir -p "$BACKUP_DIR"
+# Situarse en un directorio accesible: si se corre vía `sudo -u vitam` desde
+# /root, herramientas como `find` fallan al no poder restaurar el cwd inicial.
+cd "$BACKUP_DIR"
 
 echo "==> Volcando $DB_NAME → $FILE"
 # --no-owner / --no-acl facilitan restaurar en una BD/usuario distinto.
