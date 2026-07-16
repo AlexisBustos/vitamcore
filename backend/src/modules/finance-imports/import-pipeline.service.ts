@@ -128,6 +128,11 @@ export async function confirmImport(batchId: string) {
     where: { id: batchId },
   });
   if (!batch) throw notFound('Lote de importación no encontrado');
+  if (batch.status === FinancialImportStatus.FAILED) {
+    throw badRequest(
+      'Este lote quedó obsoleto por una actualización del sistema; vuelve a subir el archivo',
+    );
+  }
   if (batch.status !== FinancialImportStatus.PREVIEW) {
     throw badRequest('El lote ya fue confirmado o no está disponible');
   }
@@ -432,7 +437,12 @@ async function createRow(
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === 'P2002'
     ) {
-      return false;
+      // No se puede "saltar" una fila dentro de una transacción: en Postgres la
+      // sentencia fallida ya la abortó (25P02) y Prisma no pone savepoint por
+      // query, así que este catch nunca pudo cumplir lo que prometía. El
+      // rollback del lote es lo correcto —la importación es atómica—; lo que
+      // estaba mal era la falsa promesa y morir con un código críptico.
+      throw badRequest(`Fila duplicada en el lote: ${row.dedupeKey}`);
     }
     throw error;
   }

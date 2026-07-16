@@ -12,9 +12,10 @@ afterAll(disconnect);
 // StoredPreviewRow (según serializeRows/createRow): { status, dedupeKey,
 // warnings, data, rawData }. `previewData` es un array JSON de estas filas.
 // confirmImport inserta las filas VALID/WARNING; DUPLICATE y ERROR se saltan.
-// El dedupe real se produce por el @unique global de `sourceDedupeKey`
-// (IncomeRecord/ExpenseRecord): un choque lanza P2002 y createRow lo cuenta
-// como duplicado (no inserta).
+// El dedupe real ocurre en el PREVIEW (getExistingDedupeKeys contra la BD, y
+// el dedupe intra-lote del parser): confirmImport solo inserta lo que llega
+// marcado VALID/WARNING. El @unique de `sourceDedupeKey` es la última red: si
+// salta, el lote entero hace rollback con un badRequest legible.
 
 // ---------------------------------------------------------------------------
 // confirmImport — compras
@@ -167,11 +168,10 @@ describe('confirmImport (ventas)', () => {
   });
 
   test('dedupe: un sourceDedupeKey ya existente aborta la transacción y confirmImport falla', async () => {
-    // Comportamiento ACTUAL (caracterización): aunque createRow captura el
-    // P2002 y devuelve false, el error ya abortó la transacción de Postgres.
-    // Las consultas posteriores dentro del mismo $transaction (linkCreditNotes
-    // en ventas, o el update final del lote) fallan con 25P02, por lo que
-    // confirmImport lanza y la transacción hace rollback completo.
+    // Una clave ya existente en BD hace fallar el insert. La transacción hace
+    // rollback completo (la importación es atómica) pero ahora con un mensaje
+    // legible en vez del 25P02 críptico de antes: createRow ya no finge que
+    // puede "saltar" la fila.
     const org = await makeOrg();
     // Ingreso preexistente con el mismo sourceDedupeKey (unique global).
     await prisma.incomeRecord.create({
@@ -214,7 +214,7 @@ describe('confirmImport (ventas)', () => {
       },
     });
 
-    await expect(imports.confirmImport(batch.id)).rejects.toThrow();
+    await expect(imports.confirmImport(batch.id)).rejects.toThrow(/Fila duplicada en el lote/);
 
     // Rollback: solo queda el ingreso preexistente y el lote sigue en PREVIEW.
     const incomes = await prisma.incomeRecord.findMany({ where: { organizationId: org.id } });
