@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { badRequest, notFound } from '../../utils/http-error';
 import { buildOwnAccounts, isInternalTransfer } from '../shared/internal-transfer';
+import { listPeriods } from '../shared/period';
 import type { ListTransactionsFilters } from './finance-imports.schema';
 import { refs } from './finance-imports.shared';
 
@@ -152,20 +153,7 @@ export async function listBankTransactionMonths(filters: {
   organizationId?: string;
   bankAccountId?: string;
 }) {
-  const conditions = [Prisma.sql`1 = 1`];
-  if (filters.organizationId) {
-    conditions.push(Prisma.sql`"organizationId" = ${filters.organizationId}`);
-  }
-  if (filters.bankAccountId) {
-    conditions.push(Prisma.sql`"bankAccountId" = ${filters.bankAccountId}`);
-  }
-  const rows = await prisma.$queryRaw<{ mes: string }[]>(Prisma.sql`
-    SELECT DISTINCT to_char(date_trunc('month', "transactionDate"), 'YYYY-MM') AS mes
-    FROM "bank_transactions"
-    WHERE ${Prisma.join(conditions, ' AND ')}
-    ORDER BY mes DESC
-  `);
-  return rows.map((r) => r.mes);
+  return listPeriods('month', { source: 'bank', ...filters });
 }
 
 export async function listBankMonthly(filters: {
