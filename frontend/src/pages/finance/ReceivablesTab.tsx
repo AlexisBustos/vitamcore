@@ -3,7 +3,7 @@ import { Receipt } from 'lucide-react';
 import { LedgerTab, type LedgerTabConfig } from '@/components/finance/LedgerTab';
 import {
   useIncome,
-  useIncomeMonths,
+  useIncomePeriods,
   useRegisterPayment,
   useBulkRegisterPayment,
 } from '@/hooks/useFinance';
@@ -20,7 +20,7 @@ const config: LedgerTabConfig<IncomeRecord> = {
   ],
   initialEstado: 'receivable',
   listHook: useIncome,
-  monthsHook: useIncomeMonths,
+  periodsHook: useIncomePeriods,
   registerHook: useRegisterPayment,
   bulkRegisterHook: useBulkRegisterPayment,
   rowTotal: (r) => r.netAmount ?? r.amount,

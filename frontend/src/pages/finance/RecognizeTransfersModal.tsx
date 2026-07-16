@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Spinner, ErrorState } from '@/components/ui/feedback';
 import { getErrorMessage } from '@/lib/errors';
 import { formatDate, formatMoney } from '@/lib/domain';
-import { useRecognizeTransfers } from '@/hooks/useFinance';
+import { useRecognizeTransfers, type Granularity } from '@/hooks/useFinance';
 import type { RecognizeTransfer, RecognizeTransfersResult } from '@/types/domain';
 
 type Direction = 'expense' | 'income';
@@ -122,13 +122,15 @@ export function RecognizeTransfersModal({
   open,
   onClose,
   organizationId,
-  month,
+  granularity,
+  period,
   direction,
 }: {
   open: boolean;
   onClose: () => void;
   organizationId: string;
-  month?: string;
+  granularity: Granularity;
+  period?: string;
   direction: Direction;
 }) {
   const copy = COPY[direction];
@@ -156,7 +158,8 @@ export function RecognizeTransfersModal({
     recognize
       .mutateAsync({
         organizationId,
-        month,
+        granularity,
+        period,
         direction,
         category: copy.defaultCategory,
         apply: false,
@@ -177,7 +180,7 @@ export function RecognizeTransfersModal({
       cancel = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, organizationId, month, direction]);
+  }, [open, organizationId, granularity, period, direction]);
 
   const selection = useMemo(
     () =>
@@ -216,7 +219,8 @@ export function RecognizeTransfersModal({
     try {
       const r = await recognize.mutateAsync({
         organizationId,
-        month,
+        granularity,
+        period,
         direction,
         category: category.trim() || copy.defaultCategory,
         apply: true,

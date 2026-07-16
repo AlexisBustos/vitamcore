@@ -16,6 +16,8 @@ export interface DashboardSummary {
     criticalTasks: number;
     monthIncome: number;
     monthExpense: number;
+    weekIncome: number;
+    weekExpense: number;
     estimatedResult: number;
     pendingIncome: number;
     pendingExpense: number;

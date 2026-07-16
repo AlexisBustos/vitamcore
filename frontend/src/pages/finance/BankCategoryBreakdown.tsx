@@ -2,7 +2,11 @@ import { useMemo } from 'react';
 import { Card } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/feedback';
 import { formatMoney } from '@/lib/domain';
-import { useBankByCategory, useBankCategories } from '@/hooks/useFinance';
+import {
+  useBankByCategory,
+  useBankCategories,
+  type Granularity,
+} from '@/hooks/useFinance';
 import type { BankCategoryKind } from '@/types/domain';
 
 type Row = { key: string; label: string; amount: number };
@@ -10,13 +14,20 @@ type Row = { key: string; label: string; amount: number };
 export function BankCategoryBreakdown({
   organizationId,
   bankAccountId,
-  month,
+  granularity,
+  period,
 }: {
   organizationId?: string;
   bankAccountId?: string;
-  month?: string;
+  granularity?: Granularity;
+  period?: string;
 }) {
-  const query = useBankByCategory({ organizationId, bankAccountId, month });
+  const query = useBankByCategory({
+    organizationId,
+    bankAccountId,
+    granularity,
+    period,
+  });
   const categories = useBankCategories();
 
   const { ingresos, egresos, traspasos, totalIn, totalOut } = useMemo(() => {

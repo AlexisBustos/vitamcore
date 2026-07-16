@@ -4,7 +4,7 @@ import { CreditCard } from 'lucide-react';
 import { LedgerTab, type LedgerTabConfig } from '@/components/finance/LedgerTab';
 import {
   useExpenses,
-  useExpenseMonths,
+  useExpensePeriods,
   useRegisterExpensePayment,
   useBulkRegisterExpensePayment,
 } from '@/hooks/useFinance';
@@ -21,7 +21,7 @@ const config: LedgerTabConfig<ExpenseRecord> = {
   ],
   initialEstado: 'payable',
   listHook: useExpenses,
-  monthsHook: useExpenseMonths,
+  periodsHook: useExpensePeriods,
   registerHook: useRegisterExpensePayment,
   bulkRegisterHook: useBulkRegisterExpensePayment,
   rowTotal: (r) => r.amount,

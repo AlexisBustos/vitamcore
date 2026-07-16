@@ -77,8 +77,8 @@ export interface BankCategoryRule {
   active: boolean;
 }
 
-export interface BankMonthlyPoint {
-  month: string; // 'YYYY-MM'
+export interface BankPeriodicPoint {
+  period: string; // 'YYYY-MM' o 'YYYY-Www' según la granularidad pedida
   closingBalance: number;
   netFlow: number; // abonos − cargos
   credits: number; // abonos

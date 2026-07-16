@@ -11,7 +11,7 @@ import type {
   ReconciliationCandidate,
   RecognizeTransfersResult,
 } from '@/types/domain';
-import { invalidateFinance } from './finance-shared';
+import { invalidateFinance, type Granularity } from './finance-shared';
 
 export function useReconciliationCandidates(
   filters: {
@@ -47,7 +47,8 @@ export function useAutoReconcile() {
   return useMutation({
     mutationFn: (payload: {
       organizationId: string;
-      month?: string;
+      granularity: Granularity;
+      period?: string;
       apply: boolean;
       selection?: { invoiceId: string; movId: string }[];
     }) =>
@@ -74,7 +75,8 @@ export function useRecognizeTransfers() {
   return useMutation({
     mutationFn: (payload: {
       organizationId: string;
-      month?: string;
+      granularity: Granularity;
+      period?: string;
       direction: 'expense' | 'income';
       category: string;
       apply: boolean;

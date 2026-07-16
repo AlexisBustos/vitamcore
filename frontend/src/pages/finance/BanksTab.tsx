@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Landmark, Wallet } from 'lucide-react';
-import { MonthFilter } from '@/components/MonthFilter';
+import { PeriodFilter } from '@/components/PeriodFilter';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { MetricCard } from '@/components/ui/metric';
@@ -11,17 +11,18 @@ import {
   bankKindClassName,
   formatDate,
   formatMoney,
-  formatMonth,
 } from '@/lib/domain';
+import { periodLabel } from '@/lib/period';
 import { getErrorMessage } from '@/lib/errors';
 import {
   useBankAccounts,
   useBankCategories,
-  useBankMonthly,
+  useBankPeriodic,
   useBankTransactions,
-  useBankTransactionMonths,
+  useBankTransactionPeriods,
   useBulkSetCategory,
   useSetTransactionCategory,
+  type Granularity,
 } from '@/hooks/useFinance';
 import { BankCategoryBreakdown } from './BankCategoryBreakdown';
 import { CategoryRulesPanel } from './CategoryRulesPanel';
@@ -35,7 +36,8 @@ export function BanksTab({
   initialReconciliation?: 'linked' | 'unlinked';
 }) {
   const [bankAccountId, setBankAccountId] = useState('');
-  const [month, setMonth] = useState<string | undefined>();
+  const [granularity, setGranularity] = useState<Granularity>('month');
+  const [period, setPeriod] = useState<string | undefined>();
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [reconciliation, setReconciliation] = useState<'' | 'linked' | 'unlinked'>(
@@ -58,24 +60,30 @@ export function BanksTab({
   const [panelOpen, setPanelOpen] = useState(false);
 
   // Limpia la selección al cambiar de filtros para no arrastrar ids fuera de vista.
-  useEffect(() => setSelected(new Set()), [bankAccountId, month, search, category, reconciliation]);
+  useEffect(() => setSelected(new Set()), [bankAccountId, granularity, period, search, category, reconciliation]);
+
+  // Al cambiar de granularidad, el período elegido deja de ser válido.
+  useEffect(() => setPeriod(undefined), [granularity]);
 
   const accounts = useBankAccounts(organizationId);
-  const months = useBankTransactionMonths({
+  const periods = useBankTransactionPeriods({
     organizationId,
     bankAccountId: bankAccountId || undefined,
+    granularity,
   });
   const movements = useBankTransactions({
     organizationId,
     bankAccountId: bankAccountId || undefined,
-    month,
+    granularity,
+    period,
     search: search || undefined,
     category: category || undefined,
     reconciliation: reconciliation || undefined,
   });
-  const monthly = useBankMonthly({
+  const periodic = useBankPeriodic({
     organizationId,
     bankAccountId: bankAccountId || undefined,
+    granularity,
   });
 
   const accountOptions = useMemo(
@@ -108,8 +116,8 @@ export function BanksTab({
   }, [accounts.data]);
 
   const maxClosing = useMemo(
-    () => Math.max(0, ...(monthly.data ?? []).map((m) => m.closingBalance)),
-    [monthly.data],
+    () => Math.max(0, ...(periodic.data ?? []).map((m) => m.closingBalance)),
+    [periodic.data],
   );
 
   const showAccountColumn = !bankAccountId;
@@ -158,23 +166,26 @@ export function BanksTab({
         ))}
       </div>
 
-      {/* Evolución mensual de caja */}
-      {monthly.isLoading && <Spinner label="Cargando evolución…" />}
-      {monthly.data && monthly.data.length > 0 && (
+      {/* Evolución de caja por período (mes o semana según el filtro) */}
+      {periodic.isLoading && <Spinner label="Cargando evolución…" />}
+      {periodic.data && periodic.data.length > 0 && (
         <Card className="overflow-hidden">
           <div className="border-b border-[var(--color-border)] px-4 py-3">
             <h3 className="text-sm font-semibold text-[var(--color-foreground)]">
-              Evolución mensual
+              Evolución {granularity === 'week' ? 'semanal' : 'mensual'}
             </h3>
             <p className="text-xs text-[var(--color-muted-foreground)]">
-              Saldo al cierre de cada mes según las cartolas cargadas.
+              Saldo al cierre de cada {granularity === 'week' ? 'semana' : 'mes'}{' '}
+              según las cartolas cargadas.
             </p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-[var(--color-muted)] text-left text-xs text-[var(--color-muted-foreground)]">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Mes</th>
+                  <th className="px-4 py-3 font-medium">
+                    {granularity === 'week' ? 'Semana' : 'Mes'}
+                  </th>
                   <th className="px-4 py-3 text-right font-medium">Saldo al cierre</th>
                   <th className="px-4 py-3 text-right font-medium">Flujo neto</th>
                   <th className="px-4 py-3 text-right font-medium">Abonos</th>
@@ -183,10 +194,10 @@ export function BanksTab({
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border)]">
-                {monthly.data.map((m) => (
-                  <tr key={m.month} className="hover:bg-[var(--color-muted)]/40">
+                {periodic.data.map((m) => (
+                  <tr key={m.period} className="hover:bg-[var(--color-muted)]/40">
                     <td className="whitespace-nowrap px-4 py-3 font-medium text-[var(--color-foreground)]">
-                      {formatMonth(m.month)}
+                      {periodLabel(m.period)}
                     </td>
                     <td className="px-4 py-3 text-right font-medium">
                       {formatMoney(m.closingBalance)}
@@ -231,7 +242,8 @@ export function BanksTab({
       <BankCategoryBreakdown
         organizationId={organizationId}
         bankAccountId={bankAccountId || undefined}
-        month={month}
+        granularity={granularity}
+        period={period}
       />
 
       {/* Acciones de categorías */}
@@ -247,10 +259,12 @@ export function BanksTab({
           value={bankAccountId}
           onChange={(e) => setBankAccountId(e.target.value)}
         />
-        <MonthFilter
-          months={months.data ?? []}
-          value={month}
-          onChange={setMonth}
+        <PeriodFilter
+          granularity={granularity}
+          period={period}
+          periods={periods.data ?? []}
+          onGranularityChange={setGranularity}
+          onPeriodChange={setPeriod}
         />
         <Select
           options={[{ value: '__none__', label: 'Sin categoría' }, ...categoryOptions]}

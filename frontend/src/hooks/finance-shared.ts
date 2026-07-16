@@ -1,6 +1,10 @@
 // Helpers compartidos por los hooks de finanzas (income, expenses, imports...).
 import type { useQueryClient } from '@tanstack/react-query';
 
+// Granularidad + clave de período: la semana es lente, el mes es la verdad.
+export type Granularity = 'week' | 'month';
+export type PeriodSelection = { granularity: Granularity; period?: string };
+
 export type FinanceFilters = {
   organizationId?: string;
   businessUnitId?: string;
@@ -10,7 +14,8 @@ export type FinanceFilters = {
   isRecurring?: string;
   documentKind?: string;
   paymentState?: 'receivable' | 'payable' | 'overdue' | 'paid' | 'cancelled';
-  month?: string;
+  granularity?: Granularity;
+  period?: string;
   search?: string;
 };
 

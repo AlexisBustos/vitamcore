@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Pencil, Plus, Repeat, Trash2 } from 'lucide-react';
-import { MonthFilter } from '@/components/MonthFilter';
+import { PeriodFilter } from '@/components/PeriodFilter';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
@@ -13,8 +13,9 @@ import { getErrorMessage } from '@/lib/errors';
 import {
   useIncome,
   useDeleteIncome,
-  useIncomeMonths,
+  useIncomePeriods,
   type FinanceFilters,
+  type Granularity,
 } from '@/hooks/useFinance';
 import type { IncomeRecord } from '@/types/domain';
 import { IncomeForm } from './IncomeForm';
@@ -23,8 +24,9 @@ export function IncomeTab({ organizationId }: { organizationId?: string }) {
   const [extra, setExtra] = useState<{
     category?: string;
     status?: string;
-    month?: string;
-  }>({});
+    granularity: Granularity;
+    period?: string;
+  }>({ granularity: 'month' });
   const [form, setForm] = useState<{ open: boolean; item: IncomeRecord | null }>(
     { open: false, item: null },
   );
@@ -32,7 +34,7 @@ export function IncomeTab({ organizationId }: { organizationId?: string }) {
   const filters: FinanceFilters = { organizationId, ...extra };
   const { data, isLoading, isError, error } = useIncome(filters);
   const remove = useDeleteIncome();
-  const { data: months = [] } = useIncomeMonths(organizationId);
+  const { data: periods = [] } = useIncomePeriods(extra.granularity, organizationId);
 
   async function handleDelete(item: IncomeRecord) {
     if (!confirm(`¿Eliminar el ingreso "${item.description}"?`)) return;
@@ -58,10 +60,14 @@ export function IncomeTab({ organizationId }: { organizationId?: string }) {
               setExtra((x) => ({ ...x, status: e.target.value || undefined }))
             }
           />
-          <MonthFilter
-            months={months}
-            value={extra.month}
-            onChange={(month) => setExtra((x) => ({ ...x, month }))}
+          <PeriodFilter
+            granularity={extra.granularity}
+            period={extra.period}
+            periods={periods}
+            onGranularityChange={(granularity) =>
+              setExtra((x) => ({ ...x, granularity, period: undefined }))
+            }
+            onPeriodChange={(period) => setExtra((x) => ({ ...x, period }))}
           />
         </div>
         <Button onClick={() => setForm({ open: true, item: null })}>

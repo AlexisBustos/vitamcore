@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { OrganizationFilter } from '@/components/OrganizationFilter';
-import { MonthFilter } from '@/components/MonthFilter';
+import { PeriodFilter } from '@/components/PeriodFilter';
 import { cn } from '@/lib/utils';
-import { useBankTransactionMonths } from '@/hooks/useFinance';
+import { useBankTransactionPeriods, type Granularity } from '@/hooks/useFinance';
 import { FinanceSummaryTab } from './FinanceSummaryTab';
 import { IncomeTab } from './IncomeTab';
 import { ExpensesTab } from './ExpensesTab';
@@ -37,16 +37,19 @@ export function FinancePage() {
   const [tab, setTab] = useState<Tab>('summary');
   const [organizationId, setOrganizationId] = useState<string | undefined>();
 
-  // Mes del Cuadre (no afecta posición). Default = mes más reciente con datos.
-  const [consolidatedMonth, setConsolidatedMonth] = useState<string | undefined>();
-  const [monthTouched, setMonthTouched] = useState(false);
-  const months = useBankTransactionMonths({ organizationId });
+  // Período del Cuadre (no afecta posición). Granularidad = lente (mes/semana);
+  // por defecto el período más reciente con datos. La semana es lente, el mes
+  // es la verdad contable.
+  const [granularity, setGranularity] = useState<Granularity>('month');
+  const [consolidatedPeriod, setConsolidatedPeriod] = useState<string | undefined>();
+  const [periodTouched, setPeriodTouched] = useState(false);
+  const periods = useBankTransactionPeriods({ organizationId, granularity });
 
   useEffect(() => {
-    if (!monthTouched && !consolidatedMonth && (months.data?.length ?? 0) > 0) {
-      setConsolidatedMonth(months.data![0]); // lista ordenada DESC
+    if (!periodTouched && !consolidatedPeriod && (periods.data?.length ?? 0) > 0) {
+      setConsolidatedPeriod(periods.data![0]); // lista ordenada DESC
     }
-  }, [months.data, monthTouched, consolidatedMonth]);
+  }, [periods.data, periodTouched, consolidatedPeriod]);
 
   // Deep-link a Bancos filtrado a "Suelto".
   const [banksInitialFilter, setBanksInitialFilter] =
@@ -84,16 +87,22 @@ export function FinancePage() {
         actions={
           <div className="flex items-center gap-2">
             {tab === 'summary' && (
-              <div className="w-44">
-                <MonthFilter
-                  months={months.data ?? []}
-                  value={consolidatedMonth}
-                  onChange={(m) => {
-                    setMonthTouched(true);
-                    setConsolidatedMonth(m);
-                  }}
-                />
-              </div>
+              <PeriodFilter
+                granularity={granularity}
+                period={consolidatedPeriod}
+                periods={periods.data ?? []}
+                onGranularityChange={(g) => {
+                  // Cambiar de lente: descarta el período y deja que el efecto
+                  // vuelva a elegir el más reciente del nuevo grano.
+                  setGranularity(g);
+                  setConsolidatedPeriod(undefined);
+                  setPeriodTouched(false);
+                }}
+                onPeriodChange={(p) => {
+                  setPeriodTouched(true);
+                  setConsolidatedPeriod(p);
+                }}
+              />
             )}
             <div className="w-56">
               <OrganizationFilter
@@ -130,7 +139,8 @@ export function FinancePage() {
       {tab === 'summary' && (
         <FinanceSummaryTab
           organizationId={organizationId}
-          consolidatedMonth={consolidatedMonth}
+          granularity={granularity}
+          consolidatedPeriod={consolidatedPeriod}
           onReviewUnlinked={reviewUnlinked}
           onAutoReconcile={openAutoReconcile}
           onRecognizeTransfers={openRecognizeTransfers}
@@ -153,7 +163,8 @@ export function FinancePage() {
           open={autoOpen}
           onClose={() => setAutoOpen(false)}
           organizationId={organizationId}
-          month={consolidatedMonth}
+          granularity={granularity}
+          period={consolidatedPeriod}
         />
       )}
 
@@ -162,6 +173,8 @@ export function FinancePage() {
           open={!!recognizeDir}
           onClose={() => setRecognizeDir(null)}
           organizationId={organizationId}
+          granularity={granularity}
+          period={consolidatedPeriod}
           direction={recognizeDir}
         />
       )}

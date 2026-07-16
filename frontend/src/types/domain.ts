@@ -15,7 +15,7 @@ export type { SalesStatus, SalesSource, SalesOpportunity, SalesSummary } from '.
 export type {
   FinancialImportType, FinancialImportStatus, SalesImportSummary, BankAccount,
   BankTransactionsResponse, BankCategoryBreakdown, BankCategoryKind, RuleDirection,
-  BankCategory, BankCategoryRule, BankMonthlyPoint, BankTransaction,
+  BankCategory, BankCategoryRule, BankPeriodicPoint, BankTransaction,
   ReconciliationCandidate, FinancialImportBatch,
 } from './banking';
 export type {

@@ -127,6 +127,10 @@ export interface VendorDetail extends Vendor {
 export interface FinanceSummary {
   monthIncome: number;
   monthExpense: number;
+  weekIncome: number;
+  weekExpense: number;
+  // Período al que corresponden los desgloses por categoría/empresa.
+  breakdownPeriod: { granularity: 'week' | 'month'; key: string };
   estimatedResult: number;
   pendingIncome: number;
   collectedIncome: number;

@@ -6,7 +6,11 @@ import {
 } from '@tanstack/react-query';
 import { api, toQuery } from '@/lib/api';
 import type { IncomeRecord } from '@/types/domain';
-import { invalidateFinance, type FinanceFilters } from './finance-shared';
+import {
+  invalidateFinance,
+  type FinanceFilters,
+  type Granularity,
+} from './finance-shared';
 
 // ----- Ingresos -----
 export function useIncome(filters: FinanceFilters = {}) {
@@ -19,12 +23,17 @@ export function useIncome(filters: FinanceFilters = {}) {
   });
 }
 
-export function useIncomeMonths(organizationId?: string) {
+export function useIncomePeriods(
+  granularity: Granularity,
+  organizationId?: string,
+) {
   return useQuery({
-    queryKey: ['income', 'months', organizationId ?? 'all'],
+    queryKey: ['income', 'periods', granularity, organizationId ?? 'all'],
     queryFn: () =>
       api
-        .get<{ data: string[] }>(`/income/months${toQuery({ organizationId })}`)
+        .get<{ data: string[] }>(
+          `/income/periods${toQuery({ granularity, organizationId })}`,
+        )
         .then((r) => r.data),
   });
 }

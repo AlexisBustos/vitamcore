@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Spinner, ErrorState } from '@/components/ui/feedback';
 import { getErrorMessage } from '@/lib/errors';
 import { formatDate, formatMoney } from '@/lib/domain';
-import { useAutoReconcile } from '@/hooks/useFinance';
+import { useAutoReconcile, type Granularity } from '@/hooks/useFinance';
 import type { AutoReconcilePair, AutoReconcileResult } from '@/types/domain';
 
 /** Clave estable de un par (factura/gasto ↔ movimiento). */
@@ -105,12 +105,14 @@ export function AutoReconcileModal({
   open,
   onClose,
   organizationId,
-  month,
+  granularity,
+  period,
 }: {
   open: boolean;
   onClose: () => void;
   organizationId: string;
-  month?: string;
+  granularity: Granularity;
+  period?: string;
 }) {
   const auto = useAutoReconcile();
   const [preview, setPreview] = useState<AutoReconcileResult | null>(null);
@@ -133,7 +135,7 @@ export function AutoReconcileModal({
     setLoading(true);
     setError(null);
     auto
-      .mutateAsync({ organizationId, month, apply: false })
+      .mutateAsync({ organizationId, granularity, period, apply: false })
       .then((r) => {
         if (!cancel) {
           setPreview(r);
@@ -150,7 +152,7 @@ export function AutoReconcileModal({
       cancel = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, organizationId, month]);
+  }, [open, organizationId, granularity, period]);
 
   const selection = useMemo(
     () =>
@@ -181,7 +183,8 @@ export function AutoReconcileModal({
     try {
       const r = await auto.mutateAsync({
         organizationId,
-        month,
+        granularity,
+        period,
         apply: true,
         selection,
       });

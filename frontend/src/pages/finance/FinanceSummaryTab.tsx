@@ -9,33 +9,44 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MetricCard } from '@/components/ui/metric';
 import { Spinner, ErrorState, EmptyState } from '@/components/ui/feedback';
 import { formatDate, formatMoney } from '@/lib/domain';
+import { periodLabel } from '@/lib/period';
 import { getErrorMessage } from '@/lib/errors';
-import { useFinanceSummary } from '@/hooks/useFinance';
+import { useFinanceSummary, type Granularity } from '@/hooks/useFinance';
 import { ConsolidatedPosition } from './ConsolidatedPosition';
 
 export function FinanceSummaryTab({
   organizationId,
-  consolidatedMonth,
+  granularity,
+  consolidatedPeriod,
   onReviewUnlinked,
   onAutoReconcile,
   onRecognizeTransfers,
 }: {
   organizationId?: string;
-  consolidatedMonth?: string;
+  granularity: Granularity;
+  consolidatedPeriod?: string;
   onReviewUnlinked: () => void;
   onAutoReconcile: () => void;
   onRecognizeTransfers: (direction: 'expense' | 'income') => void;
 }) {
-  const { data, isLoading, isError, error } = useFinanceSummary(organizationId);
+  // El período elegido acota los desgloses por categoría/empresa (el backend
+  // resuelve la clave por defecto si no se envía).
+  const { data, isLoading, isError, error } = useFinanceSummary(organizationId, {
+    granularity,
+    period: consolidatedPeriod,
+  });
 
   if (isLoading) return <Spinner />;
   if (isError || !data) return <ErrorState message={getErrorMessage(error)} />;
+
+  const desglosePeriodo = periodLabel(data.breakdownPeriod.key);
 
   return (
     <div className="space-y-6">
       <ConsolidatedPosition
         organizationId={organizationId}
-        month={consolidatedMonth}
+        granularity={granularity}
+        period={consolidatedPeriod}
         onReviewUnlinked={onReviewUnlinked}
         onAutoReconcile={onAutoReconcile}
         onRecognizeTransfers={onRecognizeTransfers}
@@ -45,18 +56,21 @@ export function FinanceSummaryTab({
         <MetricCard
           title="Ingresos del mes"
           value={formatMoney(data.monthIncome)}
+          hint={`Semana en curso: ${formatMoney(data.weekIncome)}`}
           icon={ArrowUpRight}
           tone="success"
         />
         <MetricCard
           title="Gastos del mes"
           value={formatMoney(data.monthExpense)}
+          hint={`Semana en curso: ${formatMoney(data.weekExpense)}`}
           icon={ArrowDownRight}
           tone="danger"
         />
         <MetricCard
           title="Resultado estimado"
           value={formatMoney(data.estimatedResult)}
+          hint="Del mes en curso"
           icon={Wallet}
           tone={data.estimatedResult >= 0 ? 'success' : 'danger'}
         />
@@ -92,10 +106,10 @@ export function FinanceSummaryTab({
         </div>
       )}
 
-      {/* Desglose por empresa */}
+      {/* Desglose por empresa (acotado al período elegido) */}
       <Card>
         <CardHeader>
-          <CardTitle>Resultado por empresa</CardTitle>
+          <CardTitle>Resultado por empresa · {desglosePeriodo}</CardTitle>
         </CardHeader>
         <CardContent>
           {data.byOrganization.length === 0 ? (
@@ -135,10 +149,16 @@ export function FinanceSummaryTab({
         </CardContent>
       </Card>
 
-      {/* Desglose por categoría */}
+      {/* Desglose por categoría (acotado al período elegido) */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <CategoryBreakdown title="Ingresos por categoría" items={data.incomeByCategory} />
-        <CategoryBreakdown title="Gastos por categoría" items={data.expenseByCategory} />
+        <CategoryBreakdown
+          title={`Ingresos por categoría · ${desglosePeriodo}`}
+          items={data.incomeByCategory}
+        />
+        <CategoryBreakdown
+          title={`Gastos por categoría · ${desglosePeriodo}`}
+          items={data.expenseByCategory}
+        />
       </div>
 
       {/* Vencimientos financieros próximos */}

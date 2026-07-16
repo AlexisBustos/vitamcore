@@ -6,7 +6,11 @@ import {
 } from '@tanstack/react-query';
 import { api, toQuery } from '@/lib/api';
 import type { ExpenseRecord } from '@/types/domain';
-import { invalidateFinance, type FinanceFilters } from './finance-shared';
+import {
+  invalidateFinance,
+  type FinanceFilters,
+  type Granularity,
+} from './finance-shared';
 
 // ----- Gastos -----
 export function useExpenses(filters: FinanceFilters = {}) {
@@ -19,12 +23,17 @@ export function useExpenses(filters: FinanceFilters = {}) {
   });
 }
 
-export function useExpenseMonths(organizationId?: string) {
+export function useExpensePeriods(
+  granularity: Granularity,
+  organizationId?: string,
+) {
   return useQuery({
-    queryKey: ['expenses', 'months', organizationId ?? 'all'],
+    queryKey: ['expenses', 'periods', granularity, organizationId ?? 'all'],
     queryFn: () =>
       api
-        .get<{ data: string[] }>(`/expenses/months${toQuery({ organizationId })}`)
+        .get<{ data: string[] }>(
+          `/expenses/periods${toQuery({ granularity, organizationId })}`,
+        )
         .then((r) => r.data),
   });
 }

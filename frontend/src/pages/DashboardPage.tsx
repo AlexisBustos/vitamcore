@@ -140,18 +140,21 @@ export function DashboardPage() {
             <MetricCard
               title="Ingresos del mes"
               value={formatMoney(data.totals.monthIncome)}
+              hint={`Semana en curso: ${formatMoney(data.totals.weekIncome)}`}
               icon={ArrowUpRight}
               tone="success"
             />
             <MetricCard
               title="Gastos del mes"
               value={formatMoney(data.totals.monthExpense)}
+              hint={`Semana en curso: ${formatMoney(data.totals.weekExpense)}`}
               icon={ArrowDownRight}
               tone="danger"
             />
             <MetricCard
               title="Resultado estimado"
               value={formatMoney(data.totals.estimatedResult)}
+              hint="Del mes en curso"
               icon={Wallet}
               tone={data.totals.estimatedResult >= 0 ? 'success' : 'danger'}
             />

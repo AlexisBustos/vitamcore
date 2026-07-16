@@ -1,6 +1,7 @@
 // Tab genérico de libro (cuentas por cobrar / cuentas por pagar).
-// Unifica ReceivablesTab y PayablesTab: la estructura (filtros de estado + mes +
-// búsqueda, Card con total, tabla con selección múltiple, ReconcileModal) es
+// Unifica ReceivablesTab y PayablesTab: la estructura (filtros de estado +
+// período + búsqueda, Card con total, tabla con selección múltiple,
+// ReconcileModal) es
 // idéntica; lo que cambia entre ingresos y gastos se recibe vía `config` (hooks,
 // textos, accessors de fila).
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -14,10 +15,11 @@ import { formatDate, formatMoney } from '@/lib/domain';
 import { getErrorMessage } from '@/lib/errors';
 import type {
   FinanceFilters,
+  Granularity,
   useRegisterPayment,
   useBulkRegisterPayment,
 } from '@/hooks/useFinance';
-import { MonthFilter } from '@/components/MonthFilter';
+import { PeriodFilter } from '@/components/PeriodFilter';
 import type { IncomeRecord, ExpenseRecord } from '@/types/domain';
 import { ReconcileModal, type ReconcileTarget } from '@/pages/finance/ReconcileModal';
 
@@ -30,7 +32,10 @@ export interface LedgerTabConfig<T extends IncomeRecord | ExpenseRecord> {
   estados: { value: PaymentStateFilter; label: string }[];
   initialEstado: PaymentStateFilter;
   listHook: (filters: FinanceFilters) => UseQueryResult<T[]>;
-  monthsHook: (organizationId?: string) => UseQueryResult<string[]>;
+  periodsHook: (
+    granularity: Granularity,
+    organizationId?: string,
+  ) => UseQueryResult<string[]>;
   registerHook: () => ReturnType<typeof useRegisterPayment>;
   bulkRegisterHook: () => ReturnType<typeof useBulkRegisterPayment>;
   rowTotal: (r: T) => number;
@@ -53,7 +58,8 @@ export function LedgerTab<T extends IncomeRecord | ExpenseRecord>({
   config,
 }: LedgerTabProps<T>) {
   const [estado, setEstado] = useState<PaymentStateFilter>(config.initialEstado);
-  const [month, setMonth] = useState<string | undefined>();
+  const [granularity, setGranularity] = useState<Granularity>('month');
+  const [period, setPeriod] = useState<string | undefined>();
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -68,18 +74,25 @@ export function LedgerTab<T extends IncomeRecord | ExpenseRecord>({
   const { data: rows = [], isLoading, isError, error } = config.listHook({
     organizationId,
     paymentState: estado,
-    month,
+    granularity,
+    period,
     search: search || undefined,
   });
   const registrar = config.registerHook();
   const bulk = config.bulkRegisterHook();
-  const { data: months = [] } = config.monthsHook(organizationId);
+  const { data: periods = [] } = config.periodsHook(granularity, organizationId);
 
-  // Al cambiar de estado, mes o búsqueda se limpia la selección (evita operar
-  // sobre filas que ya no se ven).
+  // Al cambiar de granularidad se descarta el período elegido (una clave de mes
+  // no es válida como semana y viceversa); vuelve a "todos".
+  useEffect(() => {
+    setPeriod(undefined);
+  }, [granularity]);
+
+  // Al cambiar de estado, período o búsqueda se limpia la selección (evita
+  // operar sobre filas que ya no se ven).
   useEffect(() => {
     setSelected(new Set());
-  }, [estado, month, search]);
+  }, [estado, granularity, period, search]);
 
   const Icon = config.icon;
   const total = rows.reduce((s, r) => s + config.rowTotal(r), 0);
@@ -159,9 +172,13 @@ export function LedgerTab<T extends IncomeRecord | ExpenseRecord>({
             </button>
           ))}
         </div>
-        <div className="w-48">
-          <MonthFilter months={months} value={month} onChange={setMonth} />
-        </div>
+        <PeriodFilter
+          granularity={granularity}
+          period={period}
+          periods={periods}
+          onGranularityChange={setGranularity}
+          onPeriodChange={setPeriod}
+        />
         <div className="min-w-56 flex-1">
           <Input
             placeholder={

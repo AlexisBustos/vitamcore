@@ -4,35 +4,40 @@ import { MetricCard } from '@/components/ui/metric';
 import { Button } from '@/components/ui/button';
 import { Spinner, ErrorState } from '@/components/ui/feedback';
 import { formatMoney } from '@/lib/domain';
+import { periodLabel } from '@/lib/period';
 import { getErrorMessage } from '@/lib/errors';
-import { useConsolidated } from '@/hooks/useFinance';
+import { useConsolidated, type Granularity } from '@/hooks/useFinance';
 
-// 'YYYY-MM' → 'mayo' para rotular el cuadre; undefined = todos los meses.
-const MESES = [
-  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
-];
-function cuadreLabel(month?: string): string {
-  if (!month) return 'Cuadre — todos los meses';
-  const [y, m] = month.split('-').map(Number);
-  const nombre = MESES[m - 1];
-  return nombre ? `Cuadre de ${nombre} ${y}` : `Cuadre ${month}`;
+// Rótulo del cuadre según el período elegido; undefined = todo el histórico.
+function cuadreLabel(granularity: Granularity, period?: string): string {
+  if (!period) {
+    return granularity === 'week'
+      ? 'Cuadre — todas las semanas'
+      : 'Cuadre — todos los meses';
+  }
+  return `Cuadre · ${periodLabel(period)}`;
 }
 
 export function ConsolidatedPosition({
   organizationId,
-  month,
+  granularity,
+  period,
   onReviewUnlinked,
   onAutoReconcile,
   onRecognizeTransfers,
 }: {
   organizationId?: string;
-  month?: string;
+  granularity: Granularity;
+  period?: string;
   onReviewUnlinked: () => void;
   onAutoReconcile: () => void;
   onRecognizeTransfers: (direction: 'expense' | 'income') => void;
 }) {
-  const { data, isLoading, isError, error } = useConsolidated({ organizationId, month });
+  const { data, isLoading, isError, error } = useConsolidated({
+    organizationId,
+    granularity,
+    period,
+  });
 
   if (isLoading) return <Spinner />;
   if (isError || !data) return <ErrorState message={getErrorMessage(error)} />;
@@ -67,7 +72,7 @@ export function ConsolidatedPosition({
       {/* Cuadre del mes (banco ↔ facturas/gastos) */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2">
-          <CardTitle>{cuadreLabel(month)}</CardTitle>
+          <CardTitle>{cuadreLabel(granularity, period)}</CardTitle>
           <div className="flex flex-wrap justify-end gap-2">
             <Button variant="outline" onClick={() => onRecognizeTransfers('expense')}>
               Reconocer pagos

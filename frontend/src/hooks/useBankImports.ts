@@ -8,13 +8,13 @@ import { api, toQuery } from '@/lib/api';
 import type {
   BankAccount,
   BankCategoryBreakdown,
-  BankMonthlyPoint,
+  BankPeriodicPoint,
   BankTransactionsResponse,
   FinancialImportBatch,
   FinancialImportType,
   SalesImportSummary,
 } from '@/types/domain';
-import { invalidateFinance } from './finance-shared';
+import { invalidateFinance, type Granularity } from './finance-shared';
 
 export type FinanceImportFilters = {
   organizationId?: string;
@@ -87,7 +87,8 @@ export function useUpdateBankAccount() {
 export type BankTransactionFilters = {
   organizationId?: string;
   bankAccountId?: string;
-  month?: string;
+  granularity?: Granularity;
+  period?: string;
   search?: string;
   category?: string;
   reconciliation?: 'linked' | 'unlinked';
@@ -105,31 +106,33 @@ export function useBankTransactions(filters: BankTransactionFilters = {}) {
   });
 }
 
-export function useBankTransactionMonths(filters: {
+export function useBankTransactionPeriods(filters: {
   organizationId?: string;
   bankAccountId?: string;
+  granularity: Granularity;
 }) {
   return useQuery({
-    queryKey: ['finance-imports', 'transaction-months', filters],
+    queryKey: ['finance-imports', 'transaction-periods', filters],
     queryFn: () =>
       api
         .get<{ data: string[] }>(
-          `/finance/imports/transactions/months${toQuery(filters)}`,
+          `/finance/imports/transactions/periods${toQuery(filters)}`,
         )
         .then((r) => r.data),
   });
 }
 
-export function useBankMonthly(filters: {
+export function useBankPeriodic(filters: {
   organizationId?: string;
   bankAccountId?: string;
+  granularity: Granularity;
 }) {
   return useQuery({
-    queryKey: ['finance-imports', 'monthly', filters],
+    queryKey: ['finance-imports', 'periodic', filters],
     queryFn: () =>
       api
-        .get<{ data: BankMonthlyPoint[] }>(
-          `/finance/imports/transactions/monthly${toQuery(filters)}`,
+        .get<{ data: BankPeriodicPoint[] }>(
+          `/finance/imports/transactions/periodic${toQuery(filters)}`,
         )
         .then((r) => r.data),
   });
@@ -138,7 +141,8 @@ export function useBankMonthly(filters: {
 export function useBankByCategory(filters: {
   organizationId?: string;
   bankAccountId?: string;
-  month?: string;
+  granularity?: Granularity;
+  period?: string;
 }) {
   return useQuery({
     queryKey: ['finance-imports', 'by-category', filters],

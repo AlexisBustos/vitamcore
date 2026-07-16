@@ -11,11 +11,12 @@ import { expenseStatusOptions, formatDate, formatMoney } from '@/lib/domain';
 import { getErrorMessage } from '@/lib/errors';
 import {
   useExpenses,
-  useExpenseMonths,
+  useExpensePeriods,
   useDeleteExpense,
   type FinanceFilters,
+  type Granularity,
 } from '@/hooks/useFinance';
-import { MonthFilter } from '@/components/MonthFilter';
+import { PeriodFilter } from '@/components/PeriodFilter';
 import type { ExpenseRecord } from '@/types/domain';
 import { ExpenseForm } from './ExpenseForm';
 
@@ -23,15 +24,16 @@ export function ExpensesTab({ organizationId }: { organizationId?: string }) {
   const [extra, setExtra] = useState<{
     category?: string;
     status?: string;
-    month?: string;
-  }>({});
+    granularity: Granularity;
+    period?: string;
+  }>({ granularity: 'month' });
   const [form, setForm] = useState<{ open: boolean; item: ExpenseRecord | null }>(
     { open: false, item: null },
   );
 
   const filters: FinanceFilters = { organizationId, ...extra };
   const { data, isLoading, isError, error } = useExpenses(filters);
-  const { data: months = [] } = useExpenseMonths(organizationId);
+  const { data: periods = [] } = useExpensePeriods(extra.granularity, organizationId);
   const remove = useDeleteExpense();
 
   async function handleDelete(item: ExpenseRecord) {
@@ -58,10 +60,14 @@ export function ExpensesTab({ organizationId }: { organizationId?: string }) {
               setExtra((x) => ({ ...x, status: e.target.value || undefined }))
             }
           />
-          <MonthFilter
-            months={months}
-            value={extra.month}
-            onChange={(month) => setExtra((x) => ({ ...x, month }))}
+          <PeriodFilter
+            granularity={extra.granularity}
+            period={extra.period}
+            periods={periods}
+            onGranularityChange={(granularity) =>
+              setExtra((x) => ({ ...x, granularity, period: undefined }))
+            }
+            onPeriodChange={(period) => setExtra((x) => ({ ...x, period }))}
           />
         </div>
         <Button onClick={() => setForm({ open: true, item: null })}>
