@@ -1024,7 +1024,11 @@ test('la clave de ventas lleva la empresa delante', () => {
   };
   const a = parseSalesRows([fila], 'org-A').rows[0].dedupeKey;
   const b = parseSalesRows([fila], 'org-B').rows[0].dedupeKey;
-  expect(a).toBe('org-A|SALES_REPORT|FACTURA|100|76.543.210-9|2026-07-06|119000');
+  // Ojo con el RUT: normalizeRut (parser.ts:109) quita los puntos, así que la
+  // clave lleva 76543210-9, NO 76.543.210-9. Si ves rojo aquí, el que está mal
+  // es este literal, no normalizeRut: tocarlo rompería parser.test.ts:92 y
+  // cambiaría comportamiento real dentro de una tarea que no lo pretende.
+  expect(a).toBe('org-A|SALES_REPORT|FACTURA|100|76543210-9|2026-07-06|119000');
   // El punto entero del arreglo: la MISMA factura en dos empresas ya no colisiona.
   expect(a).not.toBe(b);
 });
@@ -1066,9 +1070,12 @@ Añade a `backend/test/finance-imports.service.test.ts`:
 
 ```ts
 test('dos empresas con la misma factura: ambas se guardan', async () => {
-  // Antes de este arreglo, getExistingDedupeKeys (sin filtro de empresa) marcaba
-  // la segunda como DUPLICATE en el preview y confirmImport la descartaba: el
-  // ingreso desaparecía de los números sin aviso. Ver spec §2.
+  // Este test va directo a confirmImport, así que lo que ejercita es el @unique
+  // global de sourceDedupeKey en el insert — NO getExistingDedupeKeys, que solo
+  // corre en previewImport. Son las dos caras del mismo defecto: la clave sin
+  // empresa. En producción el CEO lo sufriría por la vía del preview (la fila se
+  // marca DUPLICATE y se descarta en silencio); aquí se prueba por la vía del
+  // insert, que es la que se puede montar sin un XLSX. Ver spec §2.
   const orgA = await makeOrg('Vitam Healthcare');
   const orgB = await makeOrg('Vitam Tech');
   const fila = {
@@ -1089,7 +1096,12 @@ test('dos empresas con la misma factura: ambas se guardan', async () => {
     await confirmImport(lote.id);
   }
 
-  expect(await prisma.incomeRecord.count()).toBe(2); // antes del arreglo: 1
+  expect(await prisma.incomeRecord.count()).toBe(2);
+  // Sin el arreglo esto no daría 1: daría excepción. La clave de orgB chocaría
+  // con la de orgA (P2002), linkCreditNotes correría después dentro de la misma
+  // transacción y moriría con 25P02, así que confirmImport lanzaría. Da igual
+  // para el flujo —el test se escribe DESPUÉS de implementar— pero que conste,
+  // porque un comentario que miente sobrevive al bug que describe.
 });
 ```
 
