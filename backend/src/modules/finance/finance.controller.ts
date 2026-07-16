@@ -1,17 +1,17 @@
 import type { Request, Response } from 'express';
-import { z } from 'zod';
 import * as service from './finance.service';
 import {
   autoReconcileSchema,
   consolidatedQuery,
   recognizeTransfersSchema,
+  summaryQuery,
 } from './finance.schema';
 
-const summaryQuery = z.object({ organizationId: z.string().optional() });
-
 export async function summaryController(req: Request, res: Response) {
-  const { organizationId } = summaryQuery.parse(req.query);
-  res.json({ data: await service.getSummary(organizationId) });
+  const { organizationId, granularity, period } = summaryQuery.parse(req.query);
+  res.json({
+    data: await service.getSummary(organizationId, { granularity, period }),
+  });
 }
 
 export async function consolidatedController(req: Request, res: Response) {

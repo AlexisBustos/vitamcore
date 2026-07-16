@@ -6,12 +6,8 @@ import { prisma } from '../../lib/prisma';
 import { badRequest, notFound } from '../../utils/http-error';
 import { assertContext } from '../shared/relations';
 import { resolveClientId } from '../shared/parties';
-import {
-  reconcilePaidStatus,
-  monthRange,
-  listMonths as ledgerListMonths,
-  PENDING_INCOME_STATUSES,
-} from '../shared/ledger';
+import { reconcilePaidStatus, PENDING_INCOME_STATUSES } from '../shared/ledger';
+import { periodRange, listPeriods, type Granularity } from '../shared/period';
 import type {
   BulkRegisterPaymentInput,
   CreateIncomeInput,
@@ -65,8 +61,8 @@ export async function list(filters: ListIncomeFilters) {
     where.netAmount = 0;
   }
 
-  if (filters.month) {
-    where.incomeDate = monthRange(filters.month);
+  if (filters.period) {
+    where.incomeDate = periodRange(filters.granularity, filters.period);
   }
 
   // Búsqueda por nombre/folio/RUT. paymentState ya pudo fijar where.OR (RECEIVABLE_OR),
@@ -254,8 +250,11 @@ export async function remove(id: string) {
   await prisma.incomeRecord.delete({ where: { id } });
 }
 
-/// Meses (YYYY-MM) que tienen ingresos, ordenados descendente. Alimenta el
-/// desplegable de filtro por mes (solo ofrece meses con datos).
-export async function listMonths(organizationId?: string): Promise<string[]> {
-  return ledgerListMonths('income', organizationId);
+/// Períodos (YYYY-MM o YYYY-Www) que tienen ingresos, ordenados descendente.
+/// Alimenta el desplegable del filtro (solo ofrece períodos con datos).
+export async function listPeriodsWithIncome(
+  g: Granularity,
+  organizationId?: string,
+): Promise<string[]> {
+  return listPeriods(g, { source: 'income', organizationId });
 }

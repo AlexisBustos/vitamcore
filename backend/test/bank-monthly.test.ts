@@ -3,7 +3,12 @@ import { resetDb, disconnect } from './db';
 import {
   makeOrg, makeBankAccount, makeBankTransaction, makeImportBatch,
 } from './fixtures';
-import { listBankMonthly } from '../src/modules/finance-imports/bank-transactions.service';
+import { listBankPeriodic } from '../src/modules/finance-imports/bank-transactions.service';
+
+// Atajo: listBankPeriodic con granularidad mensual (el grano que caracteriza
+// esta red). El campo de salida es `period` (antes `month`).
+const listBankMonthly = (filters: { organizationId?: string; bankAccountId?: string }) =>
+  listBankPeriodic('month', filters);
 
 // makeBankTransaction (fixtures.ts:77) recibe un OBJETO, no posicionales, y
 // exige importBatchId: es FK obligatoria (schema.prisma:791) y no tiene default.
@@ -37,7 +42,7 @@ describe('listBankMonthly', () => {
     });
     const res = await listBankMonthly({ organizationId: org.id });
     expect(res).toEqual([
-      { month: '2026-07', closingBalance: 700, netFlow: 700, credits: 1000, charges: 300 },
+      { period: '2026-07', closingBalance: 700, netFlow: 700, credits: 1000, charges: 300 },
     ]);
   });
 
@@ -52,7 +57,7 @@ describe('listBankMonthly', () => {
       transactionDate: new Date('2026-07-10'), creditAmount: 200, chargeAmount: 0, balance: 700,
     });
     const res = await listBankMonthly({ organizationId: org.id });
-    expect(res.map((r) => r.month)).toEqual(['2026-07', '2026-06']);
+    expect(res.map((r) => r.period)).toEqual(['2026-07', '2026-06']);
   });
 
   // El corazón del algoritmo: junio no tiene movimientos, pero su saldo de
@@ -68,7 +73,7 @@ describe('listBankMonthly', () => {
       transactionDate: new Date('2026-07-10'), creditAmount: 100, chargeAmount: 0, balance: 1000,
     });
     const res = await listBankMonthly({ organizationId: org.id });
-    expect(res.map((r) => [r.month, r.closingBalance, r.netFlow])).toEqual([
+    expect(res.map((r) => [r.period, r.closingBalance, r.netFlow])).toEqual([
       ['2026-07', 1000, 100],
       ['2026-06', 900, 0],   // ← heredado de mayo, sin movimientos propios
       ['2026-05', 900, 900],
@@ -90,7 +95,7 @@ describe('listBankMonthly', () => {
       transactionDate: new Date('2026-07-10'), creditAmount: 300, chargeAmount: 0, balance: 300,
     });
     const res = await listBankMonthly({ organizationId: org.id });
-    expect(res.map((r) => [r.month, r.closingBalance])).toEqual([
+    expect(res.map((r) => [r.period, r.closingBalance])).toEqual([
       ['2026-07', 800],  // 500 (vieja, arrastrado) + 300 (nueva)
       ['2026-06', 500],  // la nueva aún no existe: aporta 0, no 300
     ]);
@@ -123,7 +128,31 @@ describe('listBankMonthly', () => {
     });
     const res = await listBankMonthly({ bankAccountId: a.id });
     expect(res).toEqual([
-      { month: '2026-07', closingBalance: 100, netFlow: 100, credits: 100, charges: 0 },
+      { period: '2026-07', closingBalance: 100, netFlow: 100, credits: 100, charges: 0 },
+    ]);
+  });
+});
+
+describe('listBankPeriodic — granularidad semanal', () => {
+  beforeEach(resetDb);
+  afterAll(disconnect);
+
+  test('agrupa por semana ISO y arrastra saldo entre semanas contiguas', async () => {
+    const org = await makeOrg();
+    const acc = await makeBankAccount(org.id);
+    const mov = await movimientosDe(org.id);
+    await mov(acc.id, {
+      transactionDate: new Date('2026-07-06'), creditAmount: 500, chargeAmount: 0, balance: 500, // W28
+    });
+    await mov(acc.id, {
+      transactionDate: new Date('2026-07-20'), creditAmount: 200, chargeAmount: 0, balance: 700, // W30
+    });
+    const res = await listBankPeriodic('week', { organizationId: org.id });
+    // W29 no tiene movimientos: hereda el saldo de W28 (carry-forward), netFlow 0.
+    expect(res.map((r) => [r.period, r.closingBalance, r.netFlow])).toEqual([
+      ['2026-W30', 700, 200],
+      ['2026-W29', 500, 0],
+      ['2026-W28', 500, 500],
     ]);
   });
 });

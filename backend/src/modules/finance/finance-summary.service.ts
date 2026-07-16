@@ -4,7 +4,7 @@
  */
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
-import { currentMonthRange } from '../shared/dates';
+import { periodRange, currentPeriod, resolvePeriodRange } from '../shared/period';
 import {
   computeReceivablePayable,
   computeOverdue,
@@ -12,15 +12,26 @@ import {
   EXPENSE_PENDING,
 } from './finance-shared';
 import { getReconciliationSummary } from './finance-reconciliation.service';
+import type { SummaryFilters } from './finance.schema';
 
-export async function getSummary(organizationId?: string) {
+export async function getSummary(
+  organizationId?: string,
+  filters: Pick<SummaryFilters, 'granularity' | 'period'> = { granularity: 'month' },
+) {
   const orgFilter = organizationId ? { organizationId } : {};
-  const { start, end } = currentMonthRange();
   const now = new Date();
+  // Pulso: mes en curso y semana en curso, siempre (para el dashboard, lado a lado).
+  const mes = periodRange('month', currentPeriod('month', now));
+  const semana = periodRange('week', currentPeriod('week', now));
+  // Los desgloses (categoría/empresa) se acotan al período seleccionado; por
+  // defecto el mes en curso. Antes no filtraban y devolvían el histórico entero.
+  const sel = resolvePeriodRange(filters.granularity, filters.period, now);
 
   const [
     monthIncome,
     monthExpense,
+    weekIncome,
+    weekExpense,
     recurringIncome,
     recurringExpense,
     incomeByCategory,
@@ -37,7 +48,7 @@ export async function getSummary(organizationId?: string) {
       _sum: { amount: true },
       where: {
         ...orgFilter,
-        incomeDate: { gte: start, lt: end },
+        incomeDate: { gte: mes.gte, lt: mes.lt },
         status: { not: 'CANCELLED' },
       },
     }),
@@ -45,7 +56,23 @@ export async function getSummary(organizationId?: string) {
       _sum: { amount: true },
       where: {
         ...orgFilter,
-        expenseDate: { gte: start, lt: end },
+        expenseDate: { gte: mes.gte, lt: mes.lt },
+        status: { not: 'CANCELLED' },
+      },
+    }),
+    prisma.incomeRecord.aggregate({
+      _sum: { amount: true },
+      where: {
+        ...orgFilter,
+        incomeDate: { gte: semana.gte, lt: semana.lt },
+        status: { not: 'CANCELLED' },
+      },
+    }),
+    prisma.expenseRecord.aggregate({
+      _sum: { amount: true },
+      where: {
+        ...orgFilter,
+        expenseDate: { gte: semana.gte, lt: semana.lt },
         status: { not: 'CANCELLED' },
       },
     }),
@@ -59,22 +86,38 @@ export async function getSummary(organizationId?: string) {
     }),
     prisma.incomeRecord.groupBy({
       by: ['category'],
-      where: { ...orgFilter, status: { not: 'CANCELLED' } },
+      where: {
+        ...orgFilter,
+        incomeDate: { gte: sel.gte, lt: sel.lt },
+        status: { not: 'CANCELLED' },
+      },
       _sum: { amount: true },
     }),
     prisma.expenseRecord.groupBy({
       by: ['category'],
-      where: { ...orgFilter, status: { not: 'CANCELLED' } },
+      where: {
+        ...orgFilter,
+        expenseDate: { gte: sel.gte, lt: sel.lt },
+        status: { not: 'CANCELLED' },
+      },
       _sum: { amount: true },
     }),
     prisma.incomeRecord.groupBy({
       by: ['organizationId'],
-      where: { ...orgFilter, status: { not: 'CANCELLED' } },
+      where: {
+        ...orgFilter,
+        incomeDate: { gte: sel.gte, lt: sel.lt },
+        status: { not: 'CANCELLED' },
+      },
       _sum: { amount: true },
     }),
     prisma.expenseRecord.groupBy({
       by: ['organizationId'],
-      where: { ...orgFilter, status: { not: 'CANCELLED' } },
+      where: {
+        ...orgFilter,
+        expenseDate: { gte: sel.gte, lt: sel.lt },
+        status: { not: 'CANCELLED' },
+      },
       _sum: { amount: true },
     }),
     prisma.incomeRecord.findMany({
@@ -117,6 +160,8 @@ export async function getSummary(organizationId?: string) {
 
   const monthIncomeTotal = monthIncome._sum.amount ?? 0;
   const monthExpenseTotal = monthExpense._sum.amount ?? 0;
+  const weekIncomeTotal = weekIncome._sum.amount ?? 0;
+  const weekExpenseTotal = weekExpense._sum.amount ?? 0;
 
   const byOrgMap = new Map<string, { income: number; expense: number }>();
   for (const r of incomeByOrg) {
@@ -138,7 +183,11 @@ export async function getSummary(organizationId?: string) {
   return {
     monthIncome: monthIncomeTotal,
     monthExpense: monthExpenseTotal,
+    weekIncome: weekIncomeTotal,
+    weekExpense: weekExpenseTotal,
     estimatedResult: monthIncomeTotal - monthExpenseTotal,
+    // Período al que corresponden los desgloses por categoría/empresa.
+    breakdownPeriod: { granularity: filters.granularity, key: sel.key },
     pendingIncome: recPay.receivable,
     collectedIncome: collectedIncome._sum.netAmount ?? 0,
     pendingExpense: recPay.payable,
@@ -167,13 +216,14 @@ export async function getSummary(organizationId?: string) {
 
 /**
  * Posición consolidada (foto al día) + cuadre del mes. Reemplaza a
- * getFinancePosition. La posición ignora `month`; solo `reconciliation` lo usa.
+ * getFinancePosition. La posición ignora el período; solo `reconciliation` lo usa.
  */
 export async function getConsolidated(filters: {
   organizationId?: string;
-  month?: string;
+  granularity: 'week' | 'month';
+  period?: string;
 }) {
-  const { organizationId, month } = filters;
+  const { organizationId, granularity, period } = filters;
 
   const [cashRows, recPay, overdue, orgs, reconciliation] = await Promise.all([
     prisma.$queryRaw<{ organizationId: string; caja: bigint }[]>(Prisma.sql`
@@ -195,7 +245,7 @@ export async function getConsolidated(filters: {
     computeReceivablePayable(organizationId),
     computeOverdue(organizationId),
     prisma.organization.findMany({ select: { id: true, name: true } }),
-    getReconciliationSummary({ organizationId, month }),
+    getReconciliationSummary({ organizationId, granularity, period }),
   ]);
 
   const cashByOrg = new Map<string, number>();

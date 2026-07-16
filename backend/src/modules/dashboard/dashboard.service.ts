@@ -140,6 +140,8 @@ export async function getSummary(organizationId?: string) {
       // Atajos financieros y comerciales para las tarjetas del dashboard.
       monthIncome: finance.monthIncome,
       monthExpense: finance.monthExpense,
+      weekIncome: finance.weekIncome,
+      weekExpense: finance.weekExpense,
       estimatedResult: finance.estimatedResult,
       pendingIncome: finance.pendingIncome,
       pendingExpense: finance.pendingExpense,

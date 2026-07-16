@@ -16,6 +16,18 @@ export const requiredDateInput = z.coerce.date({
   invalid_type_error: 'La fecha no es válida',
 });
 
+// Granularidad de período: semana ISO o mes. Default mes (la unidad contable).
+export const granularity = z.enum(['week', 'month']).default('month');
+
+// Clave de período: 'YYYY-Www' (W01–W53) o 'YYYY-MM' (01–12). La validez real de
+// la semana (W53 solo existe algunos años) la comprueba periodRange, no la regex.
+export const periodKeyInput = z
+  .string()
+  .regex(
+    /^\d{4}-(W(0[1-9]|[1-4]\d|5[0-3])|(0[1-9]|1[0-2]))$/,
+    'Formato de período inválido (YYYY-MM o YYYY-Www)',
+  );
+
 export const optionalText = z.string().trim().max(5000).optional().nullable();
 
 export const optionalShortText = z

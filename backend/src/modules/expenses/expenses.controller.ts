@@ -13,11 +13,13 @@ export async function listController(req: Request, res: Response) {
   res.json({ data: await service.list(filters) });
 }
 
-export async function listMonthsController(req: Request, res: Response) {
-  const { organizationId } = listExpenseQuery
-    .pick({ organizationId: true })
+export async function listPeriodsController(req: Request, res: Response) {
+  const { organizationId, granularity } = listExpenseQuery
+    .pick({ organizationId: true, granularity: true })
     .parse(req.query);
-  res.json({ data: await service.listMonths(organizationId) });
+  res.json({
+    data: await service.listPeriodsWithExpense(granularity, organizationId),
+  });
 }
 
 export async function registerPaymentController(req: Request, res: Response) {

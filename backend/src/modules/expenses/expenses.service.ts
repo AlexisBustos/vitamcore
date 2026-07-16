@@ -6,12 +6,8 @@ import { prisma } from '../../lib/prisma';
 import { badRequest, notFound } from '../../utils/http-error';
 import { assertContext } from '../shared/relations';
 import { resolveVendorId } from '../shared/parties';
-import {
-  reconcilePaidStatus,
-  monthRange,
-  listMonths as ledgerListMonths,
-  PAYABLE_EXPENSE_STATUSES,
-} from '../shared/ledger';
+import { reconcilePaidStatus, PAYABLE_EXPENSE_STATUSES } from '../shared/ledger';
+import { periodRange, listPeriods, type Granularity } from '../shared/period';
 import type {
   BulkRegisterPaymentInput,
   CreateExpenseInput,
@@ -50,7 +46,9 @@ export async function list(filters: ListExpenseFilters) {
     where.status = 'CANCELLED';
   }
 
-  if (filters.month) where.expenseDate = monthRange(filters.month);
+  if (filters.period) {
+    where.expenseDate = periodRange(filters.granularity, filters.period);
+  }
 
   // Búsqueda por nombre/folio/RUT, combinada con AND para no pisar un eventual
   // where.OR (mismo patrón que income; hoy expenses no fija OR, pero queda seguro).
@@ -227,7 +225,10 @@ export async function bulkRegisterPayment(input: BulkRegisterPaymentInput) {
   return { count: ids.length };
 }
 
-/// Meses (YYYY-MM) que tienen gastos, ordenados descendente. Alimenta el filtro por mes.
-export async function listMonths(organizationId?: string): Promise<string[]> {
-  return ledgerListMonths('expense', organizationId);
+/// Períodos (YYYY-MM o YYYY-Www) que tienen gastos, descendente. Alimenta el filtro.
+export async function listPeriodsWithExpense(
+  g: Granularity,
+  organizationId?: string,
+): Promise<string[]> {
+  return listPeriods(g, { source: 'expense', organizationId });
 }

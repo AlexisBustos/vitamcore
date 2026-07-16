@@ -2,7 +2,13 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { badRequest, notFound } from '../../utils/http-error';
 import { buildOwnAccounts, isInternalTransfer } from '../shared/internal-transfer';
-import { listPeriods, periodSeries, periodRange } from '../shared/period';
+import {
+  listPeriods,
+  periodSeries,
+  periodRange,
+  TRUNC,
+  type Granularity,
+} from '../shared/period';
 import type { ListTransactionsFilters } from './finance-imports.schema';
 import { refs } from './finance-imports.shared';
 
@@ -12,8 +18,8 @@ export async function listBankTransactions(filters: ListTransactionsFilters) {
     bankAccountId: filters.bankAccountId,
   };
 
-  if (filters.month) {
-    where.transactionDate = periodRange('month', filters.month);
+  if (filters.period) {
+    where.transactionDate = periodRange(filters.granularity, filters.period);
   }
 
   if (filters.category) {
@@ -145,17 +151,20 @@ export async function setTransactionCategory(
   });
 }
 
-export async function listBankTransactionMonths(filters: {
-  organizationId?: string;
-  bankAccountId?: string;
-}) {
-  return listPeriods('month', { source: 'bank', ...filters });
+export async function listBankTransactionPeriods(
+  g: Granularity,
+  filters: { organizationId?: string; bankAccountId?: string },
+) {
+  return listPeriods(g, { source: 'bank', ...filters });
 }
 
-export async function listBankMonthly(filters: {
-  organizationId?: string;
-  bankAccountId?: string;
-}) {
+export async function listBankPeriodic(
+  g: Granularity,
+  filters: {
+    organizationId?: string;
+    bankAccountId?: string;
+  },
+) {
   const conditions = [Prisma.sql`1 = 1`];
   if (filters.organizationId) {
     conditions.push(Prisma.sql`"organizationId" = ${filters.organizationId}`);
@@ -164,44 +173,53 @@ export async function listBankMonthly(filters: {
     conditions.push(Prisma.sql`"bankAccountId" = ${filters.bankAccountId}`);
   }
   const whereSql = Prisma.join(conditions, ' AND ');
+  // Mismo truncador que listPeriods, para no discrepar en el borde de año. Van
+  // por Prisma.raw (whitelist tipada TRUNC, no entrada de usuario) y NO como
+  // parámetros: el DISTINCT ON exige que la expresión de truncado sea idéntica a
+  // la del ORDER BY, y dos `${param}` serían $1 y $2, que Postgres no equipara.
+  const { unit, format } = TRUNC[g];
+  const trunc = Prisma.raw(`date_trunc('${unit}', "transactionDate")`);
+  const periodo = Prisma.raw(
+    `to_char(date_trunc('${unit}', "transactionDate"), '${format}')`,
+  );
 
-  // Flujos por cuenta y mes.
+  // Flujos por cuenta y período.
   const flows = await prisma.$queryRaw<
-    { bankAccountId: string; mes: string; abonos: bigint; cargos: bigint }[]
+    { bankAccountId: string; periodo: string; abonos: bigint; cargos: bigint }[]
   >(Prisma.sql`
     SELECT "bankAccountId",
-           to_char(date_trunc('month', "transactionDate"), 'YYYY-MM') AS mes,
+           ${periodo} AS periodo,
            SUM("creditAmount")::bigint AS abonos,
            SUM("chargeAmount")::bigint AS cargos
     FROM "bank_transactions"
     WHERE ${whereSql}
-    GROUP BY "bankAccountId", mes
+    GROUP BY "bankAccountId", periodo
   `);
 
   if (flows.length === 0) return [];
 
-  // Saldo de cierre por cuenta y mes = balance del último movimiento del mes.
+  // Saldo de cierre por cuenta y período = balance del último movimiento.
   const closings = await prisma.$queryRaw<
-    { bankAccountId: string; mes: string; cierre: number | null }[]
+    { bankAccountId: string; periodo: string; cierre: number | null }[]
   >(Prisma.sql`
-    SELECT DISTINCT ON ("bankAccountId", date_trunc('month', "transactionDate"))
+    SELECT DISTINCT ON ("bankAccountId", ${trunc})
            "bankAccountId",
-           to_char(date_trunc('month', "transactionDate"), 'YYYY-MM') AS mes,
+           ${periodo} AS periodo,
            "balance" AS cierre
     FROM "bank_transactions"
     WHERE ${whereSql}
-    ORDER BY "bankAccountId", date_trunc('month', "transactionDate"),
+    ORDER BY "bankAccountId", ${trunc},
              "transactionDate" DESC, "createdAt" DESC
   `);
 
-  // Rango de meses [min..max] a partir de las claves devueltas (mismo grano).
-  const allMonths = [
-    ...flows.map((f) => f.mes),
-    ...closings.map((c) => c.mes),
+  // Serie contigua [min..max] a partir de las claves devueltas (mismo grano).
+  const allPeriods = [
+    ...flows.map((f) => f.periodo),
+    ...closings.map((c) => c.periodo),
   ];
-  const minMonth = allMonths.reduce((a, b) => (a < b ? a : b));
-  const maxMonth = allMonths.reduce((a, b) => (a > b ? a : b));
-  const months = periodSeries('month', minMonth, maxMonth);
+  const minPeriod = allPeriods.reduce((a, b) => (a < b ? a : b));
+  const maxPeriod = allPeriods.reduce((a, b) => (a > b ? a : b));
+  const periods = periodSeries(g, minPeriod, maxPeriod);
 
   const accountIds = [
     ...new Set([
@@ -210,10 +228,10 @@ export async function listBankMonthly(filters: {
     ]),
   ];
 
-  const key = (acc: string, mes: string) => `${acc}|${mes}`;
-  const flowMap = new Map(flows.map((f) => [key(f.bankAccountId, f.mes), f]));
+  const key = (acc: string, periodo: string) => `${acc}|${periodo}`;
+  const flowMap = new Map(flows.map((f) => [key(f.bankAccountId, f.periodo), f]));
   const closeMap = new Map(
-    closings.map((c) => [key(c.bankAccountId, c.mes), c.cierre]),
+    closings.map((c) => [key(c.bankAccountId, c.periodo), c.cierre]),
   );
 
   // Por cada cuenta: serie de cierre con carry-forward. Antes de su primer
@@ -223,32 +241,32 @@ export async function listBankMonthly(filters: {
     const series = new Map<string, number>();
     let last = 0;
     let started = false;
-    for (const mes of months) {
-      const own = closeMap.get(key(acc, mes));
+    for (const periodo of periods) {
+      const own = closeMap.get(key(acc, periodo));
       if (own != null) {
         last = own;
         started = true;
       }
-      series.set(mes, started ? last : 0);
+      series.set(periodo, started ? last : 0);
     }
     carried.set(acc, series);
   }
 
-  // Consolidar por mes y devolver más reciente primero.
-  const result = months.map((mes) => {
+  // Consolidar por período y devolver más reciente primero.
+  const result = periods.map((periodo) => {
     let closingBalance = 0;
     let credits = 0;
     let charges = 0;
     for (const acc of accountIds) {
-      closingBalance += carried.get(acc)?.get(mes) ?? 0;
-      const f = flowMap.get(key(acc, mes));
+      closingBalance += carried.get(acc)?.get(periodo) ?? 0;
+      const f = flowMap.get(key(acc, periodo));
       if (f) {
         credits += Number(f.abonos);
         charges += Number(f.cargos);
       }
     }
     return {
-      month: mes,
+      period: periodo,
       closingBalance,
       netFlow: credits - charges,
       credits,
@@ -262,7 +280,8 @@ export async function listBankMonthly(filters: {
 export async function listBankByCategory(filters: {
   organizationId?: string;
   bankAccountId?: string;
-  month?: string;
+  granularity: Granularity;
+  period?: string;
 }) {
   const conditions = [Prisma.sql`1 = 1`];
   if (filters.organizationId) {
@@ -271,8 +290,8 @@ export async function listBankByCategory(filters: {
   if (filters.bankAccountId) {
     conditions.push(Prisma.sql`"bankAccountId" = ${filters.bankAccountId}`);
   }
-  if (filters.month) {
-    const { gte, lt } = periodRange('month', filters.month);
+  if (filters.period) {
+    const { gte, lt } = periodRange(filters.granularity, filters.period);
     conditions.push(
       Prisma.sql`"transactionDate" >= ${gte} AND "transactionDate" < ${lt}`,
     );

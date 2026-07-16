@@ -120,6 +120,25 @@ export function periodSeries(g: Granularity, fromKey: string, toKey: string): st
   return out;
 }
 
+/**
+ * Rango del período pedido; si falta `key`, el período en curso (resuelto en
+ * Santiago). Valida que la forma de la clave case con la granularidad, así una
+ * clave de semana con granularity 'month' es un error explícito y no un rango
+ * silenciosamente equivocado.
+ */
+export function resolvePeriodRange(
+  g: Granularity,
+  key: string | undefined,
+  now = new Date(),
+): { gte: Date; lt: Date; key: string } {
+  const k = key ?? currentPeriod(g, now);
+  const esSemana = k.includes('W');
+  if (esSemana !== (g === 'week')) {
+    throw badRequest(`El período ${k} no corresponde a la granularidad ${g}`);
+  }
+  return { ...periodRange(g, k), key: k };
+}
+
 /** ¿El rango inclusivo [start, end] es exactamente una semana ISO (lun–dom)? */
 export function isFullIsoWeek(start: Date, end: Date): boolean {
   const { gte, lt } = periodRange('week', periodKey('week', start));
@@ -129,7 +148,9 @@ export function isFullIsoWeek(start: Date, end: Date): boolean {
 
 // Whitelist tipada: los identificadores de tabla/columna y el truncador NO
 // pueden ir como parámetros de consulta, así que van por aquí y nunca crudos.
-const TRUNC = {
+// Se exporta para que otras consultas por período (p. ej. listBankPeriodic)
+// usen el MISMO truncador y no discrepen en el borde de año.
+export const TRUNC = {
   week: { unit: 'week', format: 'IYYY-"W"IW' },
   month: { unit: 'month', format: 'YYYY-MM' },
 } as const;

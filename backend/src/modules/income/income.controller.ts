@@ -13,9 +13,13 @@ export async function listController(req: Request, res: Response) {
   res.json({ data: await service.list(filters) });
 }
 
-export async function listMonthsController(req: Request, res: Response) {
-  const { organizationId } = listIncomeQuery.pick({ organizationId: true }).parse(req.query);
-  res.json({ data: await service.listMonths(organizationId) });
+export async function listPeriodsController(req: Request, res: Response) {
+  const { organizationId, granularity } = listIncomeQuery
+    .pick({ organizationId: true, granularity: true })
+    .parse(req.query);
+  res.json({
+    data: await service.listPeriodsWithIncome(granularity, organizationId),
+  });
 }
 
 export async function getController(req: Request, res: Response) {

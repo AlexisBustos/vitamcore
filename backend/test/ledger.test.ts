@@ -1,7 +1,8 @@
-import { beforeEach, afterAll, describe, expect, test } from 'vitest';
-import { resetDb, disconnect } from './db';
-import { makeOrg, makeIncome, makeExpense } from './fixtures';
-import { reconcilePaidStatus, monthRange, listMonths } from '../src/modules/shared/ledger';
+import { describe, expect, test } from 'vitest';
+import { reconcilePaidStatus } from '../src/modules/shared/ledger';
+
+// monthRange y listMonths se jubilaron en la Fase 3: su cobertura vive ahora en
+// period.test.ts (periodRange('month', …) y listPeriods('month', …)).
 
 describe('reconcilePaidStatus', () => {
   test('status undefined devuelve el input sin tocar paidDate', () => {
@@ -28,35 +29,5 @@ describe('reconcilePaidStatus', () => {
     const res = reconcilePaidStatus({ status: 'INVOICED' }, new Date('2026-07-01'));
     expect(res.paidDate).toBe(null);
     expect(res.paidByBankTransactionId).toBe(null);
-  });
-});
-
-describe('monthRange', () => {
-  test('2026-07 devuelve [julio, agosto) en UTC', () => {
-    const { gte, lt } = monthRange('2026-07');
-    expect(gte.toISOString()).toBe('2026-07-01T00:00:00.000Z');
-    expect(lt.toISOString()).toBe('2026-08-01T00:00:00.000Z');
-  });
-});
-
-describe('listMonths', () => {
-  beforeEach(resetDb);
-  afterAll(disconnect);
-
-  test('income devuelve meses con datos, descendente', async () => {
-    const org = await makeOrg();
-    await makeIncome(org.id, { incomeDate: new Date('2026-06-10') });
-    await makeIncome(org.id, { incomeDate: new Date('2026-07-05') });
-    await makeIncome(org.id, { incomeDate: new Date('2026-07-20') });
-    const meses = await listMonths('income', org.id);
-    expect(meses).toEqual(['2026-07', '2026-06']);
-  });
-
-  test('expense devuelve meses con datos, descendente', async () => {
-    const org = await makeOrg();
-    await makeExpense(org.id, { expenseDate: new Date('2026-05-10') });
-    await makeExpense(org.id, { expenseDate: new Date('2026-07-05') });
-    const meses = await listMonths('expense', org.id);
-    expect(meses).toEqual(['2026-07', '2026-05']);
   });
 });

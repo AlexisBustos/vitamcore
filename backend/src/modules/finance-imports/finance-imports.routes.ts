@@ -9,8 +9,8 @@ import {
   listAccountsController,
   listBatchesController,
   listByCategoryController,
-  listMonthlyController,
-  listTransactionMonthsController,
+  listPeriodicController,
+  listTransactionPeriodsController,
   listTransactionsController,
   previewController,
   reconciliationCandidatesController,
@@ -39,12 +39,12 @@ financeImportsRouter.post('/confirm', asyncHandler(confirmController));
 financeImportsRouter.get('/batches', asyncHandler(listBatchesController));
 financeImportsRouter.get('/batches/:id', asyncHandler(getBatchController));
 financeImportsRouter.get(
-  '/transactions/months',
-  asyncHandler(listTransactionMonthsController),
+  '/transactions/periods',
+  asyncHandler(listTransactionPeriodsController),
 );
 financeImportsRouter.get(
-  '/transactions/monthly',
-  asyncHandler(listMonthlyController),
+  '/transactions/periodic',
+  asyncHandler(listPeriodicController),
 );
 financeImportsRouter.get(
   '/transactions/by-category',

@@ -3,8 +3,10 @@ import {
   amount,
   currency,
   dateInput,
+  granularity,
   optionalShortText,
   optionalText,
+  periodKeyInput,
   recurrenceFrequencyEnum,
 } from '../shared/zod';
 
@@ -51,10 +53,8 @@ export const listIncomeQuery = z.object({
   paymentState: z.enum(['receivable', 'overdue', 'paid', 'cancelled']).optional(),
   // Búsqueda libre por nombre de cliente, folio o RUT del documento.
   search: z.string().trim().min(1).optional(),
-  month: z
-    .string()
-    .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Formato de mes inválido (YYYY-MM)')
-    .optional(),
+  granularity,
+  period: periodKeyInput.optional(),
 });
 
 export const registerPaymentSchema = z.object({

@@ -1,8 +1,8 @@
 export { listBankAccounts, createBankAccount, updateBankAccount } from './bank-accounts.service';
 export {
   listBankTransactions,
-  listBankTransactionMonths,
-  listBankMonthly,
+  listBankTransactionPeriods,
+  listBankPeriodic,
   listBankByCategory,
   setCategoryBulk,
   setTransactionCategory,

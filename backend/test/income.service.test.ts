@@ -335,13 +335,20 @@ describe('income.bulkRegisterPayment', () => {
   });
 });
 
-describe('income.listMonths', () => {
+describe('income.listPeriodsWithIncome', () => {
   test('devuelve los meses con datos, orden descendente', async () => {
     const org = await makeOrg();
     await makeIncome(org.id, { incomeDate: new Date('2026-05-15') });
     await makeIncome(org.id, { incomeDate: new Date('2026-07-01') });
-    const months = await income.listMonths(org.id);
+    const months = await income.listPeriodsWithIncome('month', org.id);
     expect(months[0]).toBe('2026-07');
     expect(months).toContain('2026-05');
+  });
+
+  test('por semana devuelve claves ISO', async () => {
+    const org = await makeOrg();
+    await makeIncome(org.id, { incomeDate: new Date('2026-07-06') }); // W28
+    const weeks = await income.listPeriodsWithIncome('week', org.id);
+    expect(weeks).toEqual(['2026-W28']);
   });
 });

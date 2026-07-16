@@ -5,7 +5,7 @@ import {
   createController,
   getController,
   listController,
-  listMonthsController,
+  listPeriodsController,
   registerPaymentController,
   removeController,
   updateController,
@@ -14,7 +14,7 @@ import {
 export const incomeRouter = Router();
 
 incomeRouter.get('/', asyncHandler(listController));
-incomeRouter.get('/months', asyncHandler(listMonthsController));
+incomeRouter.get('/periods', asyncHandler(listPeriodsController));
 incomeRouter.post('/', asyncHandler(createController));
 incomeRouter.post('/payments/bulk', asyncHandler(bulkRegisterPaymentController));
 incomeRouter.get('/:id', asyncHandler(getController));

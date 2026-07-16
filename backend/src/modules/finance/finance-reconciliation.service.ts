@@ -13,12 +13,13 @@ import { periodRange } from '../shared/period';
  */
 export async function getReconciliationSummary(filters: {
   organizationId?: string;
-  month?: string;
+  granularity: 'week' | 'month';
+  period?: string;
 }) {
   const where: Prisma.BankTransactionWhereInput = {};
   if (filters.organizationId) where.organizationId = filters.organizationId;
-  if (filters.month) {
-    where.transactionDate = periodRange('month', filters.month);
+  if (filters.period) {
+    where.transactionDate = periodRange(filters.granularity, filters.period);
   }
 
   // Cuentas propias para detectar traspasos internos (no son ingreso/gasto).
@@ -142,16 +143,17 @@ function pairUp(invoices: AutoCandidate[], movs: AutoMov[], windowMs: number) {
  */
 export async function autoReconcile(input: {
   organizationId: string;
-  month?: string;
+  granularity: 'week' | 'month';
+  period?: string;
   apply: boolean;
   selection?: { invoiceId: string; movId: string }[];
 }) {
-  const { organizationId, month, apply, selection } = input;
+  const { organizationId, granularity, period, apply, selection } = input;
   const WINDOW_MS = 60 * 24 * 60 * 60 * 1000; // ±60 días
 
   let range: { gte: Date; lt: Date } | null = null;
-  if (month) {
-    range = periodRange('month', month);
+  if (period) {
+    range = periodRange(granularity, period);
   }
   const inRange = (d: Date | null) =>
     !range || (d != null && d >= range.gte && d < range.lt);
@@ -330,13 +332,14 @@ function transferPayee(description: string): string {
  */
 export async function recognizeTransfers(input: {
   organizationId: string;
-  month?: string;
+  granularity: 'week' | 'month';
+  period?: string;
   direction: 'expense' | 'income';
   category: string;
   apply: boolean;
   selection?: string[];
 }) {
-  const { organizationId, month, direction, category, apply, selection } = input;
+  const { organizationId, granularity, period, direction, category, apply, selection } = input;
   const isIncome = direction === 'income';
 
   const where: Prisma.BankTransactionWhereInput = {
@@ -349,8 +352,8 @@ export async function recognizeTransfers(input: {
       ? { creditAmount: { gt: 0 }, paidIncomes: { none: {} } }
       : { chargeAmount: { gt: 0 }, paidExpenses: { none: {} } }),
   };
-  if (month) {
-    where.transactionDate = periodRange('month', month);
+  if (period) {
+    where.transactionDate = periodRange(granularity, period);
   }
 
   const movs = await prisma.bankTransaction.findMany({

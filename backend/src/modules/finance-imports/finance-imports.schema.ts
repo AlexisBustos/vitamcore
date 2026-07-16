@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { currency, optionalShortText, requiredDateInput } from '../shared/zod';
+import {
+  currency,
+  granularity,
+  optionalShortText,
+  periodKeyInput,
+  requiredDateInput,
+} from '../shared/zod';
 
 export const importTypeEnum = z.enum([
   'SALES_REPORT',
@@ -55,10 +61,8 @@ export const listBatchesQuery = z.object({
 export const listTransactionsQuery = z.object({
   organizationId: z.string().optional(),
   bankAccountId: z.string().optional(),
-  month: z
-    .string()
-    .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Formato de mes inválido (YYYY-MM)')
-    .optional(),
+  granularity,
+  period: periodKeyInput.optional(),
   search: z.string().trim().max(255).optional(),
   category: z.string().optional(),
   reconciliation: z.enum(['linked', 'unlinked']).optional(),
@@ -67,7 +71,15 @@ export const listTransactionsQuery = z.object({
 export const listByCategoryQuery = listTransactionsQuery.pick({
   organizationId: true,
   bankAccountId: true,
-  month: true,
+  granularity: true,
+  period: true,
+});
+
+// Para /transactions/periods y /transactions/periodic: solo el eje de agrupación.
+export const listPeriodicQuery = z.object({
+  organizationId: z.string().optional(),
+  bankAccountId: z.string().optional(),
+  granularity,
 });
 
 export const setCategorySchema = z.object({

@@ -308,12 +308,12 @@ describe('expenses.bulkRegisterPayment', () => {
   });
 });
 
-describe('expenses.listMonths', () => {
+describe('expenses.listPeriodsWithExpense', () => {
   test('devuelve los meses con datos, orden descendente', async () => {
     const org = await makeOrg();
     await makeExpense(org.id, { expenseDate: new Date('2026-05-15') });
     await makeExpense(org.id, { expenseDate: new Date('2026-07-01') });
-    const months = await expenses.listMonths(org.id);
+    const months = await expenses.listPeriodsWithExpense('month', org.id);
     expect(months[0]).toBe('2026-07');
     expect(months).toContain('2026-05');
   });

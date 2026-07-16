@@ -6,6 +6,7 @@ import {
   listAccountsQuery,
   listBatchesQuery,
   listByCategoryQuery,
+  listPeriodicQuery,
   listTransactionsQuery,
   previewImportSchema,
   reconciliationCandidatesQuery,
@@ -68,21 +69,19 @@ export async function bulkCategoryController(req: Request, res: Response) {
   res.json({ data: await service.setCategoryBulk(input.ids, input.category) });
 }
 
-export async function listTransactionMonthsController(
+export async function listTransactionPeriodsController(
   req: Request,
   res: Response,
 ) {
-  const filters = listTransactionsQuery
-    .pick({ organizationId: true, bankAccountId: true })
-    .parse(req.query);
-  res.json({ data: await service.listBankTransactionMonths(filters) });
+  const { granularity, ...filters } = listPeriodicQuery.parse(req.query);
+  res.json({
+    data: await service.listBankTransactionPeriods(granularity, filters),
+  });
 }
 
-export async function listMonthlyController(req: Request, res: Response) {
-  const filters = listTransactionsQuery
-    .pick({ organizationId: true, bankAccountId: true })
-    .parse(req.query);
-  res.json({ data: await service.listBankMonthly(filters) });
+export async function listPeriodicController(req: Request, res: Response) {
+  const { granularity, ...filters } = listPeriodicQuery.parse(req.query);
+  res.json({ data: await service.listBankPeriodic(granularity, filters) });
 }
 
 export async function getBatchController(req: Request, res: Response) {

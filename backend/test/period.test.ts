@@ -10,6 +10,7 @@ import {
   periodSeries,
   listPeriods,
   isFullIsoWeek,
+  resolvePeriodRange,
 } from '../src/modules/shared/period';
 
 describe('periodRange mes', () => {
@@ -130,6 +131,35 @@ describe('periodSeries', () => {
 
   test('rango invertido devuelve vacío', () => {
     expect(periodSeries('month', '2026-07', '2026-05')).toEqual([]);
+  });
+});
+
+describe('resolvePeriodRange', () => {
+  test('mes explícito devuelve su rango y su clave', () => {
+    const r = resolvePeriodRange('month', '2026-07');
+    expect(r.key).toBe('2026-07');
+    expect(r.gte.toISOString()).toBe('2026-07-01T00:00:00.000Z');
+    expect(r.lt.toISOString()).toBe('2026-08-01T00:00:00.000Z');
+  });
+
+  test('semana explícita', () => {
+    const r = resolvePeriodRange('week', '2026-W28');
+    expect(r.key).toBe('2026-W28');
+    expect(r.gte.toISOString()).toBe('2026-07-06T00:00:00.000Z');
+  });
+
+  test('sin clave usa el período en curso (resuelto en Santiago)', () => {
+    const now = new Date('2026-07-13T03:00:00Z'); // 12-jul 23:00 en Santiago
+    expect(resolvePeriodRange('week', undefined, now).key).toBe('2026-W28');
+    expect(resolvePeriodRange('month', undefined, now).key).toBe('2026-07');
+  });
+
+  test('clave de semana con granularidad month lanza badRequest', () => {
+    expect(() => resolvePeriodRange('month', '2026-W28')).toThrow(/no corresponde/);
+  });
+
+  test('clave de mes con granularidad week lanza badRequest', () => {
+    expect(() => resolvePeriodRange('week', '2026-07')).toThrow(/no corresponde/);
   });
 });
 
