@@ -82,6 +82,24 @@ function buildPreview(
   };
 }
 
+// Dedupe intra-lote: el preview solo compara contra la BD (getExistingDedupeKeys),
+// así que dos filas idénticas dentro del MISMO archivo llegarían ambas al insert
+// y abortarían la transacción entera (25P02). La primera gana; las repetidas se
+// marcan aquí, donde el CEO las ve y las entiende.
+function dedupeInBatch(parsedRows: ParsedImportRow[]): ParsedImportRow[] {
+  const vistas = new Set<string>();
+  return parsedRows.map((row) => {
+    // Las filas ERROR se saltan a propósito: ya están descartadas y su dedupeKey
+    // puede estar incompleta (falta folio o RUT), así que no reservan la clave.
+    if (row.status === 'ERROR') return row;
+    if (vistas.has(row.dedupeKey)) {
+      return { ...row, status: 'DUPLICATE' as const };
+    }
+    vistas.add(row.dedupeKey);
+    return row;
+  });
+}
+
 /// Clasifica un documento de venta por su descripción tributaria.
 /// Las notas de crédito restan; facturas, boletas y notas de débito suman.
 export function classifyDocumentKind(documentType: string): DocumentKind {
@@ -197,7 +215,7 @@ export function parseSalesRows(
   // Bruto facturado = neto + notas de crédito (las NC vienen con signo negativo).
   const totalGross = totalIncome + totalCreditNotes;
 
-  return buildPreview(parsedRows, {
+  return buildPreview(dedupeInBatch(parsedRows), {
     totalIncome,
     totalGross,
     totalCreditNotes,
@@ -253,7 +271,7 @@ export function parsePurchaseRows(
     } satisfies ParsedImportRow;
   });
 
-  return buildPreview(parsedRows, {
+  return buildPreview(dedupeInBatch(parsedRows), {
     totalExpense: parsedRows.reduce(
       (sum, row) => sum + (Number(row.data.amount) || 0),
       0,
@@ -319,7 +337,7 @@ export function parseBankRows(
       } satisfies ParsedImportRow;
     });
 
-  return buildPreview(parsedRows, {
+  return buildPreview(dedupeInBatch(parsedRows), {
     totalCharges: parsedRows.reduce(
       (sum, row) => sum + (Number(row.data.chargeAmount) || 0),
       0,

@@ -112,6 +112,29 @@ describe('parseSalesRows', () => {
     expect(a).not.toBe(b);
   });
 
+  test('dos filas idénticas: la segunda se marca DUPLICATE', () => {
+    const fila = {
+      DOCUMENTO: 'FACTURA', FOLIO: '100', RUT: '76.543.210-9',
+      FECHA: '2026-07-06', TOTAL: '119000', EMITIDO: 'SI',
+    };
+    const res = parseSalesRows([fila, { ...fila }], 'org-1');
+    expect(res.rows[0].status).toBe('VALID');
+    expect(res.rows[1].status).toBe('DUPLICATE');
+    expect(res.rows[1].dedupeKey).toBe(res.rows[0].dedupeKey);
+  });
+
+  test('filas distintas no se marcan duplicadas', () => {
+    const base = {
+      DOCUMENTO: 'FACTURA', RUT: '76.543.210-9',
+      FECHA: '2026-07-06', TOTAL: '119000', EMITIDO: 'SI',
+    };
+    const res = parseSalesRows(
+      [{ ...base, FOLIO: '100' }, { ...base, FOLIO: '101' }],
+      'org-1',
+    );
+    expect(res.rows.map((r) => r.status)).toEqual(['VALID', 'VALID']);
+  });
+
   test('fila no emitida queda en ERROR', () => {
     const preview = parseSalesRows([
       {
