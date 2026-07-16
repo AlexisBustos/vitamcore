@@ -40,6 +40,19 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
+
+  // --- Informes por correo (Etapa 2) ---
+  // API key de Resend. Vacía => el envío se simula (se loguea, no se manda).
+  RESEND_API_KEY: z.string().optional().default(''),
+  // Remitente (dominio verificado en Resend) y destinatario(s) del informe.
+  REPORT_EMAIL_FROM: z.string().default('core@vitam.tech'),
+  // Uno o varios correos separados por coma. Vacío => no se envía.
+  REPORT_EMAIL_TO: z.string().optional().default(''),
+  // Interruptor global del informe semanal automático.
+  REPORT_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
 });
 
 const parsed = envSchema.safeParse(process.env);

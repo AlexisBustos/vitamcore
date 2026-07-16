@@ -27,6 +27,7 @@ import { decisionsRouter } from '../modules/decisions/decisions.routes';
 import { agentRouter } from '../modules/agent/agent.routes';
 import { dashboardRouter } from '../modules/dashboard/dashboard.routes';
 import { usersRouter } from '../modules/users/users.routes';
+import { reportsRouter } from '../modules/reports/reports.routes';
 
 export const apiRouter = Router();
 
@@ -67,3 +68,4 @@ apiRouter.use('/decisions', requireAuth, adminOnly, decisionsRouter);
 apiRouter.use('/agent', requireAuth, adminOnly, agentRouter);
 apiRouter.use('/dashboard', requireAuth, adminOnly, dashboardRouter);
 apiRouter.use('/users', requireAuth, adminOnly, usersRouter);
+apiRouter.use('/reports', requireAuth, adminOnly, reportsRouter);

@@ -14,6 +14,7 @@
     "prisma:categorize": "tsx prisma/scripts/categorize-backfill.ts",
     "prisma:seed-categories": "tsx prisma/scripts/seed-categories.ts",
     "prisma:studio": "prisma studio",
+    "report:weekly": "tsx scripts/weekly-report.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:db:setup": "node scripts/test-db-setup.mjs"
