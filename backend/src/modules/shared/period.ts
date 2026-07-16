@@ -120,6 +120,13 @@ export function periodSeries(g: Granularity, fromKey: string, toKey: string): st
   return out;
 }
 
+/** ¿El rango inclusivo [start, end] es exactamente una semana ISO (lun–dom)? */
+export function isFullIsoWeek(start: Date, end: Date): boolean {
+  const { gte, lt } = periodRange('week', periodKey('week', start));
+  const endExclusive = new Date(end.getTime() + DIA_MS);
+  return start.getTime() === gte.getTime() && endExclusive.getTime() === lt.getTime();
+}
+
 // Whitelist tipada: los identificadores de tabla/columna y el truncador NO
 // pueden ir como parámetros de consulta, así que van por aquí y nunca crudos.
 const TRUNC = {

@@ -9,6 +9,7 @@ import {
   currentPeriod,
   periodSeries,
   listPeriods,
+  isFullIsoWeek,
 } from '../src/modules/shared/period';
 
 describe('periodRange mes', () => {
@@ -129,6 +130,26 @@ describe('periodSeries', () => {
 
   test('rango invertido devuelve vacío', () => {
     expect(periodSeries('month', '2026-07', '2026-05')).toEqual([]);
+  });
+});
+
+describe('isFullIsoWeek', () => {
+  const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
+
+  test('lunes 6 a domingo 12 de julio 2026 es semana completa', () => {
+    expect(isFullIsoWeek(d('2026-07-06'), d('2026-07-12'))).toBe(true);
+  });
+
+  test('lunes 6 a sábado 11 no es semana completa (falta un día)', () => {
+    expect(isFullIsoWeek(d('2026-07-06'), d('2026-07-11'))).toBe(false);
+  });
+
+  test('martes 7 a lunes 13 no es semana completa (no empieza en lunes)', () => {
+    expect(isFullIsoWeek(d('2026-07-07'), d('2026-07-13'))).toBe(false);
+  });
+
+  test('un mes completo no es semana', () => {
+    expect(isFullIsoWeek(d('2026-07-01'), d('2026-07-31'))).toBe(false);
   });
 });
 

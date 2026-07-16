@@ -5,6 +5,21 @@ import { prisma } from '../src/lib/prisma';
 import * as imports from '../src/modules/finance-imports/finance-imports.service';
 import { parseSalesRows } from '../src/modules/finance-imports/finance-imports.parser';
 import { serializeRows } from '../src/modules/finance-imports/finance-imports.serde';
+import * as XLSX from 'xlsx';
+
+/// Arma un XLSX de ventas (hoja DETALLE) en un objeto file como el de multer.
+function ventasFile(rows: Record<string, unknown>[]) {
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'DETALLE');
+  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+  return { originalname: 'ventas.xlsx', size: buffer.length, buffer };
+}
+
+const filaVenta = (folio: string, fecha: string) => ({
+  DOCUMENTO: 'FACTURA', FOLIO: folio, RUT: '76.543.210-9',
+  FECHA: fecha, TOTAL: '119000', EMITIDO: 'SI',
+});
 
 beforeEach(resetDb);
 afterAll(disconnect);
@@ -45,7 +60,8 @@ describe('confirmImport (compras)', () => {
         organizationId: org.id,
         type: 'PURCHASE_REPORT',
         status: 'PREVIEW',
-        periodMonth: new Date('2026-07-01'),
+        periodStart: new Date('2026-07-01'),
+        periodEnd: new Date('2026-07-31'),
         originalFileName: 'compras.xlsx',
         fileSize: 1,
         sourceHash: 'hash-buy-1',
@@ -95,7 +111,8 @@ describe('confirmImport (compras)', () => {
         organizationId: org.id,
         type: 'PURCHASE_REPORT',
         status: 'PREVIEW',
-        periodMonth: new Date('2026-07-01'),
+        periodStart: new Date('2026-07-01'),
+        periodEnd: new Date('2026-07-31'),
         originalFileName: 'compras.xlsx',
         fileSize: 1,
         sourceHash: 'hash-buy-2',
@@ -142,7 +159,8 @@ describe('confirmImport (ventas)', () => {
         organizationId: org.id,
         type: 'SALES_REPORT',
         status: 'PREVIEW',
-        periodMonth: new Date('2026-07-01'),
+        periodStart: new Date('2026-07-01'),
+        periodEnd: new Date('2026-07-31'),
         originalFileName: 'ventas.xlsx',
         fileSize: 1,
         sourceHash: 'hash-sale-1',
@@ -206,7 +224,8 @@ describe('confirmImport (ventas)', () => {
         organizationId: org.id,
         type: 'SALES_REPORT',
         status: 'PREVIEW',
-        periodMonth: new Date('2026-07-01'),
+        periodStart: new Date('2026-07-01'),
+        periodEnd: new Date('2026-07-31'),
         originalFileName: 'ventas.xlsx',
         fileSize: 1,
         sourceHash: 'hash-sale-dup',
@@ -271,7 +290,8 @@ describe('confirmImport (guardas)', () => {
         organizationId: org.id,
         type: 'PURCHASE_REPORT',
         status: 'CONFIRMED',
-        periodMonth: new Date('2026-07-01'),
+        periodStart: new Date('2026-07-01'),
+        periodEnd: new Date('2026-07-31'),
         originalFileName: 'compras.xlsx',
         fileSize: 1,
         sourceHash: 'hash-confirmed',
@@ -279,5 +299,68 @@ describe('confirmImport (guardas)', () => {
       },
     });
     await expect(imports.confirmImport(batch.id)).rejects.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// previewImport — rango declarado y advertencias de lote (Fase 2)
+// ---------------------------------------------------------------------------
+describe('previewImport (rango declarado)', () => {
+  const semana = { // lunes 6 a domingo 12 de julio 2026 (semana ISO completa)
+    periodStart: new Date('2026-07-06'),
+    periodEnd: new Date('2026-07-12'),
+  };
+
+  test('semana completa con filas dentro: guarda rango y dataStart/End, sin advertencias', async () => {
+    const org = await makeOrg();
+    const file = ventasFile([filaVenta('100', '2026-07-06'), filaVenta('101', '2026-07-10')]);
+    const res = await imports.previewImport(
+      { organizationId: org.id, type: 'SALES_REPORT', ...semana },
+      file,
+    );
+    expect(res.batch.periodStart.toISOString().slice(0, 10)).toBe('2026-07-06');
+    expect(res.batch.periodEnd.toISOString().slice(0, 10)).toBe('2026-07-12');
+    expect(res.batch.dataStart?.toISOString().slice(0, 10)).toBe('2026-07-06');
+    expect(res.batch.dataEnd?.toISOString().slice(0, 10)).toBe('2026-07-10');
+    expect(res.batchWarnings).toEqual([]);
+  });
+
+  test('fila fuera del rango declarado dispara la advertencia (a)', async () => {
+    const org = await makeOrg();
+    // Una fila del 28 de junio, fuera de la semana declarada.
+    const file = ventasFile([filaVenta('100', '2026-07-06'), filaVenta('200', '2026-06-28')]);
+    const res = await imports.previewImport(
+      { organizationId: org.id, type: 'SALES_REPORT', ...semana },
+      file,
+    );
+    expect(res.batchWarnings.some((w) => /fuera de ese rango/.test(w))).toBe(true);
+  });
+
+  test('rango que no es semana completa dispara la advertencia (c)', async () => {
+    const org = await makeOrg();
+    const file = ventasFile([filaVenta('100', '2026-07-06')]);
+    const res = await imports.previewImport(
+      {
+        organizationId: org.id, type: 'SALES_REPORT',
+        periodStart: new Date('2026-07-06'), periodEnd: new Date('2026-07-31'), // un mes
+      },
+      file,
+    );
+    expect(res.batchWarnings.some((w) => /semana completa/.test(w))).toBe(true);
+  });
+
+  test('reimportar el mismo archivo confirmado dispara la advertencia (b)', async () => {
+    const org = await makeOrg();
+    const file = ventasFile([filaVenta('100', '2026-07-06')]);
+    const first = await imports.previewImport(
+      { organizationId: org.id, type: 'SALES_REPORT', ...semana },
+      file,
+    );
+    await imports.confirmImport(first.batch.id);
+    const second = await imports.previewImport(
+      { organizationId: org.id, type: 'SALES_REPORT', ...semana },
+      file,
+    );
+    expect(second.batchWarnings.some((w) => /ya se importó/.test(w))).toBe(true);
   });
 });

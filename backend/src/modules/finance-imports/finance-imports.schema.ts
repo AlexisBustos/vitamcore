@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { currency, optionalShortText } from '../shared/zod';
+import { currency, optionalShortText, requiredDateInput } from '../shared/zod';
 
 export const importTypeEnum = z.enum([
   'SALES_REPORT',
@@ -29,15 +29,18 @@ export const listAccountsQuery = z.object({
   organizationId: z.string().optional(),
 });
 
-export const previewImportSchema = z.object({
-  organizationId: z.string().min(1, 'La empresa es obligatoria'),
-  bankAccountId: z.string().min(1).optional().nullable(),
-  type: importTypeEnum,
-  periodMonth: z.coerce.date({
-    required_error: 'El período es obligatorio',
-    invalid_type_error: 'El período no es válido',
-  }),
-});
+export const previewImportSchema = z
+  .object({
+    organizationId: z.string().min(1, 'La empresa es obligatoria'),
+    bankAccountId: z.string().min(1).optional().nullable(),
+    type: importTypeEnum,
+    periodStart: requiredDateInput,
+    periodEnd: requiredDateInput,
+  })
+  .refine((d) => d.periodStart <= d.periodEnd, {
+    message: 'El período "desde" no puede ser posterior al "hasta"',
+    path: ['periodEnd'],
+  });
 
 export const confirmImportSchema = z.object({
   batchId: z.string().min(1, 'El lote es obligatorio'),

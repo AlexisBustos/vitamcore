@@ -11,6 +11,7 @@ import { badRequest, notFound } from '../../utils/http-error';
 import { categorizeWith } from './finance-imports.categories';
 import { getActiveRules } from '../finance-categories/category-rules.service';
 import { assertOrganization } from '../shared/relations';
+import { isFullIsoWeek } from '../shared/period';
 import { resolveParty } from '../shared/parties';
 import {
   parseBankRows,
@@ -48,7 +49,7 @@ export async function previewImport(input: PreviewImportInput, file?: UploadFile
   if (!file) throw badRequest('Debes adjuntar un archivo');
   await assertOrganization(input.organizationId);
   const bankAccountId = await assertBankAccount(input);
-  const periodMonth = normalizePeriodMonth(input.periodMonth);
+  const { periodStart, periodEnd } = input;
   const rows = readRows(file, input.type);
   const parsed = parseRows(input.type, rows, bankAccountId, input.organizationId);
   const dedupeKeys = await getExistingDedupeKeys(input.type, parsed.rows);
@@ -60,13 +61,29 @@ export async function previewImport(input: PreviewImportInput, file?: UploadFile
   const summary = summarizeRows({ ...parsed, rows: rowsWithDuplicates });
   const sourceHash = createHash('sha256').update(file.buffer).digest('hex');
 
+  // Min/max real de las fechas de las filas (spec §3): para advertir si el
+  // archivo no cuadra con el rango declarado. Las ERROR no cuentan.
+  const { dataStart, dataEnd } = computeDataRange(rowsWithDuplicates);
+
+  const batchWarnings = await buildBatchWarnings({
+    organizationId: input.organizationId,
+    periodStart,
+    periodEnd,
+    dataStart,
+    dataEnd,
+    sourceHash,
+  });
+
   const batch = await prisma.financialImportBatch.create({
     data: {
       organizationId: input.organizationId,
       bankAccountId,
       type: input.type,
       status: FinancialImportStatus.PREVIEW,
-      periodMonth,
+      periodStart,
+      periodEnd,
+      dataStart,
+      dataEnd,
       originalFileName: file.originalname,
       fileSize: file.size,
       sourceHash,
@@ -78,7 +95,8 @@ export async function previewImport(input: PreviewImportInput, file?: UploadFile
       totalExpense: summary.totalExpense,
       totalCharges: summary.totalCharges,
       totalCredits: summary.totalCredits,
-      warnings: summary.warnings,
+      // Las advertencias de lote van delante de las de fila.
+      warnings: [...batchWarnings, ...summary.warnings],
       previewData: serializeRows(rowsWithDuplicates),
     },
     include: refs,
@@ -89,7 +107,83 @@ export async function previewImport(input: PreviewImportInput, file?: UploadFile
       ? await buildSalesSummary(input.organizationId, parsed, rowsWithDuplicates)
       : null;
 
-  return { batch, rows: rowsWithDuplicates, salesSummary };
+  return { batch, rows: rowsWithDuplicates, salesSummary, batchWarnings };
+}
+
+/// Fecha 'DD-MM-YYYY' de una fecha de calendario UTC, para mensajes legibles.
+function fechaLegible(date: Date): string {
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  return `${d}-${m}-${date.getUTCFullYear()}`;
+}
+
+/// Min/max de las fechas de las filas (ingreso/gasto/movimiento), ignorando
+/// las filas ERROR y las fechas nulas. Devuelve null si no hay ninguna fecha.
+function computeDataRange(rows: ParsedImportRow[]): {
+  dataStart: Date | null;
+  dataEnd: Date | null;
+} {
+  let dataStart: Date | null = null;
+  let dataEnd: Date | null = null;
+  for (const row of rows) {
+    if (row.status === 'ERROR') continue;
+    const raw =
+      row.data.incomeDate ?? row.data.expenseDate ?? row.data.transactionDate;
+    if (!(raw instanceof Date) || Number.isNaN(raw.getTime())) continue;
+    if (!dataStart || raw < dataStart) dataStart = raw;
+    if (!dataEnd || raw > dataEnd) dataEnd = raw;
+  }
+  return { dataStart, dataEnd };
+}
+
+/// Las tres advertencias de lote del preview (spec §3). NO son bloqueantes: el
+/// CEO puede confirmar igual (hay motivos legítimos para cada caso).
+async function buildBatchWarnings(args: {
+  organizationId: string;
+  periodStart: Date;
+  periodEnd: Date;
+  dataStart: Date | null;
+  dataEnd: Date | null;
+  sourceHash: string;
+}): Promise<string[]> {
+  const { periodStart, periodEnd, dataStart, dataEnd, sourceHash } = args;
+  const warnings: string[] = [];
+
+  // (a) Filas fuera del rango declarado.
+  if (
+    (dataStart && dataStart < periodStart) ||
+    (dataEnd && dataEnd > periodEnd)
+  ) {
+    warnings.push(
+      `Declaraste del ${fechaLegible(periodStart)} al ${fechaLegible(periodEnd)}, ` +
+        `pero el archivo trae filas fuera de ese rango ` +
+        `(del ${fechaLegible(dataStart ?? periodStart)} al ${fechaLegible(dataEnd ?? periodEnd)}).`,
+    );
+  }
+
+  // (b) Mismo archivo ya importado y confirmado. sourceHash se guardaba y jamás
+  //     se consultaba; aquí gana su primer consumidor.
+  const yaImportado = await prisma.financialImportBatch.findFirst({
+    where: {
+      organizationId: args.organizationId,
+      sourceHash,
+      status: FinancialImportStatus.CONFIRMED,
+    },
+    select: { confirmedAt: true },
+  });
+  if (yaImportado) {
+    const cuando = yaImportado.confirmedAt
+      ? ` el ${fechaLegible(yaImportado.confirmedAt)}`
+      : '';
+    warnings.push(`Este archivo ya se importó${cuando}.`);
+  }
+
+  // (c) El rango declarado no es una semana ISO completa (lun–dom).
+  if (!isFullIsoWeek(periodStart, periodEnd)) {
+    warnings.push('El rango no cubre una semana completa (lunes a domingo).');
+  }
+
+  return warnings;
 }
 
 /// Resumen específico de ventas: separa bruto facturado, notas de crédito y
@@ -448,9 +542,6 @@ async function createRow(
   }
 }
 
-function normalizePeriodMonth(date: Date) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
-}
 
 /// Segunda pasada: vincula cada nota de crédito del lote con la factura que
 /// anula (por `NRO DOCUMENTO ANULADO`) y recalcula su neto. Devuelve

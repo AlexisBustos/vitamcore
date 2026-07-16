@@ -9,6 +9,13 @@ export const dateInput = z
   .optional()
   .nullable();
 
+// Como dateInput pero OBLIGATORIO: el rango de un lote no puede faltar
+// (spec §3, Decisión 3). Usar dateInput aquí sería un fallo silencioso.
+export const requiredDateInput = z.coerce.date({
+  required_error: 'La fecha es obligatoria',
+  invalid_type_error: 'La fecha no es válida',
+});
+
 export const optionalText = z.string().trim().max(5000).optional().nullable();
 
 export const optionalShortText = z

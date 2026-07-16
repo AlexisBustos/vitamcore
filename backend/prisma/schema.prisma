@@ -752,7 +752,10 @@ model FinancialImportBatch {
   bankAccountId    String?
   type             FinancialImportType
   status           FinancialImportStatus @default(PREVIEW)
-  periodMonth      DateTime
+  periodStart      DateTime
+  periodEnd        DateTime
+  dataStart        DateTime?
+  dataEnd          DateTime?
   originalFileName String
   fileSize         Int
   sourceHash       String
@@ -777,7 +780,7 @@ model FinancialImportBatch {
 
   @@index([organizationId])
   @@index([type])
-  @@index([periodMonth])
+  @@index([periodStart, periodEnd])
   @@index([status])
   @@index([sourceHash])
   @@map("financial_import_batches")
