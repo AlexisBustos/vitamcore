@@ -160,7 +160,9 @@ caracteriza (salida esperada `prisma:error 25P02`).
 ### 1. Núcleo: `backend/src/modules/shared/period.ts`
 
 Única fuente de verdad de "qué rango de fechas es este período". **Absorbe**
-`ledger.ts:monthRange` y las 5 copias inline.
+`ledger.ts:monthRange`, `ledger.ts:listMonths`, `listBankTransactionMonths`, las 5 copias
+inline del parseo mes→rango y —en la Fase 3— `dates.ts:currentMonthRange`. Ocho sitios que
+hoy calculan lo mismo por su cuenta pasan a ser uno.
 
 ```ts
 export type Granularity = 'week' | 'month';
@@ -244,6 +246,12 @@ whitelist tiene la misma forma que las otras dos.
 `expense_records` **no tienen** columna `bankAccountId`. Con la unión, pasar `bankAccountId`
 junto a `source: 'income'` es un **error de tipos**, no un filtro que se ignora en silencio.
 El typecheck hace de guardia y no hace falta comprobación en tiempo de ejecución.
+
+**El `IS NOT NULL` va siempre, en las tres fuentes.** Hoy `ledger.ts:51` lo emite porque
+`incomeDate` (`schema.prisma:641`) y `expenseDate` (`:693`) son `DateTime?`, mientras
+`listBankTransactionMonths:162` lo omite porque `transactionDate` (`:792`) es `NOT NULL`.
+Emitirlo siempre es idéntico en comportamiento para las tres —sobre una columna `NOT NULL`
+es una condición inerte— y evita un caso especial. La omisión de hoy no significaba nada.
 
 `date_trunc('week', …)` de Postgres trunca al lunes por defecto —coincide con ISO sin
 configuración— y `to_char(…, 'IYYY-"W"IW')` produce año-semana **ISO** (`IYYY`/`IW`, no
@@ -534,6 +542,14 @@ Responde la pregunta que hoy el sistema **no puede contestar de ninguna forma**:
 cada período del rango: `covered` | `partial` | `missing`, calculado como la unión de los
 `[periodStart, periodEnd]` de los lotes **`CONFIRMED`** (los `PREVIEW` no cuentan: subir un
 archivo y no confirmarlo no es haber cargado nada).
+
+**`from` y `to` son claves de período**, no fechas: mismo `periodKeyInput` que el resto de
+la API, expandidas con `periodSeries(g, from, to)`. Mezclar fechas y claves en la misma API
+sería justo la clase de ambigüedad que este trabajo viene a quitar.
+
+**Los tres estados**, según el solape entre el período y la unión de rangos cargados:
+`covered` = el período cae **entero** dentro de la unión; `partial` = solape parcial
+(cargaste 3 de los 7 días); `missing` = solape nulo.
 
 ```ts
 type CoverageCell = { period: string; status: 'covered' | 'partial' | 'missing' };
