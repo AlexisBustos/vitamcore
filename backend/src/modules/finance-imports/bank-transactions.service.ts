@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { badRequest, notFound } from '../../utils/http-error';
 import { buildOwnAccounts, isInternalTransfer } from '../shared/internal-transfer';
-import { listPeriods } from '../shared/period';
+import { listPeriods, periodSeries } from '../shared/period';
 import type { ListTransactionsFilters } from './finance-imports.schema';
 import { refs } from './finance-imports.shared';
 
@@ -205,7 +205,7 @@ export async function listBankMonthly(filters: {
   ];
   const minMonth = allMonths.reduce((a, b) => (a < b ? a : b));
   const maxMonth = allMonths.reduce((a, b) => (a > b ? a : b));
-  const months = monthRange(minMonth, maxMonth);
+  const months = periodSeries('month', minMonth, maxMonth);
 
   const accountIds = [
     ...new Set([
@@ -300,20 +300,4 @@ export async function listBankByCategory(filters: {
     charges: Number(r.charges),
     count: Number(r.count),
   }));
-}
-
-/// Lista de meses 'YYYY-MM' contigua entre min y max (ambos inclusive), ascendente.
-function monthRange(min: string, max: string): string[] {
-  const out: string[] = [];
-  let [y, m] = min.split('-').map(Number);
-  const [maxY, maxM] = max.split('-').map(Number);
-  while (y < maxY || (y === maxY && m <= maxM)) {
-    out.push(`${y}-${String(m).padStart(2, '0')}`);
-    m += 1;
-    if (m > 12) {
-      m = 1;
-      y += 1;
-    }
-  }
-  return out;
 }
