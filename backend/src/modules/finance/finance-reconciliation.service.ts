@@ -5,6 +5,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { buildOwnAccounts, isInternalTransfer } from '../shared/internal-transfer';
+import { periodRange } from '../shared/period';
 
 /**
  * Cuadre del mes (o de todos): abonos/cargos con total · conciliado · suelto,
@@ -17,11 +18,7 @@ export async function getReconciliationSummary(filters: {
   const where: Prisma.BankTransactionWhereInput = {};
   if (filters.organizationId) where.organizationId = filters.organizationId;
   if (filters.month) {
-    const [y, m] = filters.month.split('-').map(Number);
-    where.transactionDate = {
-      gte: new Date(Date.UTC(y, m - 1, 1)),
-      lt: new Date(Date.UTC(y, m, 1)),
-    };
+    where.transactionDate = periodRange('month', filters.month);
   }
 
   // Cuentas propias para detectar traspasos internos (no son ingreso/gasto).
@@ -154,8 +151,7 @@ export async function autoReconcile(input: {
 
   let range: { gte: Date; lt: Date } | null = null;
   if (month) {
-    const [y, m] = month.split('-').map(Number);
-    range = { gte: new Date(Date.UTC(y, m - 1, 1)), lt: new Date(Date.UTC(y, m, 1)) };
+    range = periodRange('month', month);
   }
   const inRange = (d: Date | null) =>
     !range || (d != null && d >= range.gte && d < range.lt);
@@ -354,11 +350,7 @@ export async function recognizeTransfers(input: {
       : { chargeAmount: { gt: 0 }, paidExpenses: { none: {} } }),
   };
   if (month) {
-    const [y, m] = month.split('-').map(Number);
-    where.transactionDate = {
-      gte: new Date(Date.UTC(y, m - 1, 1)),
-      lt: new Date(Date.UTC(y, m, 1)),
-    };
+    where.transactionDate = periodRange('month', month);
   }
 
   const movs = await prisma.bankTransaction.findMany({

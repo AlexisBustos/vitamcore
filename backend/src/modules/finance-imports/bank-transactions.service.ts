@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { badRequest, notFound } from '../../utils/http-error';
 import { buildOwnAccounts, isInternalTransfer } from '../shared/internal-transfer';
-import { listPeriods, periodSeries } from '../shared/period';
+import { listPeriods, periodSeries, periodRange } from '../shared/period';
 import type { ListTransactionsFilters } from './finance-imports.schema';
 import { refs } from './finance-imports.shared';
 
@@ -13,11 +13,7 @@ export async function listBankTransactions(filters: ListTransactionsFilters) {
   };
 
   if (filters.month) {
-    const [y, m] = filters.month.split('-').map(Number);
-    where.transactionDate = {
-      gte: new Date(Date.UTC(y, m - 1, 1)),
-      lt: new Date(Date.UTC(y, m, 1)),
-    };
+    where.transactionDate = periodRange('month', filters.month);
   }
 
   if (filters.category) {
@@ -276,11 +272,9 @@ export async function listBankByCategory(filters: {
     conditions.push(Prisma.sql`"bankAccountId" = ${filters.bankAccountId}`);
   }
   if (filters.month) {
-    const [y, m] = filters.month.split('-').map(Number);
-    const start = new Date(Date.UTC(y, m - 1, 1));
-    const end = new Date(Date.UTC(y, m, 1));
+    const { gte, lt } = periodRange('month', filters.month);
     conditions.push(
-      Prisma.sql`"transactionDate" >= ${start} AND "transactionDate" < ${end}`,
+      Prisma.sql`"transactionDate" >= ${gte} AND "transactionDate" < ${lt}`,
     );
   }
   const rows = await prisma.$queryRaw<
