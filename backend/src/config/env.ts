@@ -19,6 +19,10 @@ const envSchema = z.object({
     .min(32, 'JWT_SECRET debe tener al menos 32 caracteres'),
   JWT_EXPIRES_IN: z.string().default('7d'),
   CORS_ORIGIN: z.string().url().default('http://localhost:5173'),
+  // Nivel de logging (pino): trace|debug|info|warn|error|fatal|silent.
+  LOG_LEVEL: z
+    .enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'])
+    .default('info'),
 
   // --- Agent Layer (Sprint 3) ---
   // Proveedor de IA: 'anthropic' usa Claude; 'heuristic' funciona sin API key.

@@ -1,0 +1,3 @@
+# Los shell scripts deben conservar finales de línea LF siempre, incluso al
+# clonarse en Windows, para no romper el shebang/ejecución en el VPS (Linux).
+*.sh text eol=lf

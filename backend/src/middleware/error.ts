@@ -5,7 +5,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 import { HttpError } from '../utils/http-error';
-import { isProduction } from '../config/env';
+import { logger } from '../lib/logger';
 
 export function notFoundHandler(_req: Request, res: Response) {
   res.status(404).json({ error: 'Recurso no encontrado' });
@@ -13,7 +13,7 @@ export function notFoundHandler(_req: Request, res: Response) {
 
 export function errorHandler(
   err: unknown,
-  _req: Request,
+  req: Request,
   res: Response,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _next: NextFunction,
@@ -32,9 +32,9 @@ export function errorHandler(
     return res.status(err.statusCode).json({ error: err.message });
   }
 
-  // Error no controlado: se registra en servidor, se oculta al cliente.
-  if (!isProduction) {
-    console.error('Error no controlado:', err);
-  }
+  // Error no controlado: se registra SIEMPRE en el servidor (también en
+  // producción), pero nunca se filtran detalles internos al cliente.
+  const log = req.log ?? logger;
+  log.error({ err }, 'Error no controlado');
   return res.status(500).json({ error: 'Error interno del servidor' });
 }
