@@ -64,14 +64,24 @@ totales del mes, sin distinguirlo.
 
 ### Dos defectos de deduplicación (verificados en código)
 
-**a) La clave no incluye la empresa.** `dedupeKey` de ventas/compras es
-`[TIPO, documentType, folio, rut, isoDate, amount].join('|')`
+**a) La clave no incluye la empresa, y el preview tampoco filtra por ella.** `dedupeKey`
+de ventas/compras es `[TIPO, documentType, folio, rut, isoDate, amount].join('|')`
 (`finance-imports.parser.ts:153-160`, `:223-230`) y `sourceDedupeKey` es `@unique`
 **global** (`schema.prisma:649`, `:701`). Los folios son correlativos **por emisor**:
-Vitam Healthcare y Vitam Tech tienen ambas su factura #100. Si las dos facturan al mismo
-cliente, el mismo día, por el mismo monto → la segunda se descarta en silencio como
-duplicada (`import-pipeline.service.ts:425-432`) y el ingreso **desaparece de los números
-sin aviso**. Probabilidad baja; modo de fallo: pérdida silenciosa de datos financieros.
+Vitam Healthcare y Vitam Tech tienen ambas su factura #100.
+
+El mecanismo exacto de la pérdida está en el **preview**, no en el insert:
+`getExistingDedupeKeys` (`import-pipeline.service.ts:264-292`) consulta
+`where: { sourceDedupeKey: { in: dedupeKeys } }` **sin filtrar por `organizationId`**. Si
+las dos empresas facturan al mismo cliente, el mismo día, por el mismo monto, la factura
+de la segunda empresa se marca `DUPLICATE` en el preview, `confirmImport` la filtra antes
+de insertarla (`:136-138`) y **nunca llega a `createRow`**: el ingreso desaparece de los
+números sin aviso. Probabilidad baja; modo de fallo: pérdida silenciosa de datos
+financieros.
+
+> El `catch` de P2002 (`:425-432`) **no** interviene aquí — por lo que explica el defecto
+> (b), ese `catch` no puede saltarse nada en silencio. Atribuirle esta pérdida sería
+> diagnosticar la línea equivocada.
 
 `BankTransaction` **no** tiene este problema: su unique es `@@unique([bankAccountId, dedupeKey])`
 (`schema.prisma:812`) y `bankAccountId` ya está acotado a una empresa. El backfill toca
@@ -194,6 +204,12 @@ devuelve `'YYYY-MM-DD'` directamente. Sin dependencias, con horario de verano re
 el runtime. **Esto corrige de paso el bug de `currentMonthRange`** (`dates.ts:2`), que se
 elimina en favor de `currentPeriod('month')`.
 
+Ese reemplazo va en la **Fase 3**, no en la 0: sustituir hora local por hora de Santiago
+**cambia el comportamiento** —es un arreglo, y la Fase 0 se define justamente por no
+cambiar ninguno—. En la Fase 3 `finance-summary` ya acepta período y el arreglo tiene dónde
+probarse. `currentPeriod` nace en la Fase 0 con sus tests, simplemente sin consumidores
+todavía.
+
 **En SQL** el agrupador se parametriza por granularidad vía **whitelist tipada** —igual que
 `ledger.ts:35` hace hoy con las tablas—; la granularidad **nunca** se interpola cruda:
 
@@ -244,27 +260,53 @@ UPDATE income_records
 ```
 Ídem `expense_records`. La cláusula `NOT LIKE` la hace re-ejecutable sin corromper datos.
 
-**Diagnóstico previo** (se corre **antes** de escribir la migración; si arroja > 0, se
-para y se informa al CEO antes de seguir):
+**Por qué el guardia funciona** (para que nadie lo "simplifique" después): las claves
+antiguas empiezan siempre por `SALES_REPORT|` o `PURCHASE_REPORT|`, nunca por un cuid, así
+que `NOT LIKE '<orgId>|%'` distingue sin ambigüedad lo ya migrado de lo pendiente. Y los
+cuid no contienen `%` ni `_`, los comodines de `LIKE`, así que la comparación es literal y
+no hay que escapar nada.
+
+**El backfill no puede violar el unique, por construcción.** Anteponer `<orgId>|` solo
+puede hacer las claves *más* distintas: los cuid no contienen `|`, así que
+`orgA|K1 = orgB|K2` exige `orgA = orgB` y `K1 = K2`, que es justo lo que el unique global
+ya impedía. No hace falta una query que lo compruebe.
+
+**Diagnóstico previo: ¿ya se perdió algún ingreso?** El daño posible ya ocurrido es la
+**ausencia** de filas, y deja un rastro exacto: una fila marcada `DUPLICATE` en el lote de
+una empresa cuya clave pertenece a los registros de **otra**. `previewData` conserva las
+filas del preview con su `status`, así que es detectable (se corre **antes** de escribir la
+migración; si arroja > 0 filas, **se para y se informa al CEO antes de seguir**):
 
 ```sql
-SELECT "sourceDedupeKey", COUNT(DISTINCT "organizationId") AS orgs, COUNT(*) AS filas
-  FROM income_records
- WHERE "sourceDedupeKey" IS NOT NULL
- GROUP BY "sourceDedupeKey" HAVING COUNT(DISTINCT "organizationId") > 1;
-```
-Colisiones ya materializadas no pueden existir (el unique global las impidió), así que
-esta query debe dar **0 filas**: su valor es confirmar que el backfill no violará el
-unique. El daño posible ya ocurrido es la **ausencia** de filas, que se detecta comparando
-`rowsValid` de los lotes confirmados contra el conteo real de filas por lote:
-
-```sql
-SELECT b.id, b."originalFileName", b."rowsValid", COUNT(i.id) AS filas_reales
+-- Ventas. Ídem para expense_records con type='PURCHASE_REPORT'.
+SELECT b.id, b."originalFileName", b."periodMonth",
+       b."organizationId" AS org_del_lote,
+       i."organizationId" AS org_que_ya_tenia_la_clave,
+       r->>'dedupeKey'    AS clave_descartada
   FROM financial_import_batches b
-  LEFT JOIN income_records i ON i."importBatchId" = b.id
- WHERE b.status = 'CONFIRMED' AND b.type = 'SALES_REPORT'
- GROUP BY b.id HAVING b."rowsValid" <> COUNT(i.id);
+  CROSS JOIN LATERAL jsonb_array_elements(b."previewData") AS r
+  JOIN income_records i ON i."sourceDedupeKey" = r->>'dedupeKey'
+ WHERE b.status = 'CONFIRMED'
+   AND b.type   = 'SALES_REPORT'
+   AND b."previewData" IS NOT NULL
+   AND jsonb_typeof(b."previewData") = 'array'
+   AND r->>'status' = 'DUPLICATE'
+   AND i."organizationId" <> b."organizationId";
 ```
+
+`previewData` es un **array JSON en la raíz** (`serializeRows` devuelve `rows.map(...)`,
+`finance-imports.serde.ts:9-15`), no un objeto con clave `rows`: de ahí
+`jsonb_array_elements(b."previewData")` directo.
+
+Si aparecen filas, cada una nombra el archivo y el período de un ingreso que se perdió.
+La recuperación es reimportar ese archivo **después** del backfill: con la deduplicación ya
+acotada por empresa, las filas antes descartadas entran como nuevas y las demás se marcan
+`DUPLICATE` correctamente. No hace falta recuperación manual.
+
+> **Nota sobre `rowsValid`:** no sirve como señal de este daño. `confirmImport` lo
+> **sobrescribe** con el conteo real de inserciones (`import-pipeline.service.ts:161`,
+> `rowsValid: inserted`), así que comparar `rowsValid` contra el número de filas del lote
+> daría cero siempre, por construcción. La señal está en `previewData`, no en los contadores.
 
 **b) Dedupe intra-lote + confirm honesto.** En `parseRows`, un `Set` marca como
 `DUPLICATE` toda fila cuyo `dedupeKey` ya apareció **antes en el mismo lote**. Con eso el
@@ -281,6 +323,24 @@ calculando desde la clasificación del preview, que es exacta.
 confirm inserta una sola y no revienta. Dos empresas con mismo folio+RUT+fecha+monto →
 ambas se insertan (hoy: la segunda se pierde). Backfill idempotente (correrlo dos veces
 deja el mismo estado).
+
+**c) Los lotes en `PREVIEW` que sobreviven a una migración.** `confirmImport` reproduce los
+`dedupeKey` congelados en `previewData` en el momento del preview (`:135`). Un lote que
+quede en `PREVIEW` **antes** de desplegar la Fase 1 y se confirme **después** insertaría
+filas con claves **sin el prefijo de empresa**, que el backfill ya no va a alcanzar:
+quedarían permanentemente fuera de la deduplicación futura e invisibles. La Fase 2 tiene el
+mismo peligro con `periodStart`/`periodEnd`, que esos lotes no traen.
+
+**Disposición:** ambas migraciones (Fase 1 y Fase 2) cierran los lotes colgados:
+
+```sql
+UPDATE financial_import_batches SET status = 'FAILED' WHERE status = 'PREVIEW';
+```
+Un lote en `PREVIEW` es un archivo subido y no confirmado: material desechable, sin ninguna
+fila en la BD. Cerrarlo no pierde nada —el archivo se vuelve a subir en diez segundos— y
+`FAILED` ya existe en `FinancialImportStatus` (`schema.prisma:138`). La alternativa
+(rechazar en el confirm los lotes anteriores a la migración) exige comparar timestamps
+contra la fecha de despliegue: más código y más frágil, para el mismo resultado.
 
 ### 3. El lote con rango explícito
 
@@ -307,8 +367,14 @@ para ellos: son nullable precisamente porque no se pueden reconstruir sin repars
 archivos, y `NULL` dice la verdad ("no lo sé") en vez de inventar un rango.
 
 **Zod** (`finance-imports.schema.ts:36`): `periodMonth: z.coerce.date()` →
-`periodStart: dateInput`, `periodEnd: dateInput`, con `.refine(periodStart <= periodEnd)`.
+`periodStart` y `periodEnd`, con `.refine(periodStart <= periodEnd)`.
 `normalizePeriodMonth` (`import-pipeline.service.ts:436`) se elimina.
+
+**Ojo con el helper:** `dateInput` (`shared/zod.ts:7-10`) es `.optional().nullable()` —
+aceptaría un rango ausente, que es exactamente lo que la Decisión 3 prohíbe. Se añade a
+`shared/zod.ts` un `requiredDateInput` (el mismo `union` sin `.optional().nullable()`) y
+`periodStart`/`periodEnd` lo usan. Usar `dateInput` aquí sería un fallo silencioso: el lote
+quedaría sin período y la cobertura (§5) no podría contarlo.
 
 **Tres advertencias nuevas en el preview** (advertencias, **no** bloqueos: el CEO confirma):
 
@@ -340,18 +406,40 @@ export const periodKeyInput = z.string().regex(/^\d{4}-(W(0[1-9]|[1-4]\d|5[0-3])
 ```
 Validación cruzada: `.refine()` que exija que la forma de `period` case con `granularity`.
 
-| Endpoint | Antes | Después |
+**La regex no basta para las semanas y no puede bastar.** `W53` es válida en 2026 (que
+tiene 53 semanas ISO) e inexistente en 2025 (que tiene 52), y una regex no sabe de qué año
+habla. La comprobación real vive en `periodRange`, que lanza
+`badRequest('Semana inexistente: 2025-W53')` cuando el número excede las semanas ISO de ese
+año. Silenciosamente rodar a `2026-W01` sería peor que fallar.
+
+Rutas **reales** (el router de imports se monta en `/finance/imports`, `routes/index.ts:60`;
+el de finance en `/finance`, `:59`):
+
+| Endpoint (ruta real) | Antes | Después |
 |---|---|---|
-| `GET /finance/summary` | mes actual hardcodeado | `?granularity&period`, ambos opcionales (default: período en curso) |
-| `GET /income`, `GET /expenses` | `?month` | `?granularity&period` |
-| `GET /income/months`, `/expenses/months` | — | `GET /income/periods?granularity`, ídem expenses |
-| `GET /finance/bank-transactions` | `?month` | `?granularity&period` |
-| `GET /finance/bank-monthly` | — | `GET /finance/bank-periodic?granularity` |
-| `GET /finance/bank-by-category` | `?month` | `?granularity&period` |
+| `GET /finance/summary` | mes actual hardcodeado, sin parámetro | `?granularity&period`, ambos opcionales (default: período en curso) |
 | `GET /finance/consolidated` | `?month` | `?granularity&period` |
-| `POST /finance/auto-reconcile`, `/recognize-transfers` | `month?` | `granularity?&period?` |
+| `POST /finance/reconciliation/auto` | `month?` | `granularity?&period?` |
+| `POST /finance/reconciliation/recognize-transfers` | `month?` | `granularity?&period?` |
+| `GET /income`, `GET /expenses` | `?month` | `?granularity&period` |
+| `GET /income/months` | — | → `GET /income/periods?granularity` |
+| `GET /expenses/months` | — | → `GET /expenses/periods?granularity` |
+| `GET /finance/imports/transactions` | `?month` | `?granularity&period` |
+| `GET /finance/imports/transactions/months` | — | → `GET /finance/imports/transactions/periods?granularity` |
+| `GET /finance/imports/transactions/monthly` | — | → `GET /finance/imports/transactions/periodic?granularity` |
+| `GET /finance/imports/transactions/by-category` | `?month` | `?granularity&period` |
 | `GET /finance/trend` | — | **nuevo**: `?granularity&last=12` |
 | `GET /finance/imports/coverage` | — | **nuevo** (§5) |
+
+Son **tres** endpoints estilo `listMonths`, no dos: además de `/income/months` y
+`/expenses/months` está `/finance/imports/transactions/months`
+(`finance-imports.routes.ts:41-44` → `listTransactionMonthsController`, consumido por
+`useBankTransactionMonths`). Los tres pasan a `/periods`.
+
+**Renombre de campo en la respuesta:** `listBankMonthly` devuelve hoy `{ month, ... }` por
+fila y `types/banking.ts:81` lo refleja. En `/transactions/periodic` el campo pasa a
+`period`. Es parte del mismo cambio, no un detalle cosmético: dejar `month` conteniendo
+`2026-W28` sería exactamente el tipo de mentira que este trabajo viene a quitar.
 
 **Dashboard.** `finance-summary.service.ts` deja de hardcodear el período y lo acepta del
 cliente. El dashboard muestra **semana en curso y mes en curso lado a lado**: el pulso y la
@@ -420,10 +508,10 @@ punto, lo entregado sigue en pie y tiene valor.
 
 | # | Qué | Por qué en ese orden | Verificación |
 |---|---|---|---|
-| **0** | `shared/period.ts` + tests. Absorber `monthRange` y las 5 copias inline (a `periodRange('month', …)`). Tests de caracterización de `listBankMonthly`. Eliminar `currentMonthRange`. | **Cero cambio de comportamiento.** Refactor puro con los 92 tests actuales de red. Si algo se pone rojo, es un error de implementación, no una ambigüedad del diseño. | `npm test` verde sin modificar tests existentes |
+| **0** | `shared/period.ts` + tests. Absorber `monthRange` y las 5 copias inline (a `periodRange('month', …)`). Tests de caracterización de `listBankMonthly`. | **Cero cambio de comportamiento.** Refactor puro con los 199 tests actuales de red. Si algo se pone rojo, es un error de implementación, no una ambigüedad del diseño. | `npm test` verde (199) **sin modificar tests existentes** |
 | **1** | Deduplicación: diagnóstico → `organizationId` en la clave → dedupe intra-lote → confirm honesto → backfill SQL. | Sobre la BD **antes** de multiplicar por ~4 el número de importaciones. Aislada del resto. | `npm test` + conteos antes/después del backfill |
 | **2** | `periodMonth` → `periodStart`/`periodEnd` + `dataStart`/`dataEnd`. Advertencias del preview. Selectores de fecha en el frontend. | **Aquí el sistema ya hace lo pedido** (carga semanal), aunque el análisis siga mensual. | `npm test` + `npm run lint` + `/verify` |
-| **3** | Granularidad semanal en endpoints + `PeriodFilter`. Dashboard, libros, bancos, conciliación. | La lente semanal. La fase más ancha, pero mecánica y con el typecheck cazando cada sitio. | `npm test` + `npm run lint` + `/verify` |
+| **3** | Granularidad semanal en endpoints + `PeriodFilter`. Dashboard, libros, bancos, conciliación. **Eliminar `currentMonthRange`** en favor de `currentPeriod('month')`. | La lente semanal. La fase más ancha, pero mecánica y con el typecheck cazando cada sitio. Aquí `finance-summary` empieza a aceptar período, que es donde el cambio de zona horaria tiene sentido y test. | `npm test` + `npm run lint` + `/verify` |
 | **4** | Tendencia de 12 semanas + grilla de cobertura. | Lo único nuevo. Va al final porque se apoya en todo lo anterior. | `npm test` + `npm run lint` + `/verify` |
 
 **Punto de corte:** si hay que recortar, las fases **0 → 2 → 3** entregan carga y análisis
@@ -474,7 +562,10 @@ estable.
 ## Notas de compatibilidad
 
 - El parámetro `month` desaparece de la API (Decisión 7). Consumidores a actualizar en la
-  misma fase: `frontend/src/hooks/{finance-shared,useIncome,useExpenses,useBankImports,useReconciliation,useFinanceSummary}.ts`.
+  misma fase: `frontend/src/hooks/{finance-shared,useIncome,useExpenses,useBankImports,useReconciliation,useFinanceSummary}.ts`
+  y el barrel `frontend/src/hooks/useFinance.ts:4-15`, que reexporta `useIncomeMonths`,
+  `useExpenseMonths`, `useBankTransactionMonths` y `useBankMonthly` (los cuatro se renombran
+  a `…Periods` / `useBankPeriodic`). El typecheck caza cualquier olvido.
 - `dashboard.service.ts:141-143` reexpone `monthIncome`/`monthExpense` del resumen: los
   nombres se conservan (siguen siendo el mes) y se **añaden** `weekIncome`/`weekExpense`.
   La capa de agente no se toca.
