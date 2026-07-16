@@ -1,9 +1,14 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, beforeEach, afterAll } from 'vitest';
+import { resetDb, disconnect } from './db';
+import {
+  makeOrg, makeIncome, makeExpense, makeBankAccount, makeBankTransaction, makeImportBatch,
+} from './fixtures';
 import {
   periodRange,
   periodKey,
   currentPeriod,
   periodSeries,
+  listPeriods,
 } from '../src/modules/shared/period';
 
 describe('periodRange mes', () => {
@@ -124,5 +129,79 @@ describe('periodSeries', () => {
 
   test('rango invertido devuelve vacío', () => {
     expect(periodSeries('month', '2026-07', '2026-05')).toEqual([]);
+  });
+});
+
+// makeBankTransaction (fixtures.ts:77) recibe un OBJETO, no posicionales, y
+// exige importBatchId: es FK obligatoria (schema.prisma:791) y no tiene default.
+// Este helper crea el lote una vez y devuelve un atajo por cuenta.
+async function movimientosDe(organizationId: string) {
+  const lote = await makeImportBatch(organizationId, { type: 'BANK_STATEMENT' });
+  return (bankAccountId: string, overrides: Record<string, unknown> = {}) =>
+    makeBankTransaction(
+      { organizationId, bankAccountId, importBatchId: lote.id },
+      overrides,
+    );
+}
+
+describe('listPeriods', () => {
+  beforeEach(resetDb);
+  afterAll(disconnect);
+
+  test('income por mes, descendente', async () => {
+    const org = await makeOrg();
+    await makeIncome(org.id, { incomeDate: new Date('2026-06-10') });
+    await makeIncome(org.id, { incomeDate: new Date('2026-07-05') });
+    await makeIncome(org.id, { incomeDate: new Date('2026-07-20') });
+    expect(await listPeriods('month', { source: 'income', organizationId: org.id }))
+      .toEqual(['2026-07', '2026-06']);
+  });
+
+  test('income por semana, descendente', async () => {
+    const org = await makeOrg();
+    await makeIncome(org.id, { incomeDate: new Date('2026-07-06') }); // W28
+    await makeIncome(org.id, { incomeDate: new Date('2026-07-12') }); // W28
+    await makeIncome(org.id, { incomeDate: new Date('2026-07-13') }); // W29
+    expect(await listPeriods('week', { source: 'income', organizationId: org.id }))
+      .toEqual(['2026-W29', '2026-W28']);
+  });
+
+  test('expense por mes', async () => {
+    const org = await makeOrg();
+    await makeExpense(org.id, { expenseDate: new Date('2026-05-10') });
+    await makeExpense(org.id, { expenseDate: new Date('2026-07-05') });
+    expect(await listPeriods('month', { source: 'expense', organizationId: org.id }))
+      .toEqual(['2026-07', '2026-05']);
+  });
+
+  test('bank filtra por cuenta', async () => {
+    const org = await makeOrg();
+    const a = await makeBankAccount(org.id, { accountNumber: '111' });
+    const b = await makeBankAccount(org.id, { accountNumber: '222' });
+    const mov = await movimientosDe(org.id);
+    await mov(a.id, { transactionDate: new Date('2026-07-06') });
+    await mov(b.id, { transactionDate: new Date('2026-06-10') });
+    expect(await listPeriods('month', { source: 'bank', bankAccountId: a.id }))
+      .toEqual(['2026-07']);
+    expect(await listPeriods('month', { source: 'bank', organizationId: org.id }))
+      .toEqual(['2026-07', '2026-06']);
+  });
+
+  // El borde de año ISO tiene que salir bien también desde Postgres (IYYY/IW),
+  // no solo desde la aritmética de JS. Con 'YYYY-WW' esto daría 2027-W01 y las
+  // dos capas discreparían justo en el borde.
+  test('bank: el 1-ene-2027 se agrupa en 2026-W53, como en periodKey', async () => {
+    const org = await makeOrg();
+    const acc = await makeBankAccount(org.id);
+    const mov = await movimientosDe(org.id);
+    await mov(acc.id, { transactionDate: new Date('2027-01-01') });
+    expect(await listPeriods('week', { source: 'bank', organizationId: org.id }))
+      .toEqual(['2026-W53']);
+  });
+
+  test('sin datos devuelve vacío', async () => {
+    const org = await makeOrg();
+    expect(await listPeriods('month', { source: 'income', organizationId: org.id }))
+      .toEqual([]);
   });
 });

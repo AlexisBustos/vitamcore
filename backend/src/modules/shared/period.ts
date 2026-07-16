@@ -9,6 +9,8 @@
  *
  * Detalle en docs/superpowers/specs/2026-07-16-finanzas-granularidad-semanal-design.md.
  */
+import { Prisma } from '@prisma/client';
+import { prisma } from '../../lib/prisma';
 import { badRequest } from '../../utils/http-error';
 
 export type Granularity = 'week' | 'month';
@@ -116,4 +118,49 @@ export function periodSeries(g: Granularity, fromKey: string, toKey: string): st
         : new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
   }
   return out;
+}
+
+// Whitelist tipada: los identificadores de tabla/columna y el truncador NO
+// pueden ir como parámetros de consulta, así que van por aquí y nunca crudos.
+const TRUNC = {
+  week: { unit: 'week', format: 'IYYY-"W"IW' },
+  month: { unit: 'month', format: 'YYYY-MM' },
+} as const;
+
+const PERIOD_SOURCES = {
+  income: { table: 'income_records', column: 'incomeDate' },
+  expense: { table: 'expense_records', column: 'expenseDate' },
+  bank: { table: 'bank_transactions', column: 'transactionDate' },
+} as const;
+
+/**
+ * Consulta de períodos. La unión discriminada existe porque income_records y
+ * expense_records NO tienen columna bankAccountId: así, pasar bankAccountId
+ * junto a source:'income' es un error de tipos y no un filtro que se ignora.
+ */
+export type PeriodQuery =
+  | { source: 'income' | 'expense'; organizationId?: string }
+  | { source: 'bank'; organizationId?: string; bankAccountId?: string };
+
+/** Claves de período con datos, descendente. */
+export async function listPeriods(g: Granularity, q: PeriodQuery): Promise<string[]> {
+  const { table, column } = PERIOD_SOURCES[q.source];
+  const { unit, format } = TRUNC[g];
+  const col = Prisma.raw(`"${column}"`);
+
+  const conditions = [Prisma.sql`${col} IS NOT NULL`];
+  if (q.organizationId) {
+    conditions.push(Prisma.sql`"organizationId" = ${q.organizationId}`);
+  }
+  if (q.source === 'bank' && q.bankAccountId) {
+    conditions.push(Prisma.sql`"bankAccountId" = ${q.bankAccountId}`);
+  }
+
+  const rows = await prisma.$queryRaw<{ periodo: string }[]>(Prisma.sql`
+    SELECT DISTINCT to_char(date_trunc(${unit}, ${col}), ${format}) AS periodo
+    FROM ${Prisma.raw(`"${table}"`)}
+    WHERE ${Prisma.join(conditions, ' AND ')}
+    ORDER BY periodo DESC
+  `);
+  return rows.map((r) => r.periodo);
 }
