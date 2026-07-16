@@ -122,7 +122,10 @@ export interface FinancialImportBatch {
   bankAccountId: string | null;
   type: FinancialImportType;
   status: FinancialImportStatus;
-  periodMonth: string;
+  periodStart: string;
+  periodEnd: string;
+  dataStart: string | null;
+  dataEnd: string | null;
   originalFileName: string;
   fileSize: number;
   sourceHash: string;

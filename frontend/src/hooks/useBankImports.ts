@@ -26,7 +26,8 @@ export type ImportPreviewInput = {
   organizationId: string;
   bankAccountId?: string;
   type: FinancialImportType;
-  periodMonth: string;
+  periodStart: string;
+  periodEnd: string;
   file: File;
 };
 
@@ -42,6 +43,7 @@ export type ImportPreviewResponse = {
   batch: FinancialImportBatch;
   rows: ImportPreviewRow[];
   salesSummary: SalesImportSummary | null;
+  batchWarnings: string[];
 };
 
 // ----- Importaciones financieras -----
@@ -168,7 +170,8 @@ export function useFinanceImportPreview() {
       const formData = new FormData();
       formData.append('organizationId', input.organizationId);
       formData.append('type', input.type);
-      formData.append('periodMonth', input.periodMonth);
+      formData.append('periodStart', input.periodStart);
+      formData.append('periodEnd', input.periodEnd);
       formData.append('file', input.file);
       if (input.bankAccountId) {
         formData.append('bankAccountId', input.bankAccountId);

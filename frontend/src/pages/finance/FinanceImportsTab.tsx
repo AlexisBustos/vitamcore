@@ -37,15 +37,38 @@ const statusLabel: Record<ImportPreviewRow['status'], string> = {
   ERROR: 'Error',
 };
 
+const DIA_MS = 86_400_000;
+
+/// 'YYYY-MM-DD' de hoy en Chile (el backend no comparte código con el frontend).
+function hoyEnChile(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Santiago',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+/// Rango lunes–domingo (ISO) de la semana en curso desplazada `offset` semanas.
+function semanaISO(offset: number): { desde: string; hasta: string } {
+  const hoy = new Date(`${hoyEnChile()}T00:00:00.000Z`);
+  const diaIso = hoy.getUTCDay() || 7; // lunes = 1 … domingo = 7
+  const lunes = new Date(
+    hoy.getTime() - (diaIso - 1) * DIA_MS + offset * 7 * DIA_MS,
+  );
+  const domingo = new Date(lunes.getTime() + 6 * DIA_MS);
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  return { desde: iso(lunes), hasta: iso(domingo) };
+}
+
 export function FinanceImportsTab({
   organizationId,
 }: {
   organizationId?: string;
 }) {
   const [type, setType] = useState<FinancialImportType>('SALES_REPORT');
-  const [periodMonth, setPeriodMonth] = useState(() =>
-    new Date().toISOString().slice(0, 7),
-  );
+  const [periodStart, setPeriodStart] = useState(() => semanaISO(0).desde);
+  const [periodEnd, setPeriodEnd] = useState(() => semanaISO(0).hasta);
   const [bankAccountId, setBankAccountId] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<ImportPreviewResponse | null>(null);
@@ -73,9 +96,18 @@ export function FinanceImportsTab({
   const requiresAccount = type === 'BANK_STATEMENT';
   const canPreview =
     !!organizationId &&
-    !!periodMonth &&
+    !!periodStart &&
+    !!periodEnd &&
+    periodStart <= periodEnd &&
     !!file &&
     (!requiresAccount || !!bankAccountId);
+
+  function aplicarSemana(offset: number) {
+    const { desde, hasta } = semanaISO(offset);
+    setPeriodStart(desde);
+    setPeriodEnd(hasta);
+    setPreview(null);
+  }
 
   async function handleCreateAccount(e: FormEvent) {
     e.preventDefault();
@@ -98,7 +130,8 @@ export function FinanceImportsTab({
       organizationId,
       bankAccountId: requiresAccount ? bankAccountId : undefined,
       type,
-      periodMonth: `${periodMonth}-01`,
+      periodStart,
+      periodEnd,
       file,
     });
     setPreview(result);
@@ -114,7 +147,7 @@ export function FinanceImportsTab({
   if (!organizationId) {
     return (
       <EmptyState title="Selecciona una empresa">
-        Elige una empresa arriba para cargar reportes mensuales y cartolas.
+        Elige una empresa arriba para cargar reportes y cartolas.
       </EmptyState>
     );
   }
@@ -126,18 +159,54 @@ export function FinanceImportsTab({
           <div className="mb-4 flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5 text-[var(--color-primary)]" />
             <h2 className="text-base font-semibold text-[var(--color-foreground)]">
-              Nueva importación mensual
+              Nueva importación
             </h2>
           </div>
 
           <form className="grid gap-4 md:grid-cols-2" onSubmit={handlePreview}>
-            <Field label="Período">
+            <Field label="Desde">
               <Input
-                type="month"
-                value={periodMonth}
-                onChange={(e) => setPeriodMonth(e.target.value)}
+                type="date"
+                value={periodStart}
+                onChange={(e) => {
+                  setPeriodStart(e.target.value);
+                  setPreview(null);
+                }}
               />
             </Field>
+
+            <Field label="Hasta">
+              <Input
+                type="date"
+                value={periodEnd}
+                onChange={(e) => {
+                  setPeriodEnd(e.target.value);
+                  setPreview(null);
+                }}
+              />
+            </Field>
+
+            <div className="flex flex-wrap items-center gap-2 md:col-span-2">
+              <span className="text-xs font-medium text-[var(--color-muted-foreground)]">
+                Atajos:
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => aplicarSemana(0)}
+              >
+                Esta semana
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => aplicarSemana(-1)}
+              >
+                Semana pasada
+              </Button>
+            </div>
 
             <Field label="Tipo de archivo">
               <Select
@@ -306,7 +375,9 @@ export function FinanceImportsTab({
               <tbody className="divide-y divide-[var(--color-border)]">
                 {batches.data.map((batch) => (
                   <tr key={batch.id}>
-                    <td className="px-4 py-3">{formatDate(batch.periodMonth)}</td>
+                    <td className="px-4 py-3">
+                      {formatDate(batch.periodStart)} – {formatDate(batch.periodEnd)}
+                    </td>
                     <td className="px-4 py-3">{importTypeName(batch.type)}</td>
                     <td className="px-4 py-3 text-[var(--color-muted-foreground)]">
                       {batch.originalFileName}
@@ -352,6 +423,16 @@ function PreviewPanel({
           {isConfirming ? 'Confirmando…' : 'Confirmar importación'}
         </Button>
       </div>
+
+      {preview.batchWarnings.length > 0 && (
+        <div className="border-b border-amber-500/30 bg-amber-500/10 px-5 py-3">
+          <ul className="space-y-1 text-sm text-amber-700 dark:text-amber-400">
+            {preview.batchWarnings.map((warning) => (
+              <li key={warning}>⚠️ {warning}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-6">
         <SummaryCard label="Filas" value={String(preview.batch.rowsTotal)} />
