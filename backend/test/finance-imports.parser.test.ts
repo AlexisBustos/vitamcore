@@ -78,7 +78,7 @@ describe('parseSalesRows', () => {
         'RAZON SOCIAL': 'Cliente X',
         'TIPO DE MONEDA': 'CLP',
       },
-    ]);
+    ], 'org-1');
 
     expect(preview.rows).toHaveLength(1);
     const row = preview.rows[0];
@@ -91,9 +91,25 @@ describe('parseSalesRows', () => {
     expect(row.data.clientName).toBe('Cliente X');
     expect(row.data.sourceRut).toBe('76222222-2');
     expect(row.dedupeKey).toBe(
-      'SALES_REPORT|Factura Electrónica|123|76222222-2|2026-01-30|1681790',
+      'org-1|SALES_REPORT|Factura Electrónica|123|76222222-2|2026-01-30|1681790',
     );
     expect(preview.totalIncome).toBe(1681790);
+  });
+
+  test('la clave de ventas lleva la empresa delante', () => {
+    const fila = {
+      DOCUMENTO: 'FACTURA', FOLIO: '100', RUT: '76.543.210-9',
+      FECHA: '2026-07-06', TOTAL: '119000', EMITIDO: 'SI',
+    };
+    const a = parseSalesRows([fila], 'org-A').rows[0].dedupeKey;
+    const b = parseSalesRows([fila], 'org-B').rows[0].dedupeKey;
+    // Ojo con el RUT: normalizeRut (parser.ts:109) quita los puntos, así que la
+    // clave lleva 76543210-9, NO 76.543.210-9. Si ves rojo aquí, el que está mal
+    // es este literal, no normalizeRut: tocarlo rompería parser.test.ts:92 y
+    // cambiaría comportamiento real dentro de una tarea que no lo pretende.
+    expect(a).toBe('org-A|SALES_REPORT|FACTURA|100|76543210-9|2026-07-06|119000');
+    // El punto entero del arreglo: la MISMA factura en dos empresas ya no colisiona.
+    expect(a).not.toBe(b);
   });
 
   test('fila no emitida queda en ERROR', () => {
@@ -106,7 +122,7 @@ describe('parseSalesRows', () => {
         TOTAL: '1000',
         EMITIDO: 'NO',
       },
-    ]);
+    ], 'org-1');
     expect(preview.rows[0].status).toBe('ERROR');
     expect(preview.rows[0].warnings).toContain('Documento no emitido');
   });
@@ -124,7 +140,7 @@ describe('parsePurchaseRows', () => {
         TOTAL: '50.000',
         'RAZON SOCIAL': 'Proveedor X',
       },
-    ]);
+    ], 'org-1');
 
     expect(preview.rows).toHaveLength(1);
     const row = preview.rows[0];
@@ -137,7 +153,7 @@ describe('parsePurchaseRows', () => {
     expect(row.data.status).toBe('PENDING');
     expect(row.data.category).toBe('Compras');
     expect(row.dedupeKey).toBe(
-      'PURCHASE_REPORT|Factura|55|76333333-3|2026-01-30|50000',
+      'org-1|PURCHASE_REPORT|Factura|55|76333333-3|2026-01-30|50000',
     );
     expect(preview.totalExpense).toBe(50000);
   });

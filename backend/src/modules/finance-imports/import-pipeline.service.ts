@@ -50,7 +50,7 @@ export async function previewImport(input: PreviewImportInput, file?: UploadFile
   const bankAccountId = await assertBankAccount(input);
   const periodMonth = normalizePeriodMonth(input.periodMonth);
   const rows = readRows(file, input.type);
-  const parsed = parseRows(input.type, rows, bankAccountId);
+  const parsed = parseRows(input.type, rows, bankAccountId, input.organizationId);
   const dedupeKeys = await getExistingDedupeKeys(input.type, parsed.rows);
   const rowsWithDuplicates = parsed.rows.map((row) =>
     dedupeKeys.has(row.dedupeKey)
@@ -252,9 +252,14 @@ function parseRows(
   type: FinancialImportType,
   rows: Record<string, unknown>[],
   bankAccountId: string | null,
+  organizationId: string,
 ) {
-  if (type === FinancialImportType.SALES_REPORT) return parseSalesRows(rows);
-  if (type === FinancialImportType.PURCHASE_REPORT) return parsePurchaseRows(rows);
+  if (type === FinancialImportType.SALES_REPORT) {
+    return parseSalesRows(rows, organizationId);
+  }
+  if (type === FinancialImportType.PURCHASE_REPORT) {
+    return parsePurchaseRows(rows, organizationId);
+  }
   if (!bankAccountId) {
     throw badRequest('Debes seleccionar una cuenta bancaria para la cartola');
   }

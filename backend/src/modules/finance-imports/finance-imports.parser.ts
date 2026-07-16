@@ -127,6 +127,7 @@ export function normalizeDate(value: unknown): Date | null {
 
 export function parseSalesRows(
   rows: Record<string, unknown>[],
+  organizationId: string,
 ): ParsedImportPreview {
   const parsedRows = rows.map((row) => {
       const documentType = text(valueOf(row, 'DOCUMENTO'));
@@ -151,6 +152,7 @@ export function parseSalesRows(
       return {
         status,
         dedupeKey: [
+          organizationId,
           'SALES_REPORT',
           documentType,
           folio,
@@ -204,6 +206,7 @@ export function parseSalesRows(
 
 export function parsePurchaseRows(
   rows: Record<string, unknown>[],
+  organizationId: string,
 ): ParsedImportPreview {
   const parsedRows = rows.map((row) => {
     const documentType = text(valueOf(row, 'DOCUMENTO'));
@@ -221,6 +224,7 @@ export function parsePurchaseRows(
     return {
       status: warnings.length > 0 ? 'WARNING' : 'VALID',
       dedupeKey: [
+        organizationId,
         'PURCHASE_REPORT',
         documentType,
         folio,

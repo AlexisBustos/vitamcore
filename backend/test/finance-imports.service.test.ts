@@ -1,8 +1,10 @@
 import { beforeEach, afterAll, describe, expect, test } from 'vitest';
 import { resetDb, disconnect } from './db';
-import { makeOrg } from './fixtures';
+import { makeOrg, makeImportBatch } from './fixtures';
 import { prisma } from '../src/lib/prisma';
 import * as imports from '../src/modules/finance-imports/finance-imports.service';
+import { parseSalesRows } from '../src/modules/finance-imports/finance-imports.parser';
+import { serializeRows } from '../src/modules/finance-imports/finance-imports.serde';
 
 beforeEach(resetDb);
 afterAll(disconnect);
@@ -220,6 +222,41 @@ describe('confirmImport (ventas)', () => {
     expect(incomes[0].description).toBe('Ingreso previo');
     const after = await prisma.financialImportBatch.findUnique({ where: { id: batch.id } });
     expect(after?.status).toBe('PREVIEW');
+  });
+
+  test('dos empresas con la misma factura: ambas se guardan', async () => {
+    // Este test va directo a confirmImport, así que lo que ejercita es el @unique
+    // global de sourceDedupeKey en el insert — NO getExistingDedupeKeys, que solo
+    // corre en previewImport. Son las dos caras del mismo defecto: la clave sin
+    // empresa. En producción el CEO lo sufriría por la vía del preview (la fila se
+    // marca DUPLICATE y se descarta en silencio); aquí se prueba por la vía del
+    // insert, que es la que se puede montar sin un XLSX. Ver spec §2.
+    const orgA = await makeOrg('Vitam Healthcare');
+    const orgB = await makeOrg('Vitam Tech');
+    const fila = {
+      DOCUMENTO: 'FACTURA', FOLIO: '100', RUT: '76.543.210-9',
+      FECHA: '2026-07-06', TOTAL: '119000', EMITIDO: 'SI',
+    };
+
+    // CLAVE: las dedupeKey se DERIVAN del parser, no se escriben a mano. Si las
+    // escribieras a mano ya saldrían distintas y el test pasaría incluso sin el
+    // arreglo: probaría que dos strings distintos insertan dos filas, que es
+    // cierto hoy. Lo que se prueba aquí es que el PARSER las hace distintas.
+    for (const org of [orgA, orgB]) {
+      const preview = parseSalesRows([fila], org.id);
+      const lote = await makeImportBatch(org.id, {
+        type: 'SALES_REPORT',
+        previewData: serializeRows(preview.rows),
+      });
+      await imports.confirmImport(lote.id);
+    }
+
+    expect(await prisma.incomeRecord.count()).toBe(2);
+    // Sin el arreglo esto no daría 1: daría excepción. La clave de orgB chocaría
+    // con la de orgA (P2002), linkCreditNotes correría después dentro de la misma
+    // transacción y moriría con 25P02, así que confirmImport lanzaría. Da igual
+    // para el flujo —el test se escribe DESPUÉS de implementar— pero que conste,
+    // porque un comentario que miente sobrevive al bug que describe.
   });
 });
 
