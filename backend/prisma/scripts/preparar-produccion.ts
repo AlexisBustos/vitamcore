@@ -7,7 +7,7 @@
  * - Verifica que el CEO exista y quede activo con rol CEO.
  *
  * Uso en el VPS (una sola vez, después del restore):
- *   PROD_CEO_EMAIL=ceo@vitam.tech PROD_CEO_PASSWORD='...' \
+ *   PROD_CEO_EMAIL=a.bustos@vitam.tech PROD_CEO_PASSWORD='...' \
  *     npx tsx prisma/scripts/preparar-produccion.ts
  */
 import { PrismaClient, Role } from '@prisma/client';
@@ -15,7 +15,7 @@ import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
-const CEO_EMAIL = process.env.PROD_CEO_EMAIL ?? 'ceo@vitam.tech';
+const CEO_EMAIL = process.env.PROD_CEO_EMAIL ?? 'a.bustos@vitam.tech';
 const CEO_PASSWORD = process.env.PROD_CEO_PASSWORD;
 
 // Emails de cuentas demo/seed que NO deben existir en producción.
