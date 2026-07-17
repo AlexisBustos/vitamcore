@@ -23,6 +23,7 @@ import {
   recordActivity,
   type ActivityEvent,
 } from './task-activity.service';
+import { notifyTaskAssigned } from './task-notifications.service';
 import type {
   CreateTaskInput,
   ListTasksFilters,
@@ -121,24 +122,28 @@ export async function create(input: CreateTaskInput, user?: AuthUser) {
   }
   // Las validaciones anteriores solo leen, así que pueden ir fuera de la
   // transacción. La escritura + la sincronización del proyecto van juntas.
-  return prisma.$transaction(async (tx) => {
-    const task = await tx.task.create({ data });
+  const task = await prisma.$transaction(async (tx) => {
+    const created = await tx.task.create({ data });
     if (labelIds?.length) {
       await tx.taskLabel.createMany({
-        data: labelIds.map((labelId) => ({ taskId: task.id, labelId })),
+        data: labelIds.map((labelId) => ({ taskId: created.id, labelId })),
       });
     }
     if (assigneeIds.length) {
       await tx.taskAssignee.createMany({
-        data: assigneeIds.map((userId) => ({ taskId: task.id, userId })),
+        data: assigneeIds.map((userId) => ({ taskId: created.id, userId })),
       });
     }
-    await recordActivity(tx, task.id, user?.id, [
+    await recordActivity(tx, created.id, user?.id, [
       { type: TaskActivityType.CREATED, data: {} },
     ]);
-    if (task.projectId) await syncProjectStatus(task.projectId, tx);
-    return task;
+    if (created.projectId) await syncProjectStatus(created.projectId, tx);
+    return created;
   });
+  // En create, todos los responsables son nuevos. Se notifica fuera de la
+  // transacción; nunca lanza.
+  await maybeNotifyAssigned(task, assigneeIds, user);
+  return task;
 }
 
 export async function update(
@@ -179,8 +184,8 @@ export async function update(
     await assertLabelsInOrganization(labelIds, current.organizationId);
   }
 
-  return prisma.$transaction(async (tx) => {
-    const task = await tx.task.update({ where: { id }, data });
+  const task = await prisma.$transaction(async (tx) => {
+    const updated = await tx.task.update({ where: { id }, data });
     // labelIds (si viene) reemplaza el set completo de etiquetas.
     if (labelIds) {
       await tx.taskLabel.deleteMany({ where: { taskId: id } });
@@ -208,10 +213,15 @@ export async function update(
     // Si la tarea se movió de proyecto, hay que recalcular ambos.
     const affected = new Set<string>();
     if (current.projectId) affected.add(current.projectId);
-    if (task.projectId) affected.add(task.projectId);
+    if (updated.projectId) affected.add(updated.projectId);
     for (const pid of affected) await syncProjectStatus(pid, tx);
-    return task;
+    return updated;
   });
+  // Notifica solo a los responsables NUEVOS (los que no estaban antes).
+  const before = new Set(current.assignees.map((a) => a.userId));
+  const nuevos = assigneeIds ? assigneeIds.filter((u) => !before.has(u)) : [];
+  await maybeNotifyAssigned(task, nuevos, user);
+  return task;
 }
 
 /**
@@ -305,6 +315,46 @@ export async function remove(id: string, user?: AuthUser) {
   await prisma.$transaction(async (tx) => {
     await tx.task.delete({ where: { id } });
     if (existing.projectId) await syncProjectStatus(existing.projectId, tx);
+  });
+}
+
+/**
+ * Carga nombres de empresa/proyecto y notifica por correo a los responsables
+ * nuevos. Se llama SIEMPRE fuera de la transacción; nunca lanza.
+ */
+async function maybeNotifyAssigned(
+  task: {
+    id: string;
+    title: string;
+    description: string | null;
+    priority: Prisma.TaskGetPayload<object>['priority'];
+    dueDate: Date | null;
+    organizationId: string;
+    projectId: string | null;
+  },
+  recipientIds: string[],
+  user?: AuthUser,
+) {
+  if (recipientIds.length === 0) return;
+  const [organization, project] = await Promise.all([
+    prisma.organization.findUnique({
+      where: { id: task.organizationId },
+      select: { name: true },
+    }),
+    task.projectId
+      ? prisma.project.findUnique({
+          where: { id: task.projectId },
+          select: { name: true },
+        })
+      : Promise.resolve(null),
+  ]);
+  await notifyTaskAssigned({
+    task,
+    organizationName: organization?.name ?? null,
+    projectName: project?.name ?? null,
+    recipientIds,
+    actorId: user?.id,
+    actorName: user?.name ?? null,
   });
 }
 
