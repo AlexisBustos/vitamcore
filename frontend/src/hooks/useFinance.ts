@@ -4,7 +4,7 @@
 export { useIncome, useIncomePeriods, useSaveIncome, useDeleteIncome, useRegisterPayment, useBulkRegisterPayment } from './useIncome';
 export { useExpenses, useExpensePeriods, useSaveExpense, useDeleteExpense, useRegisterExpensePayment, useBulkRegisterExpensePayment } from './useExpenses';
 export type { FinanceFilters, Granularity, PeriodSelection } from './finance-shared';
-export { useFinanceSummary, useFinanceTrend, useConsolidated } from './useFinanceSummary';
+export { useFinanceSummary, useFinanceTrend, useConsolidated, useCashflow } from './useFinanceSummary';
 export {
   useBankCategories, useSaveCategory, useDeleteCategory, useCategoryRules,
   useSaveRule, useDeleteRule, useReorderRules, useReapplyRules, useRulePreview,

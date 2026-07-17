@@ -5,6 +5,7 @@
  */
 export { getSummary, getConsolidated } from './finance-summary.service';
 export { getTrend } from './finance-trend.service';
+export { getCashflow } from './finance-cashflow.service';
 export {
   getReconciliationSummary,
   autoReconcile,

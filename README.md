@@ -168,6 +168,7 @@ Abre `http://localhost:5173` y entra con las credenciales del seed:
 | GET/POST/PATCH/DELETE | `/api/income[/:id]` | CRUD de ingresos                     | Sí   |
 | GET/POST/PATCH/DELETE | `/api/expenses[/:id]` | CRUD de gastos                     | Sí   |
 | GET    | `/api/finance/summary`     | Resumen financiero (`?organizationId`)   | Sí   |
+| GET    | `/api/finance/cashflow`    | Flujo de caja proyectado (`?weeks=4..12`) | Sí   |
 | GET/POST/PATCH/DELETE | `/api/documents[/:id]` | CRUD de documentos                 | Sí   |
 | GET/POST/PATCH/DELETE | `/api/decisions[/:id]` | CRUD de decisiones estratégicas    | Sí   |
 | POST   | `/api/agent/chat`          | Envía un mensaje al agente ejecutivo     | Sí   |

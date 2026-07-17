@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import * as service from './finance.service';
 import {
   autoReconcileSchema,
+  cashflowQuery,
   consolidatedQuery,
   recognizeTransfersSchema,
   summaryQuery,
@@ -23,6 +24,11 @@ export async function consolidatedController(req: Request, res: Response) {
 export async function trendController(req: Request, res: Response) {
   const filters = trendQuery.parse(req.query);
   res.json({ data: await service.getTrend(filters) });
+}
+
+export async function cashflowController(req: Request, res: Response) {
+  const { organizationId, weeks } = cashflowQuery.parse(req.query);
+  res.json({ data: await service.getCashflow({ organizationId, weeks }) });
 }
 
 export async function autoReconcileController(req: Request, res: Response) {

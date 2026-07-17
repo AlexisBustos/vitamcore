@@ -23,6 +23,6 @@ export type {
   ExpenseRecord, ClientStats, Client, ClientDetail, VendorStats, Vendor, VendorDetail,
   FinanceSummary, ReconciliationSummary, ConsolidatedOrg, ConsolidatedResponse,
   AutoReconcilePair, AutoReconcileResult, RecognizeTransfer, RecognizeTransfersResult,
-  TrendPoint,
+  TrendPoint, CashflowWeek, Cashflow,
 } from './finance';
 export type { DashboardSummary } from './dashboard';

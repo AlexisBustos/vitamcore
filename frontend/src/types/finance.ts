@@ -231,3 +231,28 @@ export interface TrendPoint {
   expense: number;
   result: number; // income − expense
 }
+
+// ---- Flujo de caja proyectado ----
+
+export interface CashflowWeek {
+  weekKey: string; // 'YYYY-Www'
+  startDate: string;
+  endDate: string;
+  expectedIn: number;
+  expectedOut: number;
+  recurringIn: number;
+  recurringOut: number;
+  net: number;
+  closingBalance: number;
+}
+
+export interface Cashflow {
+  horizonWeeks: number;
+  startingCash: number;
+  generatedAt: string;
+  weeks: CashflowWeek[];
+  minBalance: number;
+  minBalanceWeek: string | null;
+  firstShortfallWeek: string | null;
+  overdueFoldedIn: { receivable: number; payable: number };
+}

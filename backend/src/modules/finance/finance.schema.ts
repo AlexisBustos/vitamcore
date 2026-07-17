@@ -20,6 +20,12 @@ export const trendQuery = z.object({
   last: z.coerce.number().int().min(1).max(52).default(12),
 });
 
+export const cashflowQuery = z.object({
+  organizationId: z.string().optional(),
+  // Horizonte de proyección en semanas (4 a 12; por defecto 8 ≈ 2 meses).
+  weeks: z.coerce.number().int().min(4).max(12).default(8),
+});
+
 export const autoReconcileSchema = z.object({
   organizationId: z.string().min(1, 'La empresa es obligatoria'),
   granularity,
@@ -49,5 +55,6 @@ export const recognizeTransfersSchema = z.object({
 export type SummaryFilters = z.infer<typeof summaryQuery>;
 export type ConsolidatedFilters = z.infer<typeof consolidatedQuery>;
 export type TrendFilters = z.infer<typeof trendQuery>;
+export type CashflowFilters = z.infer<typeof cashflowQuery>;
 export type AutoReconcileInput = z.infer<typeof autoReconcileSchema>;
 export type RecognizeTransfersInput = z.infer<typeof recognizeTransfersSchema>;
