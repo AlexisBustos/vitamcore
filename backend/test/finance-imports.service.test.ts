@@ -399,17 +399,33 @@ describe('previewImport (rango declarado)', () => {
     expect(res.batchWarnings.some((w) => /fuera de ese rango/.test(w))).toBe(true);
   });
 
-  test('rango que no es semana completa dispara la advertencia (c)', async () => {
+  test('rango corto que no cae en semana ISO dispara la advertencia (c)', async () => {
     const org = await makeOrg();
     const file = ventasFile([filaVenta('100', '2026-07-06')]);
     const res = await imports.previewImport(
       {
         organizationId: org.id, type: 'SALES_REPORT',
-        periodStart: new Date('2026-07-06'), periodEnd: new Date('2026-07-31'), // un mes
+        // Lunes 6 a miércoles 8: parece un intento de semana pero está incompleta.
+        periodStart: new Date('2026-07-06'), periodEnd: new Date('2026-07-08'),
       },
       file,
     );
     expect(res.batchWarnings.some((w) => /semana completa/.test(w))).toBe(true);
+  });
+
+  test('rango mensual (parcial) NO dispara la advertencia de semana (c)', async () => {
+    const org = await makeOrg();
+    const file = ventasFile([filaVenta('100', '2026-07-06')]);
+    const res = await imports.previewImport(
+      {
+        organizationId: org.id, type: 'SALES_REPORT',
+        // Carga mensual parcial 1–17 jul: no es una semana, pero tampoco pretende
+        // serlo, así que el aviso de semana sería ruido y no debe aparecer.
+        periodStart: new Date('2026-07-01'), periodEnd: new Date('2026-07-17'),
+      },
+      file,
+    );
+    expect(res.batchWarnings.some((w) => /semana completa/.test(w))).toBe(false);
   });
 
   test('reimportar el mismo archivo confirmado dispara la advertencia (b)', async () => {

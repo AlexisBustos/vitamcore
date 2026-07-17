@@ -178,8 +178,13 @@ async function buildBatchWarnings(args: {
     warnings.push(`Este archivo ya se importó${cuando}.`);
   }
 
-  // (c) El rango declarado no es una semana ISO completa (lun–dom).
-  if (!isFullIsoWeek(periodStart, periodEnd)) {
+  // (c) El rango declarado no es una semana ISO completa (lun–dom). Solo tiene
+  //     sentido avisar cuando el rango PARECE un intento de semana (≤ 8 días
+  //     inclusive): en una carga mensual —parcial o completa— este aviso sería
+  //     ruido, no un error, porque el CEO nunca pretendió declarar una semana.
+  const DIA_MS = 86_400_000;
+  const pareceSemana = periodEnd.getTime() - periodStart.getTime() <= 7 * DIA_MS;
+  if (pareceSemana && !isFullIsoWeek(periodStart, periodEnd)) {
     warnings.push('El rango no cubre una semana completa (lunes a domingo).');
   }
 
