@@ -232,15 +232,27 @@ export async function confirmImport(batchId: string) {
   }
 
   const rows = deserializeRows(batch.previewData);
-  const rowsToInsert = rows.filter(
+  const candidateRows = rows.filter(
     (row) => row.status === 'VALID' || row.status === 'WARNING',
   );
 
   const rules = await getActiveRules();
 
   const result = await prisma.$transaction(async (tx) => {
+    // Re-chequeo de duplicados DENTRO de la transacción: entre el preview y esta
+    // confirmación puede haberse confirmado otro lote solapado (p. ej. cargar el
+    // mes parcial y luego el mes completo). Aquí `tx` ya ve esas filas, así que
+    // las claves repetidas se SALTAN en vez de reventar el lote entero. Cierra la
+    // ventana preview→confirm y hace idempotente la carga incremental.
+    const alreadyPresent = await getExistingDedupeKeys(batch.type, candidateRows, tx);
+    const rowsToInsert = candidateRows.filter(
+      (row) => !alreadyPresent.has(row.dedupeKey),
+    );
+
     let inserted = 0;
-    let duplicated = rows.filter((row) => row.status === 'DUPLICATE').length;
+    let duplicated =
+      rows.filter((row) => row.status === 'DUPLICATE').length +
+      (candidateRows.length - rowsToInsert.length);
 
     for (const row of rowsToInsert) {
       const created = await createRow(tx, batch, row, rules);
@@ -365,15 +377,20 @@ function parseRows(
   return parseBankRows(rows, bankAccountId);
 }
 
+/// Claves de deduplicación ya presentes en la BD, de entre las de `rows`.
+/// Acepta un cliente transaccional para poder consultarse tanto en el preview
+/// (contra `prisma`) como dentro de la transacción de confirmación (contra `tx`),
+/// donde ve los lotes solapados ya confirmados.
 async function getExistingDedupeKeys(
   type: FinancialImportType,
-  rows: ParsedImportRow[],
+  rows: { dedupeKey: string }[],
+  client: Prisma.TransactionClient = prisma,
 ) {
   const dedupeKeys = rows.map((row) => row.dedupeKey);
   if (dedupeKeys.length === 0) return new Set<string>();
 
   if (type === FinancialImportType.SALES_REPORT) {
-    const existing = await prisma.incomeRecord.findMany({
+    const existing = await client.incomeRecord.findMany({
       where: { sourceDedupeKey: { in: dedupeKeys } },
       select: { sourceDedupeKey: true },
     });
@@ -381,14 +398,14 @@ async function getExistingDedupeKeys(
   }
 
   if (type === FinancialImportType.PURCHASE_REPORT) {
-    const existing = await prisma.expenseRecord.findMany({
+    const existing = await client.expenseRecord.findMany({
       where: { sourceDedupeKey: { in: dedupeKeys } },
       select: { sourceDedupeKey: true },
     });
     return new Set(existing.flatMap((row) => row.sourceDedupeKey ?? []));
   }
 
-  const existing = await prisma.bankTransaction.findMany({
+  const existing = await client.bankTransaction.findMany({
     where: { dedupeKey: { in: dedupeKeys } },
     select: { dedupeKey: true },
   });
@@ -531,11 +548,12 @@ async function createRow(
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === 'P2002'
     ) {
-      // No se puede "saltar" una fila dentro de una transacción: en Postgres la
-      // sentencia fallida ya la abortó (25P02) y Prisma no pone savepoint por
-      // query, así que este catch nunca pudo cumplir lo que prometía. El
-      // rollback del lote es lo correcto —la importación es atómica—; lo que
-      // estaba mal era la falsa promesa y morir con un código críptico.
+      // Salvavidas de último recurso. Los duplicados contra la BD ya se saltan
+      // en confirmImport (re-chequeo dentro de la transacción), así que aquí solo
+      // se cae por una carrera real: otro lote solapado que se confirmó entre ese
+      // re-chequeo y este insert. No se puede "saltar" la fila —en Postgres la
+      // sentencia fallida ya abortó la transacción (25P02)—; el rollback atómico
+      // del lote es lo correcto, con un mensaje legible en vez del código críptico.
       throw badRequest(`Fila duplicada en el lote: ${row.dedupeKey}`);
     }
     throw error;

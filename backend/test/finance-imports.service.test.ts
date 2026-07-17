@@ -185,11 +185,11 @@ describe('confirmImport (ventas)', () => {
     expect(client?.rut).toBe('77.111.111-1');
   });
 
-  test('dedupe: un sourceDedupeKey ya existente aborta la transacción y confirmImport falla', async () => {
-    // Una clave ya existente en BD hace fallar el insert. La transacción hace
-    // rollback completo (la importación es atómica) pero ahora con un mensaje
-    // legible en vez del 25P02 críptico de antes: createRow ya no finge que
-    // puede "saltar" la fila.
+  test('dedupe: una clave ya existente en BD se salta y las filas nuevas sí entran', async () => {
+    // Carga incremental (mes parcial → mes completo): confirmImport re-chequea las
+    // claves contra la BD DENTRO de la transacción y salta las repetidas en vez de
+    // reventar el lote. La factura ya cargada se cuenta como duplicada; la nueva se
+    // inserta. El lote se confirma igual.
     const org = await makeOrg();
     // Ingreso preexistente con el mismo sourceDedupeKey (unique global).
     await prisma.incomeRecord.create({
@@ -207,7 +207,7 @@ describe('confirmImport (ventas)', () => {
     const previewData = [
       {
         status: 'VALID',
-        dedupeKey: 'sale-dup',
+        dedupeKey: 'sale-dup', // ya está en la BD → se salta
         warnings: [],
         data: {
           clientName: 'Cliente Y',
@@ -215,6 +215,19 @@ describe('confirmImport (ventas)', () => {
           documentKind: 'SALE',
           amount: 999,
           description: 'Factura duplicada',
+        },
+        rawData: {},
+      },
+      {
+        status: 'VALID',
+        dedupeKey: 'sale-nuevo', // clave nueva → se inserta
+        warnings: [],
+        data: {
+          clientName: 'Cliente Z',
+          sourceRut: '77.333.333-3',
+          documentKind: 'SALE',
+          amount: 50000,
+          description: 'Factura nueva',
         },
         rawData: {},
       },
@@ -233,14 +246,19 @@ describe('confirmImport (ventas)', () => {
       },
     });
 
-    await expect(imports.confirmImport(batch.id)).rejects.toThrow(/Fila duplicada en el lote/);
+    const result = await imports.confirmImport(batch.id);
+    expect(result.inserted).toBe(1); // solo la nueva
+    expect(result.duplicated).toBe(1); // la repetida, saltada
 
-    // Rollback: solo queda el ingreso preexistente y el lote sigue en PREVIEW.
-    const incomes = await prisma.incomeRecord.findMany({ where: { organizationId: org.id } });
-    expect(incomes).toHaveLength(1);
-    expect(incomes[0].description).toBe('Ingreso previo');
+    // Quedan el ingreso preexistente y la factura nueva; la duplicada NO se dobló.
+    const incomes = await prisma.incomeRecord.findMany({
+      where: { organizationId: org.id },
+      orderBy: { amount: 'asc' },
+    });
+    expect(incomes).toHaveLength(2);
+    expect(incomes.map((i) => i.description)).toEqual(['Factura nueva', 'Ingreso previo']);
     const after = await prisma.financialImportBatch.findUnique({ where: { id: batch.id } });
-    expect(after?.status).toBe('PREVIEW');
+    expect(after?.status).toBe('CONFIRMED');
   });
 
   test('dos empresas con la misma factura: ambas se guardan', async () => {
@@ -276,6 +294,51 @@ describe('confirmImport (ventas)', () => {
     // transacción y moriría con 25P02, así que confirmImport lanzaría. Da igual
     // para el flujo —el test se escribe DESPUÉS de implementar— pero que conste,
     // porque un comentario que miente sobrevive al bug que describe.
+  });
+
+  test('lotes solapados sin importar el orden: el segundo salta duplicados e inserta lo nuevo', async () => {
+    // Escenario real del CEO: previsualiza el mes parcial y el mes completo ANTES
+    // de confirmar ninguno (el segundo preview no ve al primero, así que no marca
+    // nada DUPLICATE). Al confirmar ambos, el segundo re-chequea contra la BD
+    // dentro de la transacción y salta las facturas ya insertadas en vez de
+    // reventar el lote. Antes del arreglo, el segundo confirm lanzaba.
+    const org = await makeOrg();
+
+    // Parcial: folios 100 y 101. Completo: 100, 101, 102 y 103 (se solapan).
+    const parcial = ventasFile([filaVenta('100', '2026-07-06'), filaVenta('101', '2026-07-10')]);
+    const completo = ventasFile([
+      filaVenta('100', '2026-07-06'), filaVenta('101', '2026-07-10'),
+      filaVenta('102', '2026-07-20'), filaVenta('103', '2026-07-28'),
+    ]);
+    const rango = { periodStart: new Date('2026-07-01'), periodEnd: new Date('2026-07-31') };
+
+    // Ambos previews ocurren antes de cualquier confirmación.
+    const previewParcial = await imports.previewImport(
+      { organizationId: org.id, type: 'SALES_REPORT', ...rango },
+      parcial,
+    );
+    const previewCompleto = await imports.previewImport(
+      { organizationId: org.id, type: 'SALES_REPORT', ...rango },
+      completo,
+    );
+    // El segundo preview no vio al primero (nada confirmado aún): sus 4 filas VALID.
+    expect(previewCompleto.batch.rowsValid).toBe(4);
+
+    const resParcial = await imports.confirmImport(previewParcial.batch.id);
+    expect(resParcial.inserted).toBe(2);
+
+    const resCompleto = await imports.confirmImport(previewCompleto.batch.id);
+    expect(resCompleto.inserted).toBe(2); // solo 102 y 103
+    expect(resCompleto.duplicated).toBe(2); // 100 y 101, saltadas
+
+    // Cuatro facturas en total, sin duplicar las solapadas.
+    expect(await prisma.incomeRecord.count({ where: { organizationId: org.id } })).toBe(4);
+    const folios = await prisma.incomeRecord.findMany({
+      where: { organizationId: org.id },
+      select: { sourceFolio: true },
+      orderBy: { sourceFolio: 'asc' },
+    });
+    expect(folios.map((f) => f.sourceFolio)).toEqual(['100', '101', '102', '103']);
   });
 });
 
