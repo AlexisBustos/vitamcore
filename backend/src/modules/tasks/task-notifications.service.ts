@@ -7,6 +7,9 @@
  */
 import type { Priority } from '@prisma/client';
 import { env } from '../../config/env';
+import { prisma } from '../../lib/prisma';
+import { sendEmail } from '../../lib/email';
+import { logger } from '../../lib/logger';
 
 const PRIORITY_LABEL: Record<Priority, string> = {
   LOW: 'Baja',
@@ -85,4 +88,69 @@ export function buildAssignmentEmail(input: AssignmentEmailInput): {
     html: lineasHtml.join('\n'),
     text: lineasTexto.join('\n'),
   };
+}
+
+export type NotifyTaskAssignedInput = {
+  task: {
+    id: string;
+    title: string;
+    description: string | null;
+    priority: Priority;
+    dueDate: Date | null;
+  };
+  organizationName: string | null;
+  projectName: string | null;
+  /** Responsables NUEVOS (los que no estaban antes en la tarea). */
+  recipientIds: string[];
+  /** Quien hace la asignación; se excluye de los destinatarios. */
+  actorId?: string;
+  actorName?: string | null;
+};
+
+/**
+ * Notifica por correo a cada responsable nuevo. Nunca lanza: captura sus
+ * errores y los loguea, para no romper ni revertir la asignación.
+ */
+export async function notifyTaskAssigned(input: NotifyTaskAssignedInput): Promise<void> {
+  try {
+    const ids = [...new Set(input.recipientIds)].filter((id) => id !== input.actorId);
+    if (ids.length === 0) return;
+
+    const users = await prisma.user.findMany({
+      where: { id: { in: ids }, isActive: true },
+      select: { id: true, name: true, email: true },
+    });
+
+    for (const user of users) {
+      // Sin email concreto NO se llama a sendEmail: resolveRecipients caería a
+      // REPORT_EMAIL_TO y desviaría el aviso al destinatario del informe semanal.
+      if (!user.email) continue;
+      const mail = buildAssignmentEmail({
+        recipientName: user.name,
+        taskTitle: input.task.title,
+        taskId: input.task.id,
+        description: input.task.description,
+        organizationName: input.organizationName,
+        projectName: input.projectName,
+        priority: input.task.priority,
+        dueDate: input.task.dueDate,
+        assignedByName: input.actorName,
+      });
+      try {
+        await sendEmail({
+          to: user.email,
+          subject: mail.subject,
+          html: mail.html,
+          text: mail.text,
+        });
+      } catch (err) {
+        logger.error(
+          { err, userId: user.id, taskId: input.task.id },
+          'Fallo al enviar correo de asignación de tarea',
+        );
+      }
+    }
+  } catch (err) {
+    logger.error({ err }, 'Error inesperado en notifyTaskAssigned');
+  }
 }
