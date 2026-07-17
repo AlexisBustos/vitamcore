@@ -6,7 +6,6 @@ export type QuickIntent =
   | 'healthcare-summary'
   | 'tech-summary'
   | 'financial-analysis'
-  | 'sales-follow-up'
   | 'project-risks'
   | 'weekly-plan'
   | 'documents-recent';

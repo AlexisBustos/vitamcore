@@ -12,7 +12,6 @@ import type {
   IncomeStatus,
   Priority,
   ProjectStatus,
-  SalesStatus,
   TaskStatus,
 } from '@/types/domain';
 
@@ -33,11 +32,6 @@ export function PriorityBadge({ value }: { value: Priority }) {
 
 export function EntityStatusBadge({ value }: { value: EntityStatus }) {
   const t = d.entityStatus[value];
-  return <Badge className={t.className}>{t.label}</Badge>;
-}
-
-export function SalesStatusBadge({ value }: { value: SalesStatus }) {
-  const t = d.salesStatus[value];
   return <Badge className={t.className}>{t.label}</Badge>;
 }
 

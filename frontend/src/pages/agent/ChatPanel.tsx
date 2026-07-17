@@ -32,7 +32,6 @@ const QUICK: { label: string; action?: string; chat?: string; agentType?: string
   { label: 'Resumen Healthcare', action: 'healthcare-summary' },
   { label: 'Resumen Tech', action: 'tech-summary' },
   { label: 'Análisis financiero', action: 'financial-analysis' },
-  { label: 'Seguimiento comercial', action: 'sales-follow-up' },
   { label: 'Riesgos de proyectos', action: 'project-risks' },
   { label: 'Tareas críticas', action: 'project-risks' },
   { label: 'Plan semanal', action: 'weekly-plan' },

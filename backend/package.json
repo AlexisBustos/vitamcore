@@ -15,6 +15,7 @@
     "prisma:seed-categories": "tsx prisma/scripts/seed-categories.ts",
     "prisma:studio": "prisma studio",
     "report:weekly": "tsx scripts/weekly-report.ts",
+    "alerts:generate": "tsx scripts/alerts-generate.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:db:setup": "node scripts/test-db-setup.mjs"

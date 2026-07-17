@@ -6,7 +6,6 @@
  * Es el modo por defecto y permite operar el agente sin API key.
  */
 import { prisma } from '../../../lib/prisma';
-import { getSummary as getSalesSummary } from '../../sales/sales.service';
 import { getSummary as getFinanceSummary } from '../../finance/finance.service';
 import { callReadTool, type ToolContext } from '../tools';
 import type {
@@ -74,9 +73,6 @@ export class HeuristicProvider implements AgentProvider {
       case 'financial-analysis':
         content = await this.finance(input.organizationId, toolsUsed);
         break;
-      case 'sales-follow-up':
-        content = await this.sales(input.organizationId, toolsUsed);
-        break;
       case 'project-risks':
         content = await this.projectRisks(input.organizationId, toolsUsed);
         break;
@@ -95,14 +91,13 @@ export class HeuristicProvider implements AgentProvider {
 
   /** Resumen ejecutivo consolidado o por empresa. */
   private async executive(orgId: string | null | undefined, used: string[]) {
-    const [orgs, finance, sales] = await Promise.all([
+    const [orgs, finance] = await Promise.all([
       prisma.organization.findMany({
         include: { _count: { select: { projects: true, tasks: true } } },
       }),
       getFinanceSummary(orgId || undefined),
-      getSalesSummary(orgId || undefined),
     ]);
-    used.push('getOrganizations', 'getFinancialSummary', 'getSalesOpportunities');
+    used.push('getOrganizations', 'getFinancialSummary');
 
     const [blocked, criticalTasks, overdueTasks, activeDecisions] =
       await Promise.all([
@@ -136,14 +131,13 @@ export class HeuristicProvider implements AgentProvider {
         )} (ingresos ${money.format(finance.monthIncome)}, gastos ${money.format(
           finance.monthExpense,
         )}).`,
-        `Pipeline comercial abierto: ${sales.openCount} oportunidades, ${money.format(
-          sales.openAmount,
-        )} (ponderado ${money.format(sales.weightedAmount)}).`,
+        `Por cobrar ${money.format(finance.pendingIncome)} · por pagar ${money.format(
+          finance.pendingExpense,
+        )}.`,
       ],
       hechos: [
         `Proyectos bloqueados: ${blocked}. Tareas críticas abiertas: ${criticalTasks}. Tareas vencidas: ${overdueTasks}.`,
         `Decisiones estratégicas activas: ${activeDecisions}.`,
-        `Oportunidades sin seguimiento: ${sales.noFollowUpCount}.`,
         ...orgs.map(
           (o) =>
             `${o.name}: ${o._count.projects} proyectos, ${o._count.tasks} tareas.`,
@@ -161,23 +155,17 @@ export class HeuristicProvider implements AgentProvider {
             ]
           : []),
         ...(blocked > 0 ? [`${blocked} proyecto(s) bloqueado(s).`] : []),
-        ...(sales.noFollowUpCount > 0
-          ? [`${sales.noFollowUpCount} oportunidad(es) sin seguimiento.`]
-          : []),
       ],
       recomendaciones: [
         criticalTasks > 0
           ? `Atender primero las ${criticalTasks} tareas críticas abiertas.`
-          : 'No hay tareas críticas abiertas; mantener foco en el pipeline.',
-        sales.openCount > 0
-          ? 'Avanzar las oportunidades de mayor monto ponderado para asegurar el resultado.'
-          : 'Generar nuevas oportunidades comerciales.',
+          : 'No hay tareas críticas abiertas; mantener el foco en la operación.',
+        finance.pendingIncome > 0
+          ? 'Gestionar la cobranza de los ingresos pendientes para asegurar la caja.'
+          : 'Cobranza al día; mantener el control de gastos.',
       ],
       acciones: [
         ...(blocked > 0 ? ['Desbloquear los proyectos detenidos.'] : []),
-        ...(sales.noFollowUpCount > 0
-          ? ['Agendar seguimiento de las oportunidades sin próxima fecha.']
-          : []),
         'Revisar los vencimientos financieros y de tareas de la semana.',
       ],
       faltante: [
@@ -275,66 +263,6 @@ export class HeuristicProvider implements AgentProvider {
     return render(s);
   }
 
-  private async sales(orgId: string | null | undefined, used: string[]) {
-    const [summary, noFollowUp] = await Promise.all([
-      getSalesSummary(orgId || undefined),
-      callReadTool(
-        'getSalesOpportunities',
-        {},
-        { agentType: 'SALES', organizationId: orgId },
-      ),
-    ]);
-    used.push('getSalesOpportunities', 'getOrganizations');
-    const openList = (noFollowUp as any[]).filter(
-      (o) => !['WON', 'LOST'].includes(o.status),
-    );
-
-    const s: Section = {
-      resumen: [
-        `Pipeline abierto: ${summary.openCount} oportunidades por ${money.format(
-          summary.openAmount,
-        )} (ponderado ${money.format(summary.weightedAmount)}).`,
-        `Ganadas: ${summary.wonCount} · Perdidas: ${summary.lostCount}.`,
-      ],
-      hechos: [
-        `Oportunidades sin seguimiento: ${summary.noFollowUpCount}.`,
-        ...openList
-          .slice(0, 6)
-          .map(
-            (o) =>
-              `${o.opportunityName} (${o.organization?.name ?? '—'}): ${money.format(
-                o.estimatedAmount,
-              )}, ${o.probability}%, seguimiento ${date(o.nextFollowUpDate)}.`,
-          ),
-      ],
-      riesgos: [
-        ...(summary.noFollowUpCount > 0
-          ? [
-              `${summary.noFollowUpCount} oportunidad(es) sin próxima fecha de seguimiento: riesgo de enfriamiento.`,
-            ]
-          : []),
-      ],
-      recomendaciones: [
-        'Priorizar las oportunidades de mayor monto ponderado.',
-        summary.noFollowUpCount > 0
-          ? 'Definir próxima acción y fecha para las oportunidades sin seguimiento.'
-          : 'Mantener la cadencia de seguimiento del pipeline.',
-      ],
-      acciones: summary.upcomingFollowUps
-        .slice(0, 5)
-        .map(
-          (o) =>
-            `Seguimiento de "${o.opportunityName}" (${o.clientName}) el ${date(
-              o.nextFollowUpDate,
-            )}.`,
-        ),
-      faltante: [
-        'La probabilidad y los montos son estimaciones cargadas manualmente.',
-      ],
-    };
-    return render(s);
-  }
-
   private async projectRisks(orgId: string | null | undefined, used: string[]) {
     const [blocked, noNext, overdueTasks, criticalTasks] = await Promise.all([
       prisma.project.findMany({
@@ -413,11 +341,10 @@ export class HeuristicProvider implements AgentProvider {
   }
 
   private async weeklyPlan(orgId: string | null | undefined, used: string[]) {
-    const now = new Date();
     const in7 = new Date();
     in7.setDate(in7.getDate() + 7);
 
-    const [dueTasks, followUps, finance] = await Promise.all([
+    const [dueTasks, finance] = await Promise.all([
       prisma.task.findMany({
         where: orgWhere(orgId, {
           dueDate: { lte: in7 },
@@ -427,17 +354,9 @@ export class HeuristicProvider implements AgentProvider {
         include: { project: { select: { name: true } } },
         take: 15,
       }),
-      prisma.salesOpportunity.findMany({
-        where: orgWhere(orgId, {
-          nextFollowUpDate: { gte: now, lte: in7 },
-          status: { notIn: ['WON', 'LOST'] },
-        }),
-        orderBy: { nextFollowUpDate: 'asc' },
-        take: 10,
-      }),
       getFinanceSummary(orgId || undefined),
     ]);
-    used.push('getTasks', 'getSalesOpportunities', 'getFinancialSummary');
+    used.push('getTasks', 'getFinancialSummary');
 
     const finUpcoming = finance.upcomingFinancial.filter(
       (u) => u.dueDate && new Date(u.dueDate) <= in7,
@@ -445,7 +364,7 @@ export class HeuristicProvider implements AgentProvider {
 
     const s: Section = {
       resumen: [
-        `Plan para los próximos 7 días: ${dueTasks.length} tarea(s), ${followUps.length} seguimiento(s) comercial(es) y ${finUpcoming.length} vencimiento(s) financiero(s).`,
+        `Plan para los próximos 7 días: ${dueTasks.length} tarea(s) y ${finUpcoming.length} vencimiento(s) financiero(s).`,
       ],
       hechos: [
         ...dueTasks
@@ -456,12 +375,6 @@ export class HeuristicProvider implements AgentProvider {
                 t.dueDate,
               )} [${t.priority}].`,
           ),
-        ...followUps.map(
-          (o) =>
-            `Comercial: ${o.opportunityName} (${o.clientName}) — ${date(
-              o.nextFollowUpDate,
-            )}.`,
-        ),
       ],
       riesgos: [
         ...(finance.overdueExpense.count > 0
@@ -470,9 +383,9 @@ export class HeuristicProvider implements AgentProvider {
       ],
       recomendaciones: [
         'Bloquear tiempo para las tareas críticas y de alta prioridad primero.',
-        followUps.length
-          ? 'Confirmar los seguimientos comerciales de la semana.'
-          : 'Sin seguimientos comerciales agendados; generar oportunidades.',
+        finUpcoming.length
+          ? 'Atender los cobros y pagos que vencen esta semana.'
+          : 'Sin vencimientos financieros esta semana.',
       ],
       acciones: [
         ...finUpcoming
@@ -549,8 +462,6 @@ function detectIntent(message: string): QuickIntent | undefined {
   if (/\btech\b|tecnolog|software|alox|matris|vine/.test(m)) return 'tech-summary';
   if (/finanz|ingreso|gasto|resultado|caja|cobr|pag/.test(m))
     return 'financial-analysis';
-  if (/venta|comercial|oportunidad|pipeline|seguimiento/.test(m))
-    return 'sales-follow-up';
   if (/riesgo|bloque|proyecto/.test(m)) return 'project-risks';
   if (/semana|plan|priori/.test(m)) return 'weekly-plan';
   if (/document/.test(m)) return 'documents-recent';

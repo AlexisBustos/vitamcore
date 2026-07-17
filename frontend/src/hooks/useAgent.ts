@@ -110,6 +110,21 @@ export function useUpdateInsightStatus() {
   });
 }
 
+// ---- Motor de alertas ----
+export function useRunAlerts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.post<{ data: { active: number; created: number; updated: number; dismissed: number } }>(
+        '/alerts/run',
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['agent', 'insights'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+}
+
 // ---- Tareas propuestas ----
 export function useProposedTasks(
   filters: Record<string, string | undefined> = {},

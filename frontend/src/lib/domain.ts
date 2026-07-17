@@ -14,8 +14,6 @@ import type {
   Priority,
   ProjectStatus,
   RecurrenceFrequency,
-  SalesSource,
-  SalesStatus,
   TaskSource,
   TaskStatus,
 } from '@/types/domain';
@@ -70,29 +68,6 @@ export const taskSourceLabels: Record<TaskSource, string> = {
 };
 
 // ---- Sprint 2 ----
-
-export const salesStatus: Record<SalesStatus, Tone> = {
-  LEAD: { label: 'Lead', className: 'bg-slate-100 text-slate-600' },
-  CONTACTED: { label: 'Contactado', className: 'bg-sky-50 text-sky-700' },
-  MEETING_SCHEDULED: { label: 'Reunión agendada', className: 'bg-sky-50 text-sky-700' },
-  DIAGNOSIS_DONE: { label: 'Diagnóstico', className: 'bg-indigo-50 text-indigo-700' },
-  PROPOSAL_SENT: { label: 'Propuesta enviada', className: 'bg-violet-50 text-violet-700' },
-  NEGOTIATION: { label: 'Negociación', className: 'bg-amber-50 text-amber-700' },
-  WON: { label: 'Ganada', className: 'bg-emerald-50 text-emerald-700' },
-  LOST: { label: 'Perdida', className: 'bg-red-50 text-red-700' },
-  PAUSED: { label: 'Pausada', className: 'bg-slate-100 text-slate-500' },
-};
-
-export const salesSourceLabels: Record<SalesSource, string> = {
-  MANUAL: 'Manual',
-  REFERRAL: 'Referido',
-  EMAIL: 'Email',
-  MEETING: 'Reunión',
-  WEBSITE: 'Sitio web',
-  LINKEDIN: 'LinkedIn',
-  EXISTING_CLIENT: 'Cliente actual',
-  OTHER: 'Otro',
-};
 
 export const incomeStatus: Record<IncomeStatus, Tone> = {
   EXPECTED: { label: 'Esperado', className: 'bg-slate-100 text-slate-600' },
@@ -174,10 +149,6 @@ export const taskSourceOptions = Object.entries(taskSourceLabels).map(
 );
 
 // ---- Sprint 2 ----
-export const salesStatusOptions = toOptions(salesStatus);
-export const salesSourceOptions = Object.entries(salesSourceLabels).map(
-  ([value, label]) => ({ value, label }),
-);
 export const incomeStatusOptions = toOptions(incomeStatus);
 export const expenseStatusOptions = toOptions(expenseStatus);
 export const documentTypeOptions = toOptions(documentType);

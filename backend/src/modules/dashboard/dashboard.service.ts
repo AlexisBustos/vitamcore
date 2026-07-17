@@ -5,7 +5,6 @@
 import type { ProjectStatus, TaskStatus } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { getSummary as getFinanceSummary } from '../finance/finance.service';
-import { getSummary as getSalesSummary } from '../sales/sales.service';
 
 const PROJECT_STATUSES: ProjectStatus[] = [
   'IDEA',
@@ -105,11 +104,10 @@ export async function getSummary(organizationId?: string) {
     }),
   );
 
-  // Métricas ejecutivas del Sprint 2 (finanzas, ventas, documentos, decisiones).
-  const [finance, sales, recentDocuments, activeDecisions, revisitDecisions] =
+  // Métricas ejecutivas del Sprint 2 (finanzas, documentos, decisiones).
+  const [finance, recentDocuments, activeDecisions, revisitDecisions] =
     await Promise.all([
       getFinanceSummary(organizationId),
-      getSalesSummary(organizationId),
       prisma.document.findMany({
         where: orgFilter,
         orderBy: { createdAt: 'desc' },
@@ -147,10 +145,6 @@ export async function getSummary(organizationId?: string) {
       pendingExpense: finance.pendingExpense,
       overdueIncome: finance.overdueIncome.amount,
       overdueExpense: finance.overdueExpense.amount,
-      openOpportunities: sales.openCount,
-      openAmount: sales.openAmount,
-      weightedAmount: sales.weightedAmount,
-      noFollowUpOpportunities: sales.noFollowUpCount,
       activeDecisions,
       revisitDecisions,
     },
@@ -159,9 +153,7 @@ export async function getSummary(organizationId?: string) {
     projectsByOrganization,
     upcomingDueDates: upcoming,
     finance,
-    sales,
     recentDocuments,
-    upcomingFollowUps: sales.upcomingFollowUps,
   };
 }
 

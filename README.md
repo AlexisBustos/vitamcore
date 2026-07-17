@@ -1,6 +1,6 @@
 # VITAM CORE
 
-Plataforma interna privada de dirección ejecutiva para centralizar la gestión de **Vitam Healthcare** y **Vitam Tech**: proyectos, ventas, finanzas, gastos, ingresos, documentos, decisiones, tareas e información estratégica, con visión consolidada y visión separada por empresa.
+Plataforma interna privada de dirección ejecutiva para centralizar la gestión de **Vitam Healthcare** y **Vitam Tech**: proyectos, finanzas, gastos, ingresos, documentos, decisiones, tareas e información estratégica, con visión consolidada y visión separada por empresa.
 
 > Uso privado / individual (CEO). No es un SaaS. Esta es la base técnica del **Sprint 0**.
 
@@ -165,9 +165,6 @@ Abre `http://localhost:5173` y entra con las credenciales del seed:
 | POST   | `/api/tasks`               | Crea tarea                               | Sí   |
 | PATCH  | `/api/tasks/:id`           | Actualiza / cambia estado                | Sí   |
 | DELETE | `/api/tasks/:id`           | Elimina tarea                            | Sí   |
-| GET    | `/api/sales`               | Lista oportunidades (filtros varios)     | Sí   |
-| GET    | `/api/sales/summary`       | KPIs del pipeline (`?organizationId`)    | Sí   |
-| POST/PATCH/DELETE | `/api/sales[/:id]` | CRUD de oportunidades                    | Sí   |
 | GET/POST/PATCH/DELETE | `/api/income[/:id]` | CRUD de ingresos                     | Sí   |
 | GET/POST/PATCH/DELETE | `/api/expenses[/:id]` | CRUD de gastos                     | Sí   |
 | GET    | `/api/finance/summary`     | Resumen financiero (`?organizationId`)   | Sí   |
@@ -176,10 +173,11 @@ Abre `http://localhost:5173` y entra con las credenciales del seed:
 | POST   | `/api/agent/chat`          | Envía un mensaje al agente ejecutivo     | Sí   |
 | GET    | `/api/agent/status`        | Estado del agente (proveedor, modelo)    | Sí   |
 | GET    | `/api/agent/conversations` | Lista/obtiene conversaciones (`/:id`)    | Sí   |
-| POST   | `/api/agent/quick-actions/*` | 7 acciones rápidas (resúmenes, análisis) | Sí   |
+| POST   | `/api/agent/quick-actions/*` | 6 acciones rápidas (resúmenes, análisis) | Sí   |
 | GET/POST | `/api/agent/insights`    | Lista/crea insights; `PATCH /:id/status` | Sí   |
 | GET/POST | `/api/agent/proposed-tasks` | Tareas propuestas; `/:id/approve\|reject\|convert` | Sí |
 | GET/POST | `/api/agent/reports`     | Lista/genera reportes ejecutivos         | Sí   |
+| POST   | `/api/alerts/run`          | Ejecuta el motor de alertas (→ insights) | Sí   |
 | GET    | `/api/dashboard/summary`   | Métricas (`?organizationId` opcional)    | Sí   |
 
 > **Agent Layer (IA Ejecutiva):** la clave del proveedor IA vive **solo en el backend**
@@ -189,7 +187,6 @@ Abre `http://localhost:5173` y entra con las credenciales del seed:
 Filtros disponibles por query string:
 - **projects**: `organizationId`, `businessUnitId`, `status`, `priority`
 - **tasks**: `organizationId`, `businessUnitId`, `projectId`, `status`, `priority`, `overdue`
-- **sales**: `organizationId`, `businessUnitId`, `projectId`, `status`, `productOrService`, `minProbability`, `noFollowUp`
 - **income / expenses**: `organizationId`, `businessUnitId`, `projectId`, `category`, `status`, `isRecurring`
 - **documents**: `organizationId`, `businessUnitId`, `projectId`, `documentType`, `status`, `clientName`
 - **decisions**: `organizationId`, `businessUnitId`, `projectId`, `status`

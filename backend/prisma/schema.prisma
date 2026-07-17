@@ -77,31 +77,6 @@ enum TaskSource {
 
 // --- Sprint 2 ---
 
-/// Etapas del pipeline comercial.
-enum SalesStatus {
-  LEAD
-  CONTACTED
-  MEETING_SCHEDULED
-  DIAGNOSIS_DONE
-  PROPOSAL_SENT
-  NEGOTIATION
-  WON
-  LOST
-  PAUSED
-}
-
-/// Origen de una oportunidad comercial.
-enum SalesSource {
-  MANUAL
-  REFERRAL
-  EMAIL
-  MEETING
-  WEBSITE
-  LINKEDIN
-  EXISTING_CLIENT
-  OTHER
-}
-
 /// Estado de un ingreso.
 enum IncomeStatus {
   EXPECTED
@@ -308,7 +283,6 @@ model Organization {
   businessUnits          BusinessUnit[]
   projects               Project[]
   tasks                  Task[]
-  salesOpportunities     SalesOpportunity[]
   incomeRecords          IncomeRecord[]
   expenseRecords         ExpenseRecord[]
   bankAccounts           BankAccount[]
@@ -337,7 +311,6 @@ model BusinessUnit {
   organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   projects           Project[]
   tasks              Task[]
-  salesOpportunities SalesOpportunity[]
   incomeRecords      IncomeRecord[]
   expenseRecords     ExpenseRecord[]
   documents          Document[]
@@ -371,7 +344,6 @@ model Project {
   businessUnit       BusinessUnit?       @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
   owner              User?               @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   tasks              Task[]
-  salesOpportunities SalesOpportunity[]
   incomeRecords      IncomeRecord[]
   expenseRecords     ExpenseRecord[]
   documents          Document[]
@@ -544,40 +516,6 @@ model TaskActivity {
 // (CLP por defecto, sin decimales). Es un control ejecutivo, no
 // contabilidad: suficiente y evita problemas de serialización.
 // ---------------------------------------------------------
-
-/// Oportunidad comercial (pipeline de ventas).
-model SalesOpportunity {
-  id                String      @id @default(cuid())
-  organizationId    String
-  businessUnitId    String?
-  projectId         String?
-  clientName        String
-  contactName       String?
-  contactEmail      String?
-  contactPhone      String?
-  opportunityName   String
-  productOrService  String?
-  estimatedAmount   Int         @default(0)
-  currency          String      @default("CLP")
-  probability       Int         @default(0)
-  status            SalesStatus @default(LEAD)
-  expectedCloseDate DateTime?
-  nextAction        String?
-  nextFollowUpDate  DateTime?
-  source            SalesSource @default(MANUAL)
-  notes             String?
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
-
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  businessUnit BusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
-  project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
-
-  @@index([organizationId])
-  @@index([status])
-  @@index([nextFollowUpDate])
-  @@map("sales_opportunities")
-}
 
 /// Cliente (razón social + RUT) consolidado por empresa.
 /// Se crea/actualiza automáticamente al importar reportes de ventas.
@@ -931,12 +869,17 @@ model AgentInsight {
   priority       Priority      @default(MEDIUM)
   status         InsightStatus @default(NEW)
   sourceData     Json?
+  // Clave estable para idempotencia del motor de alertas determinístico
+  // (p. ej. "alert:overdue-receivable:<orgId>"). Null en insights de IA/manuales.
+  // No es único: permite volver a alertar tras un DISMISSED previo.
+  dedupeKey      String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
   @@index([status])
   @@index([agentType])
   @@index([organizationId])
+  @@index([dedupeKey])
   @@map("agent_insights")
 }
 

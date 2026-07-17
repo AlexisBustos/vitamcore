@@ -62,3 +62,20 @@ CRON_TZ=America/Santiago
 
 > Mientras no haya `RESEND_API_KEY`, el cron corre igual y solo persiste + loguea
 > (no envía). Es seguro dejarlo instalado desde ya.
+
+## Motor de alertas (cron diario)
+
+Reglas determinísticas (sin IA) que revisan finanzas, tareas y proyectos y
+materializan cada hallazgo como un `AgentInsight` (visible en el dashboard y en
+`/ia`). No envía correo: las alertas se ven en la app y se resumen en el informe
+semanal (el informe además refresca las alertas antes de generarse).
+
+- Idempotente: no duplica alertas; si la condición desaparece, la alerta `NEW` se
+  auto-descarta (`DISMISSED`). Las que el usuario marcó revisada/accionada no se tocan.
+- Ejecución manual: `POST /api/alerts/run` (admin) o `npm run alerts:generate`.
+
+Cron diario sugerido (07:00 Chile), junto al del informe:
+
+```cron
+0 7 * * * cd /home/vitam/apps/vitamcore/backend && /usr/bin/npx tsx scripts/alerts-generate.ts >> /home/vitam/backups/vitamcore/alertas.log 2>&1
+```

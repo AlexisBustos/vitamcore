@@ -141,12 +141,6 @@ const QUICK_ACTIONS: Record<
     prompt: 'Realiza un análisis financiero ejecutivo.',
     title: 'Análisis financiero',
   },
-  'sales-follow-up': {
-    intent: 'sales-follow-up',
-    agentType: 'SALES',
-    prompt: 'Analiza el pipeline comercial y los seguimientos pendientes.',
-    title: 'Seguimiento comercial',
-  },
   'project-risks': {
     intent: 'project-risks',
     agentType: 'PROJECT',

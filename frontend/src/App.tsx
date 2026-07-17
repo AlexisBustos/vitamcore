@@ -10,7 +10,6 @@ import { OrganizationDetailPage } from '@/pages/organizations/OrganizationDetail
 import { ProjectsPage } from '@/pages/projects/ProjectsPage';
 import { ProjectDetailPage } from '@/pages/projects/ProjectDetailPage';
 import { TasksPage } from '@/pages/tasks/TasksPage';
-import { SalesPage } from '@/pages/sales/SalesPage';
 import { ClientsPage } from '@/pages/clients/ClientsPage';
 import { ClientDetailPage } from '@/pages/clients/ClientDetailPage';
 import { VendorsPage } from '@/pages/vendors/VendorsPage';
@@ -47,7 +46,6 @@ export default function App() {
             <Route index element={<DashboardPage />} />
             <Route path="/empresas" element={<OrganizationsPage />} />
             <Route path="/empresas/:id" element={<OrganizationDetailPage />} />
-            <Route path="/ventas" element={<SalesPage />} />
             <Route path="/clientes" element={<ClientsPage />} />
             <Route path="/clientes/:id" element={<ClientDetailPage />} />
             <Route path="/proveedores" element={<VendorsPage />} />

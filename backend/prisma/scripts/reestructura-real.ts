@@ -42,7 +42,6 @@ async function main() {
     TRUNCATE TABLE
       "business_units", "projects", "tasks", "task_labels", "checklist_items",
       "task_comments", "task_activity", "labels",
-      "sales_opportunities",
       "income_records", "expense_records", "clients", "vendors",
       "bank_accounts", "bank_transactions", "financial_import_batches",
       "bank_categories", "bank_category_rules",
@@ -85,7 +84,7 @@ async function main() {
   await ensureUnits(tech.id, TECH_UNITS);
 
   // 5) Reporte.
-  const [orgs, users, hUnits, tUnits, proj, tasks, income, expense, sales] =
+  const [orgs, users, hUnits, tUnits, proj, tasks, income, expense] =
     await Promise.all([
       prisma.organization.count(),
       prisma.user.count(),
@@ -95,14 +94,13 @@ async function main() {
       prisma.task.count(),
       prisma.incomeRecord.count(),
       prisma.expenseRecord.count(),
-      prisma.salesOpportunity.count(),
     ]);
 
   console.log('Reestructuración completada.');
   console.log(`  Empresas: ${orgs} | Usuarios: ${users}`);
   console.log(`  Unidades Vitam Healthcare: ${hUnits} | Vitam Tech: ${tUnits}`);
   console.log(
-    `  Data transaccional (debe ser 0): proyectos=${proj} tareas=${tasks} ingresos=${income} gastos=${expense} ventas=${sales}`,
+    `  Data transaccional (debe ser 0): proyectos=${proj} tareas=${tasks} ingresos=${income} gastos=${expense}`,
   );
 }
 

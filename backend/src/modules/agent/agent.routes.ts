@@ -46,10 +46,6 @@ agentRouter.post(
   asyncHandler(quickActionController('financial-analysis')),
 );
 agentRouter.post(
-  '/quick-actions/sales-follow-up',
-  asyncHandler(quickActionController('sales-follow-up')),
-);
-agentRouter.post(
   '/quick-actions/project-risks',
   asyncHandler(quickActionController('project-risks')),
 );

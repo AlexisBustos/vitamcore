@@ -11,8 +11,6 @@ import {
   FolderKanban,
   Flame,
   Gavel,
-  Target,
-  TrendingUp,
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
@@ -33,8 +31,17 @@ import { getErrorMessage } from '@/lib/errors';
 import { useOrganizations } from '@/hooks/useOrganizations';
 import { useDashboard } from '@/hooks/useDashboard';
 import { useTasks } from '@/hooks/useTasks';
+import { useInsights, useRunAlerts } from '@/hooks/useAgent';
 import { useAuth } from '@/context/AuthContext';
-import type { ProjectStatus, TaskStatus } from '@/types/domain';
+import type { Priority, ProjectStatus, TaskStatus } from '@/types/domain';
+
+// Orden de severidad para las alertas del motor (mayor primero).
+const PRIORITY_RANK: Record<Priority, number> = {
+  CRITICAL: 3,
+  HIGH: 2,
+  MEDIUM: 1,
+  LOW: 0,
+};
 
 export function DashboardPage() {
   const [orgId, setOrgId] = useState<string | undefined>(undefined);
@@ -59,6 +66,17 @@ export function DashboardPage() {
       })
       .slice(0, 8);
   }, [myTasksRaw, user?.id]);
+
+  // Alertas activas del motor determinístico (insights NEW con dedupeKey "alert:").
+  const runAlerts = useRunAlerts();
+  const { data: insightsRaw } = useInsights({ status: 'NEW' });
+  const alerts = useMemo(
+    () =>
+      (insightsRaw ?? [])
+        .filter((i) => i.dedupeKey?.startsWith('alert:'))
+        .sort((a, b) => PRIORITY_RANK[b.priority] - PRIORITY_RANK[a.priority]),
+    [insightsRaw],
+  );
 
   const tabs = useMemo(
     () => [
@@ -135,7 +153,54 @@ export function DashboardPage() {
             />
           </div>
 
-          {/* Métricas financieras y comerciales */}
+          {/* Alertas activas (motor determinístico) */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-[var(--color-danger)]" />
+                <CardTitle>Alertas activas</CardTitle>
+                {alerts.length > 0 && (
+                  <span className="rounded-full bg-[var(--color-danger)]/10 px-2 py-0.5 text-xs font-medium text-[var(--color-danger)]">
+                    {alerts.length}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => runAlerts.mutate()}
+                disabled={runAlerts.isPending}
+                className="text-xs text-[var(--color-accent)] hover:underline disabled:opacity-50"
+              >
+                {runAlerts.isPending ? 'Actualizando…' : 'Actualizar'}
+              </button>
+            </CardHeader>
+            <CardContent>
+              {alerts.length === 0 ? (
+                <EmptyState title="Sin alertas activas" />
+              ) : (
+                <div className="divide-y divide-[var(--color-border)]">
+                  {alerts.map((a) => (
+                    <Link
+                      key={a.id}
+                      to="/ia"
+                      className="flex items-start justify-between gap-3 py-2.5 hover:bg-[var(--color-muted)]/40"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-[var(--color-foreground)]">
+                          {a.title}
+                        </p>
+                        <p className="text-xs text-[var(--color-muted-foreground)]">
+                          {a.summary}
+                        </p>
+                      </div>
+                      <PriorityBadge value={a.priority} />
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Métricas financieras */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <MetricCard
               title="Ingresos del mes"
@@ -160,33 +225,7 @@ export function DashboardPage() {
             />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricCard
-              title="Ventas abiertas"
-              value={String(data.totals.openOpportunities)}
-              hint={formatMoney(data.totals.openAmount)}
-              icon={TrendingUp}
-            />
-            <MetricCard
-              title="Monto ponderado"
-              value={formatMoney(data.totals.weightedAmount)}
-              icon={Target}
-              hint="por probabilidad"
-            />
-            <MetricCard
-              title="Sin seguimiento"
-              value={String(data.totals.noFollowUpOpportunities)}
-              tone={data.totals.noFollowUpOpportunities > 0 ? 'warning' : 'default'}
-            />
-            <MetricCard
-              title="Decisiones activas"
-              value={String(data.totals.activeDecisions)}
-              hint={`${data.totals.revisitDecisions} por revisar`}
-              icon={Gavel}
-            />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <MetricCard
               title="Por cobrar"
               value={formatMoney(data.totals.pendingIncome)}
@@ -204,6 +243,12 @@ export function DashboardPage() {
               title="Gastos vencidos"
               value={formatMoney(data.totals.overdueExpense)}
               tone={data.totals.overdueExpense > 0 ? 'danger' : 'default'}
+            />
+            <MetricCard
+              title="Decisiones activas"
+              value={String(data.totals.activeDecisions)}
+              hint={`${data.totals.revisitDecisions} por revisar`}
+              icon={Gavel}
             />
           </div>
 
@@ -350,85 +395,41 @@ export function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Próximos seguimientos comerciales + documentos recientes */}
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card>
-              <CardHeader className="flex flex-row items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-[var(--color-accent)]" />
-                <CardTitle>Próximos seguimientos comerciales</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {data.upcomingFollowUps.length === 0 ? (
-                  <EmptyState title="Sin seguimientos próximos" />
-                ) : (
-                  <div className="divide-y divide-[var(--color-border)]">
-                    {data.upcomingFollowUps.map((o) => (
-                      <div
-                        key={o.id}
-                        className="flex items-center justify-between py-2.5"
-                      >
-                        <div>
-                          <p className="text-sm font-medium text-[var(--color-foreground)]">
-                            {o.opportunityName}
-                          </p>
-                          <p className="text-xs text-[var(--color-muted-foreground)]">
-                            {o.clientName}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm text-[var(--color-foreground)]">
-                            {formatMoney(o.estimatedAmount)}
-                          </p>
-                          <p className="text-xs text-[var(--color-muted-foreground)]">
-                            {formatDate(o.nextFollowUpDate)}
-                          </p>
-                        </div>
+          {/* Documentos recientes */}
+          <Card>
+            <CardHeader className="flex flex-row items-center gap-2">
+              <FileText className="h-4 w-4 text-[var(--color-accent)]" />
+              <CardTitle>Documentos recientes</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {data.recentDocuments.length === 0 ? (
+                <EmptyState title="Sin documentos" />
+              ) : (
+                <div className="divide-y divide-[var(--color-border)]">
+                  {data.recentDocuments.map((d) => (
+                    <div
+                      key={d.id}
+                      className="flex items-center justify-between py-2.5"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-[var(--color-foreground)]">
+                          {d.title}
+                        </p>
+                        <p className="text-xs text-[var(--color-muted-foreground)]">
+                          {d.organization.name} · {documentTypeMap[d.documentType].label}
+                        </p>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center gap-2">
-                <FileText className="h-4 w-4 text-[var(--color-accent)]" />
-                <CardTitle>Documentos recientes</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {data.recentDocuments.length === 0 ? (
-                  <EmptyState title="Sin documentos" />
-                ) : (
-                  <div className="divide-y divide-[var(--color-border)]">
-                    {data.recentDocuments.map((d) => (
-                      <div
-                        key={d.id}
-                        className="flex items-center justify-between py-2.5"
-                      >
-                        <div>
-                          <p className="text-sm font-medium text-[var(--color-foreground)]">
-                            {d.title}
-                          </p>
-                          <p className="text-xs text-[var(--color-muted-foreground)]">
-                            {d.organization.name} · {documentTypeMap[d.documentType].label}
-                          </p>
-                        </div>
-                        <span className="text-xs text-[var(--color-muted-foreground)]">
-                          {formatDate(d.createdAt)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                      <span className="text-xs text-[var(--color-muted-foreground)]">
+                        {formatDate(d.createdAt)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           <p className="text-right text-xs text-[var(--color-muted-foreground)]">
-            <Link to="/ventas" className="hover:text-[var(--color-accent)]">
-              Ventas
-            </Link>
-            {' · '}
             <Link to="/finanzas" className="hover:text-[var(--color-accent)]">
               Finanzas
             </Link>

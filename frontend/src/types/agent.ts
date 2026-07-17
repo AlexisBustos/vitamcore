@@ -93,6 +93,8 @@ export interface AgentInsight {
   recommendation: string | null;
   priority: Priority;
   status: InsightStatus;
+  /** Presente solo en alertas del motor determinístico (prefijo "alert:"). */
+  dedupeKey?: string | null;
   createdAt: string;
   updatedAt: string;
 }

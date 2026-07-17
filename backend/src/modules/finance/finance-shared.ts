@@ -119,3 +119,61 @@ export async function computeOverdue(organizationId?: string): Promise<{
     },
   };
 }
+
+/**
+ * Por cobrar / por pagar que vencen en los próximos `days` días (ventana
+ * [ahora, ahora + days]). Espejo de computeOverdue pero hacia adelante; usa los
+ * mismos filtros de pendientes para no divergir. Reusado por el motor de alertas.
+ */
+export async function computeUpcoming(
+  organizationId: string | undefined,
+  days: number,
+): Promise<{
+  upcomingReceivable: { amount: number; count: number };
+  upcomingPayable: { amount: number; count: number };
+}> {
+  const orgFilter = organizationId ? { organizationId } : {};
+  const now = new Date();
+  const until = new Date(now.getTime() + days * 86_400_000);
+  const window = { gte: now, lte: until };
+  const [upcomingSales, upcomingManual, upcomingExpense] = await Promise.all([
+    prisma.incomeRecord.aggregate({
+      _sum: { netAmount: true },
+      _count: { _all: true },
+      where: {
+        ...orgFilter,
+        documentKind: { not: 'CREDIT_NOTE' },
+        status: { not: 'CANCELLED' },
+        paidDate: null,
+        netAmount: { gt: 0 },
+        dueDate: window,
+      },
+    }),
+    prisma.incomeRecord.aggregate({
+      _sum: { amount: true },
+      _count: { _all: true },
+      where: {
+        ...orgFilter,
+        documentKind: { not: 'CREDIT_NOTE' },
+        netAmount: null,
+        status: { in: INCOME_PENDING },
+        dueDate: window,
+      },
+    }),
+    prisma.expenseRecord.aggregate({
+      _sum: { amount: true },
+      _count: { _all: true },
+      where: { ...orgFilter, dueDate: window, status: { in: EXPENSE_PENDING } },
+    }),
+  ]);
+  return {
+    upcomingReceivable: {
+      count: upcomingSales._count._all + upcomingManual._count._all,
+      amount: (upcomingSales._sum.netAmount ?? 0) + (upcomingManual._sum.amount ?? 0),
+    },
+    upcomingPayable: {
+      count: upcomingExpense._count._all,
+      amount: upcomingExpense._sum.amount ?? 0,
+    },
+  };
+}

@@ -18,8 +18,6 @@ import {
   Priority,
   TaskStatus,
   TaskSource,
-  SalesStatus,
-  SalesSource,
   IncomeStatus,
   ExpenseStatus,
   DocumentType,
@@ -394,90 +392,7 @@ async function main() {
     });
   }
 
-  // ===== Sprint 2: ventas, finanzas, documentos, decisiones =====
-
-  // --- Oportunidades comerciales ---
-  if ((await prisma.salesOpportunity.count()) === 0) {
-    await prisma.salesOpportunity.createMany({
-      data: [
-        {
-          organizationId: healthcare.id,
-          businessUnitId: hUnitIds['Operativos Empresas'],
-          projectId: projectIds['Operativo Cardiometabólico Empresas'],
-          clientName: 'Empresa Minera Regional',
-          contactName: 'Gerente de Personas',
-          opportunityName: 'Operativo Cardiometabólico Empresas',
-          productOrService: 'Operativo de salud',
-          estimatedAmount: 18000000,
-          probability: 60,
-          status: SalesStatus.PROPOSAL_SENT,
-          source: SalesSource.MEETING,
-          nextAction: 'Enviar propuesta ajustada con dotación final.',
-          nextFollowUpDate: daysFromNow(4),
-          expectedCloseDate: daysFromNow(25),
-        },
-        {
-          organizationId: tech.id,
-          businessUnitId: tUnitIds['Productos SaaS'],
-          projectId: projectIds['Alox'],
-          clientName: 'Mutual de Seguridad',
-          contactName: 'Jefe de Innovación',
-          opportunityName: 'Alox para Mutual',
-          productOrService: 'Licencia Alox',
-          estimatedAmount: 32000000,
-          probability: 50,
-          status: SalesStatus.NEGOTIATION,
-          source: SalesSource.REFERRAL,
-          nextAction: 'Reunión de cierre comercial.',
-          nextFollowUpDate: daysFromNow(2),
-          expectedCloseDate: daysFromNow(20),
-        },
-        {
-          organizationId: tech.id,
-          businessUnitId: tUnitIds['Productos SaaS'],
-          projectId: projectIds['Matris SHE'],
-          clientName: 'Weir Minerals',
-          opportunityName: 'Matris SHE para Weir',
-          productOrService: 'Matris SHE',
-          estimatedAmount: 24000000,
-          probability: 70,
-          status: SalesStatus.DIAGNOSIS_DONE,
-          source: SalesSource.EXISTING_CLIENT,
-          nextAction: 'Presentar resultados del diagnóstico.',
-          nextFollowUpDate: daysFromNow(6),
-          expectedCloseDate: daysFromNow(30),
-        },
-        {
-          organizationId: healthcare.id,
-          businessUnitId: hUnitIds['Convenios'],
-          clientName: 'Municipalidad de Casablanca',
-          opportunityName: 'Convenios Empresa Casablanca',
-          productOrService: 'Convenio de atención',
-          estimatedAmount: 9000000,
-          probability: 40,
-          status: SalesStatus.CONTACTED,
-          source: SalesSource.MANUAL,
-          nextAction: 'Agendar reunión con dirección municipal.',
-          // Sin próxima fecha de seguimiento (aparece como "sin seguimiento").
-          expectedCloseDate: daysFromNow(45),
-        },
-        {
-          organizationId: tech.id,
-          businessUnitId: tUnitIds['Comercial Tech'],
-          clientName: 'Empresas Regionales (paquete)',
-          opportunityName: 'Alox + Vine + Matris para empresas regionales',
-          productOrService: 'Paquete plataformas',
-          estimatedAmount: 48000000,
-          probability: 35,
-          status: SalesStatus.LEAD,
-          source: SalesSource.LINKEDIN,
-          nextAction: 'Calificar lead y detectar decisor.',
-          nextFollowUpDate: daysFromNow(9),
-          expectedCloseDate: daysFromNow(60),
-        },
-      ],
-    });
-  }
+  // ===== Sprint 2: finanzas, documentos, decisiones =====
 
   // --- Ingresos ---
   if ((await prisma.incomeRecord.count()) === 0) {
@@ -682,13 +597,12 @@ async function main() {
     });
   }
 
-  const [orgs, units, projects, tasks, sales, income, expenses, docs, decisions] =
+  const [orgs, units, projects, tasks, income, expenses, docs, decisions] =
     await Promise.all([
       prisma.organization.count(),
       prisma.businessUnit.count(),
       prisma.project.count(),
       prisma.task.count(),
-      prisma.salesOpportunity.count(),
       prisma.incomeRecord.count(),
       prisma.expenseRecord.count(),
       prisma.document.count(),
@@ -699,7 +613,7 @@ async function main() {
   console.log(`  Usuario CEO: ${CEO_EMAIL} / ${CEO_PASSWORD}`);
   console.log(`  Usuario Colaborador: ${COLLAB_EMAIL} / ${COLLAB_PASSWORD}`);
   console.log(`  Empresas: ${orgs} | Unidades: ${units} | Proyectos: ${projects} | Tareas: ${tasks}`);
-  console.log(`  Ventas: ${sales} | Ingresos: ${income} | Gastos: ${expenses} | Documentos: ${docs} | Decisiones: ${decisions}`);
+  console.log(`  Ingresos: ${income} | Gastos: ${expenses} | Documentos: ${docs} | Decisiones: ${decisions}`);
 }
 
 main()

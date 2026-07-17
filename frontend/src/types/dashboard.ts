@@ -1,11 +1,10 @@
 /**
  * Tipos del resumen ejecutivo del dashboard.
- * Agrega datos de proyectos, tareas, finanzas y ventas.
+ * Agrega datos de proyectos, tareas y finanzas.
  */
 
 import type { ProjectStatus, TaskStatus, OrganizationType, Priority, Ref, DocumentType } from './core';
 import type { FinanceSummary } from './finance';
-import type { SalesSummary, SalesOpportunity } from './sales';
 
 export interface DashboardSummary {
   totals: {
@@ -23,10 +22,6 @@ export interface DashboardSummary {
     pendingExpense: number;
     overdueIncome: number;
     overdueExpense: number;
-    openOpportunities: number;
-    openAmount: number;
-    weightedAmount: number;
-    noFollowUpOpportunities: number;
     activeDecisions: number;
     revisitDecisions: number;
   };
@@ -48,7 +43,6 @@ export interface DashboardSummary {
     project: Ref | null;
   }[];
   finance: FinanceSummary;
-  sales: SalesSummary;
   recentDocuments: {
     id: string;
     title: string;
@@ -56,5 +50,4 @@ export interface DashboardSummary {
     createdAt: string;
     organization: Ref;
   }[];
-  upcomingFollowUps: SalesOpportunity[];
 }

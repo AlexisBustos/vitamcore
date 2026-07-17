@@ -63,7 +63,7 @@ Convenciones transversales:
 Capa de IA ejecutiva con detalle propio en `docs/AGENT.md`. Puntos críticos:
 - La **API key del proveedor IA vive solo en el backend** (`AGENT_API_KEY`) y nunca se expone al frontend.
 - Dos providers intercambiables tras la interfaz `AgentProvider` (`providers/types.ts`): `AnthropicProvider` (Claude, `@anthropic-ai/sdk`, modelo `claude-opus-4-8` por defecto, loop de tool-use real) y `HeuristicProvider` (determinístico, **sin API key, es el modo por defecto**). Si `AGENT_PROVIDER=anthropic` pero falta la key, cae automáticamente a heurístico.
-- El `orchestrator.ts` construye contexto, ejecuta el provider y persiste conversaciones/mensajes. Las **internal tools** (`tools.ts`) son funciones read sobre datos reales y un conjunto acotado de write tools (`createAIInsight`, `proposeTask`, `createExecutiveReport`) que solo se exponen al modelo si `AGENT_ALLOW_WRITE_ACTIONS=true`. **No existe ninguna tool destructiva** (borrar, modificar finanzas/ventas, cerrar oportunidades). Las tareas propuestas quedan en estado `PROPOSED` hasta aprobación manual.
+- El `orchestrator.ts` construye contexto, ejecuta el provider y persiste conversaciones/mensajes. Las **internal tools** (`tools.ts`) son funciones read sobre datos reales y un conjunto acotado de write tools (`createAIInsight`, `proposeTask`, `createExecutiveReport`) que solo se exponen al modelo si `AGENT_ALLOW_WRITE_ACTIONS=true`. **No existe ninguna tool destructiva** (borrar o modificar finanzas). Las tareas propuestas quedan en estado `PROPOSED` hasta aprobación manual.
 
 ## Arquitectura frontend (React + Vite + TanStack Query)
 
@@ -75,7 +75,7 @@ Capa de IA ejecutiva con detalle propio en `docs/AGENT.md`. Puntos críticos:
 
 ## Modelo de datos
 
-Definido en `backend/prisma/schema.prisma` (PostgreSQL). Jerarquía central: `Organization` → `BusinessUnit` → `Project` → `Task`, con módulos ejecutivos (`Sale`, `Income`, `Expense`, `Document`, `Decision`) que cuelgan de la empresa y opcionalmente de unidad/proyecto. La capa de agente añade `AIConversation`, `AIMessage`, `AIInsight`, `ProposedTask`, `ExecutiveReport`. Las migraciones están versionadas por sprint en `prisma/migrations/`.
+Definido en `backend/prisma/schema.prisma` (PostgreSQL). Jerarquía central: `Organization` → `BusinessUnit` → `Project` → `Task`, con módulos ejecutivos (`Income`, `Expense`, `Document`, `Decision`) que cuelgan de la empresa y opcionalmente de unidad/proyecto. La capa de agente añade `AIConversation`, `AIMessage`, `AIInsight`, `ProposedTask`, `ExecutiveReport`. Las migraciones están versionadas por sprint en `prisma/migrations/`.
 
 ## Documentación de referencia
 

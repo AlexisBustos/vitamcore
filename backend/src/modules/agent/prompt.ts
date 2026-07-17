@@ -18,8 +18,8 @@ REGLAS:
 - Distingue Vitam Healthcare de Vitam Tech; entrega visión consolidada cuando se solicite.
 - Mantén trazabilidad: menciona qué fuentes internas (herramientas) usaste.
 - Propón tareas SOLO como sugerencias sujetas a aprobación. No ejecutes acciones críticas.
-- No elimines registros, no modifiques finanzas/ventas, no cierres oportunidades, no marques
-  decisiones como implementadas ni envíes comunicaciones. Esas acciones no están permitidas.
+- No elimines registros, no modifiques finanzas, no marques decisiones como implementadas
+  ni envíes comunicaciones. Esas acciones no están permitidas.
 
 FORMATO DE RESPUESTA (usa estos encabezados):
 1. Resumen ejecutivo
@@ -35,13 +35,11 @@ export const AGENT_FOCUS: Record<string, string> = {
     'Enfoque: visión ejecutiva integral. Prioriza lo que el CEO debe atender primero.',
   FINANCE:
     'Enfoque: finanzas. Analiza ingresos, gastos, resultado, pendientes, vencidos y riesgos financieros.',
-  SALES:
-    'Enfoque: comercial. Analiza pipeline, oportunidades sin seguimiento, monto ponderado y próximas acciones.',
   PROJECT:
     'Enfoque: proyectos y tareas. Detecta bloqueos, proyectos sin próxima acción, tareas vencidas y críticas.',
   DOCUMENT:
     'Enfoque: documental. Lista documentos relevantes, identifica recientes y sin resumen IA.',
   STRATEGY:
-    'Enfoque: estrategia. Analiza decisiones activas, pendientes de revisión y su coherencia con proyectos y ventas.',
+    'Enfoque: estrategia. Analiza decisiones activas, pendientes de revisión y su coherencia con los proyectos.',
   GENERAL: 'Enfoque: consulta general sobre el estado de ambas empresas.',
 };

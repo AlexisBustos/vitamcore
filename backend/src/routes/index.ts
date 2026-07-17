@@ -13,7 +13,6 @@ import { projectsRouter } from '../modules/projects/projects.routes';
 import { tasksRouter } from '../modules/tasks/tasks.routes';
 import { assigneesRouter } from '../modules/assignees/assignees.routes';
 import { labelsRouter } from '../modules/labels/labels.routes';
-import { salesRouter } from '../modules/sales/sales.routes';
 import { incomeRouter } from '../modules/income/income.routes';
 import { expensesRouter } from '../modules/expenses/expenses.routes';
 import { financeRouter } from '../modules/finance/finance.routes';
@@ -26,6 +25,7 @@ import { vendorsRouter } from '../modules/vendors/vendors.routes';
 import { documentsRouter } from '../modules/documents/documents.routes';
 import { decisionsRouter } from '../modules/decisions/decisions.routes';
 import { agentRouter } from '../modules/agent/agent.routes';
+import { alertsRouter } from '../modules/alerts/alerts.routes';
 import { dashboardRouter } from '../modules/dashboard/dashboard.routes';
 import { usersRouter } from '../modules/users/users.routes';
 import { reportsRouter } from '../modules/reports/reports.routes';
@@ -55,7 +55,6 @@ apiRouter.use('/business-units', requireAuth, referenceAccess, businessUnitsRout
 
 // Solo admin (CEO/ADMIN): todo lo demás.
 const adminOnly = requireRole(...ADMIN_ROLES);
-apiRouter.use('/sales', requireAuth, adminOnly, salesRouter);
 apiRouter.use('/income', requireAuth, adminOnly, incomeRouter);
 apiRouter.use('/expenses', requireAuth, adminOnly, expensesRouter);
 apiRouter.use('/finance', requireAuth, adminOnly, financeRouter);
@@ -68,6 +67,7 @@ apiRouter.use('/vendors', requireAuth, adminOnly, vendorsRouter);
 apiRouter.use('/documents', requireAuth, adminOnly, documentsRouter);
 apiRouter.use('/decisions', requireAuth, adminOnly, decisionsRouter);
 apiRouter.use('/agent', requireAuth, adminOnly, agentRouter);
+apiRouter.use('/alerts', requireAuth, adminOnly, alertsRouter);
 apiRouter.use('/dashboard', requireAuth, adminOnly, dashboardRouter);
 apiRouter.use('/users', requireAuth, adminOnly, usersRouter);
 apiRouter.use('/reports', requireAuth, adminOnly, reportsRouter);

@@ -6,8 +6,8 @@
  *
  * Reglas de seguridad:
  *  - Las write tools solo crean insights, tareas PROPUESTAS y reportes.
- *  - No existen tools para borrar, modificar finanzas/ventas, cerrar
- *    oportunidades ni marcar decisiones como implementadas.
+ *  - No existen tools para borrar ni modificar finanzas, ni marcar
+ *    decisiones como implementadas.
  *  - Las write tools solo se exponen al modelo si AGENT_ALLOW_WRITE_ACTIONS=true.
  */
 import type {
@@ -19,7 +19,6 @@ import type {
 import { prisma } from '../../lib/prisma';
 import { env } from '../../config/env';
 import { getSummary as getFinanceSummary } from '../finance/finance.service';
-import { getSummary as getSalesSummary } from '../sales/sales.service';
 
 const MAX = env.AGENT_MAX_CONTEXT_ITEMS;
 
@@ -166,50 +165,6 @@ const getTasks: InternalTool = {
     return prisma.task.findMany({
       where,
       orderBy: { dueDate: 'asc' },
-      include: refs,
-      take: MAX,
-    });
-  },
-};
-
-const getSalesOpportunities: InternalTool = {
-  def: {
-    name: 'getSalesOpportunities',
-    description:
-      'Consulta oportunidades comerciales con filtros por empresa, estado, probabilidad y seguimiento.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        organizationId: { type: 'string' },
-        status: {
-          type: 'string',
-          enum: [
-            'LEAD', 'CONTACTED', 'MEETING_SCHEDULED', 'DIAGNOSIS_DONE',
-            'PROPOSAL_SENT', 'NEGOTIATION', 'WON', 'LOST', 'PAUSED',
-          ],
-        },
-        minProbability: { type: 'number' },
-        productOrService: { type: 'string' },
-      },
-    },
-  },
-  handler: (input) => {
-    const where: Prisma.SalesOpportunityWhereInput = {
-      organizationId: input.organizationId || undefined,
-      status: input.status || undefined,
-    };
-    if (typeof input.minProbability === 'number') {
-      where.probability = { gte: input.minProbability };
-    }
-    if (input.productOrService) {
-      where.productOrService = {
-        contains: input.productOrService,
-        mode: 'insensitive',
-      };
-    }
-    return prisma.salesOpportunity.findMany({
-      where,
-      orderBy: { nextFollowUpDate: 'asc' },
       include: refs,
       take: MAX,
     });
@@ -482,7 +437,6 @@ export const READ_TOOLS: InternalTool[] = [
   getBusinessUnits,
   getProjects,
   getTasks,
-  getSalesOpportunities,
   getFinancialSummary,
   getIncomeRecords,
   getExpenseRecords,

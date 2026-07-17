@@ -2,8 +2,8 @@
  * Informe ejecutivo semanal (determinístico, con datos reales).
  *
  * Se entrega el lunes por la mañana y resume la SEMANA ISO QUE TERMINÓ (la
- * anterior a hoy). Reutiliza los services existentes (getConsolidated, finance,
- * sales) para no duplicar lógica financiera. No requiere IA: los números son
+ * anterior a hoy). Reutiliza los services existentes (getConsolidated, finance)
+ * para no duplicar lógica financiera. No requiere IA: los números son
  * reales. En la Etapa 3, cuando se active Anthropic, se puede enriquecer con
  * narrativa; por ahora el valor está en el pulso semanal automático por correo.
  */
@@ -13,7 +13,7 @@ import { sendEmail, type SendEmailResult } from '../../lib/email';
 import { logger } from '../../lib/logger';
 import { periodRange, periodKey, currentPeriod } from '../shared/period';
 import { getConsolidated, getSummary as getFinanceSummary } from '../finance/finance-summary.service';
-import { getSummary as getSalesSummary } from '../sales/sales.service';
+import { generateAlerts, listActiveAlerts } from '../alerts/alerts.service';
 
 const DIA_MS = 86_400_000;
 
@@ -69,15 +69,16 @@ export async function buildWeeklyReportData(now: Date) {
   const { key, periodStart, periodEnd } = resolveTargetWeek(now);
   const { gte, lt } = periodRange('week', key);
 
-  const [consolidated, sales, finance, accrued, ops] = await Promise.all([
+  const [consolidated, finance, accrued, ops, alerts] = await Promise.all([
     // Caja, posición, por cobrar/pagar, vencidos, desglose por empresa y
     // reconciliation (cobros/pagos reales de caja de la semana objetivo).
     getConsolidated({ granularity: 'week', period: key }),
-    getSalesSummary(),
     // Solo para `upcomingFinancial` (próximos cobros/pagos según hoy).
     getFinanceSummary(undefined, { granularity: 'week', period: key }),
     weekAccrued(gte, lt),
     operationalCounts(now),
+    // Alertas activas del motor determinístico (insights NEW con dedupeKey alert:).
+    listActiveAlerts(),
   ]);
 
   return {
@@ -100,14 +101,8 @@ export async function buildWeeklyReportData(now: Date) {
     weekAccruedExpense: accrued.expense,
     // Próximos vencimientos (cobros/pagos)
     upcomingFinancial: finance.upcomingFinancial,
-    // Comercial
-    sales: {
-      openCount: sales.openCount,
-      openAmount: sales.openAmount,
-      weightedAmount: sales.weightedAmount,
-      noFollowUpCount: sales.noFollowUpCount,
-      upcomingFollowUps: sales.upcomingFollowUps,
-    },
+    // Alertas activas (motor determinístico)
+    alerts,
     // Operación
     ops,
   };
@@ -158,6 +153,13 @@ export function renderText(d: WeeklyReportData): string {
   const l: string[] = [];
   l.push(`INFORME EJECUTIVO SEMANAL — ${weekLabel(d)}`);
   l.push('');
+  l.push(`ALERTAS ACTIVAS (${d.alerts.length})`);
+  if (d.alerts.length === 0) {
+    l.push('  (sin alertas activas)');
+  } else {
+    for (const a of d.alerts) l.push(`  [${a.priority}] ${a.title}`);
+  }
+  l.push('');
   l.push('CAJA Y POSICIÓN (al día de hoy)');
   l.push(`  Caja en bancos:      ${money(d.cash)}`);
   l.push(`  Por cobrar:          ${money(d.receivable)}`);
@@ -185,13 +187,6 @@ export function renderText(d: WeeklyReportData): string {
   for (const u of d.upcomingFinancial) {
     const signo = u.kind === 'INCOME' ? 'Cobro' : 'Pago';
     l.push(`  ${fecha(u.dueDate)} · ${signo} · ${money(u.amount)} · ${u.description ?? u.organization?.name ?? ''}`);
-  }
-  l.push('');
-  l.push('COMERCIAL');
-  l.push(`  Oportunidades abiertas: ${d.sales.openCount} · monto ${money(d.sales.openAmount)} · ponderado ${money(d.sales.weightedAmount)}`);
-  l.push(`  Sin seguimiento al día: ${d.sales.noFollowUpCount}`);
-  for (const f of d.sales.upcomingFollowUps) {
-    l.push(`  ${fecha(f.nextFollowUpDate)} · ${f.clientName} — ${f.opportunityName}${f.nextAction ? ` (${f.nextAction})` : ''}`);
   }
   l.push('');
   l.push('OPERACIÓN');
@@ -235,17 +230,6 @@ export function renderHtml(d: WeeklyReportData): string {
         .join('')
     : `<tr><td colspan="4" style="padding:6px 8px;color:#94a3b8;">Sin vencimientos próximos.</td></tr>`;
 
-  const followRows = d.sales.upcomingFollowUps.length
-    ? d.sales.upcomingFollowUps
-        .map(
-          (f) => `<tr>
-            <td style="padding:6px 8px;color:#64748b;white-space:nowrap;">${esc(fecha(f.nextFollowUpDate))}</td>
-            <td style="padding:6px 8px;color:#334155;"><strong>${esc(f.clientName)}</strong> — ${esc(f.opportunityName)}${f.nextAction ? `<br><span style="color:#64748b;font-size:12px;">${esc(f.nextAction)}</span>` : ''}</td>
-          </tr>`,
-        )
-        .join('')
-    : `<tr><td colspan="2" style="padding:6px 8px;color:#94a3b8;">Sin seguimientos agendados.</td></tr>`;
-
   const orgRows = d.byOrganization
     .map(
       (o) => `<tr>
@@ -257,6 +241,19 @@ export function renderHtml(d: WeeklyReportData): string {
       </tr>`,
     )
     .join('');
+
+  const prioColor = (p: string) =>
+    p === 'CRITICAL' || p === 'HIGH' ? '#dc2626' : p === 'MEDIUM' ? '#d97706' : '#64748b';
+  const alertRows = d.alerts.length
+    ? d.alerts
+        .map(
+          (a) => `<tr>
+            <td style="padding:6px 8px;color:${prioColor(a.priority)};font-weight:600;white-space:nowrap;vertical-align:top;">●</td>
+            <td style="padding:6px 8px;color:#334155;"><strong>${esc(a.title)}</strong><br><span style="color:#64748b;font-size:12px;">${esc(a.summary)}</span></td>
+          </tr>`,
+        )
+        .join('')
+    : `<tr><td colspan="2" style="padding:6px 8px;color:#94a3b8;">Sin alertas activas.</td></tr>`;
 
   return `<!-- Informe ejecutivo semanal VitamCore -->
 <div style="margin:0;padding:0;background:#eef2f7;">
@@ -282,6 +279,11 @@ export function renderHtml(d: WeeklyReportData): string {
 
   <tr><td style="padding:0 28px;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+
+      ${sectionTitle(`Alertas activas (${d.alerts.length})`)}
+      <tr><td>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;border-collapse:collapse;">${alertRows}</table>
+      </td></tr>
 
       ${sectionTitle('La semana que terminó')}
       <tr><td>
@@ -318,12 +320,6 @@ export function renderHtml(d: WeeklyReportData): string {
       ${sectionTitle('Próximos cobros / pagos')}
       <tr><td>
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;border-collapse:collapse;">${upcomingRows}</table>
-      </td></tr>
-
-      ${sectionTitle('Comercial')}
-      <tr><td>
-        <div style="font-size:13px;color:#334155;">Oportunidades abiertas: <strong>${d.sales.openCount}</strong> · monto ${esc(money(d.sales.openAmount))} · ponderado ${esc(money(d.sales.weightedAmount))}${d.sales.noFollowUpCount > 0 ? ` · <span style="color:#dc2626;">${d.sales.noFollowUpCount} sin seguimiento al día</span>` : ''}</div>
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;border-collapse:collapse;margin-top:8px;">${followRows}</table>
       </td></tr>
 
       ${sectionTitle('Operación')}
@@ -365,7 +361,6 @@ function highlightsOf(d: WeeklyReportData): { highlights: string; risks: string 
     d.overduePayable.amount > 0
       ? `Por pagar vencido: ${money(d.overduePayable.amount)} (${d.overduePayable.count} doc.)`
       : null,
-    d.sales.noFollowUpCount > 0 ? `${d.sales.noFollowUpCount} oportunidades sin seguimiento` : null,
     d.ops.blockedProjects > 0 ? `${d.ops.blockedProjects} proyectos bloqueados` : null,
   ]
     .filter(Boolean)
@@ -381,6 +376,9 @@ export async function generateWeeklyReport(now: Date): Promise<{
   text: string;
   report: ExecutiveReport;
 }> {
+  // Refresca las alertas antes de leerlas, para que el informe refleje el
+  // estado actual (el cron diario también las mantiene al día entre semanas).
+  await generateAlerts();
   const data = await buildWeeklyReportData(now);
   const subject = reportSubject(data);
   const html = renderHtml(data);
