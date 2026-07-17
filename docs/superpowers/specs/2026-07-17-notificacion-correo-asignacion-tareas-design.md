@@ -69,8 +69,19 @@ Comportamiento:
    obligatorio y `assertAssignableUsers` ya exige activos).
 3. Para cada destinatario, construir asunto/HTML/texto (Componente 3) y llamar
    `sendEmail(...)` de `src/lib/email.ts`.
-4. **Todo el cuerpo va dentro de un `try/catch`** que loguea con `logger` y
-   nunca relanza. Un fallo de Resend o de red no debe propagarse al llamador.
+4. **El envío de cada destinatario va en su propio `try/catch`** (dentro del
+   bucle) que loguea con `logger` y sigue con el siguiente. Esto es
+   deliberado: `sendEmail` **sí lanza** ante una respuesta no-2xx de Resend
+   (`email.ts` solo retorna en silencio cuando falta la key o no hay
+   destinatario), así que un fallo enviando al responsable #1 no debe impedir
+   que #2 reciba su correo. Un `try/catch` externo adicional envuelve la carga
+   de usuarios. En ningún caso `notifyTaskAssigned` relanza al llamador.
+
+   Guard explícito: como `resolveRecipients` de `email.ts` cae a
+   `env.REPORT_EMAIL_TO` cuando el `to` viene vacío, **nunca** se llama a
+   `sendEmail` sin un `to` concreto (los destinatarios sin email se descartan en
+   el paso 2). Así una notificación de tarea jamás se desvía al destinatario del
+   informe semanal.
 
 Interfaz clara: el llamador le pasa datos ya cargados (task + nombres) y la
 lista de ids nuevos; el módulo no conoce Prisma-de-tareas ni transacciones, solo
@@ -98,11 +109,14 @@ obtienen con una lectura ligera tras la transacción (o incluyéndolos en el
 `select`/`include` del `task`), evitando N+1. Estos nombres se pasan al
 notificador; el módulo de notificaciones no vuelve a consultarlos.
 
-El llamado al notificador **no** se espera con la request bloqueada más de lo
-necesario: se hace `await` de `notifyTaskAssigned` (que internamente ya captura
-errores), de modo que la respuesta al cliente no depende del resultado del
-correo pero tampoco deja promesas colgando. Como `notifyTaskAssigned` nunca
-lanza, este `await` es seguro.
+Modelo de ejecución (sin ambigüedad): se hace **`await notifyTaskAssigned(...)`**
+tras la transacción. Esto **sí** retiene la respuesta al cliente hasta que
+terminan los envíos (secuenciales, uno por destinatario), lo cual es aceptable
+por el bajo volumen (una app de pocos usuarios, pocos responsables por tarea). Se
+prefiere `await` a disparar-y-olvidar (`void`/`queueMicrotask`) para no dejar
+promesas colgando ni logs huérfanos. Es seguro porque `notifyTaskAssigned`
+**nunca lanza** (captura sus errores internamente): un fallo de correo no cambia
+el resultado de la request, que ya devolvió la tarea asignada.
 
 ## Componente 3 — Contenido del correo
 
@@ -117,7 +131,8 @@ para test) construye el correo de un destinatario:
   **"Abrir tarea"** enlazando a `${APP_URL}/tareas?tarea=<task.id>` (el frontend
   ya abre el panel de la tarea con el query param `tarea`).
 - **Texto plano**: misma información en texto, como respaldo (`text` de
-  `SendEmailInput`).
+  `SendEmailInput`). Siempre **no vacío** (al menos título + enlace), porque
+  `sendEmail` solo reenvía `text` cuando es truthy.
 - **Remitente**: `core@vitam.tech` (default de `REPORT_EMAIL_FROM`, dominio ya
   verificado en Resend). El `to` es el correo del destinatario.
 
@@ -141,16 +156,20 @@ Dos partes:
 
 1. **Dato existente (local y producción)**: el usuario CEO ya creado tiene
    `email = ceo@vitam.tech`. El `upsert` del seed busca por email, así que
-   re-sembrar **no** lo renombra. Se corrige con una actualización puntual:
-   `UPDATE "User" SET email = 'a.bustos@vitam.tech' WHERE email = 'ceo@vitam.tech'`
-   (o su equivalente Prisma en un script `scripts/`), ejecutada en local y en el
-   VPS. `email` es `@unique`: si ya existiera `a.bustos@vitam.tech` la operación
-   fallaría, cosa que no ocurre hoy (se verifica antes).
+   re-sembrar **no** lo renombra. Se corrige con un **script versionado y
+   reproducible** `backend/scripts/fix-ceo-email.ts` (patrón `tsx`, como los
+   demás scripts del proyecto) que: verifica que no exista ya
+   `a.bustos@vitam.tech` y que exista `ceo@vitam.tech`, y hace
+   `prisma.user.update({ where: { email: 'ceo@vitam.tech' }, data: { email: 'a.bustos@vitam.tech' } })`.
+   Se ejecuta una vez por entorno (local y VPS) y queda en el repo para
+   auditoría. `email` es `@unique`: si ya existiera el destino, el script aborta
+   con mensaje claro en vez de reventar con `P2002`.
 2. **Seed (futuros entornos)**: el default de `CEO_EMAIL` en `prisma/seed.ts`
    pasa de `ceo@vitam.tech` a `a.bustos@vitam.tech` (sigue siendo
    sobreescribible por `SEED_CEO_EMAIL`). Así una base nueva nace con el correo
-   correcto. La documentación de credenciales (CLAUDE.md, memoria) se actualiza
-   en consecuencia.
+   correcto. Se actualizan también: el `console.log` de credenciales del seed, la
+   tabla de credenciales de `CLAUDE.md` (hoy muestra `ceo@vitam.tech`) y la
+   memoria del proyecto.
 
 Impacto de login: tras el cambio, **el CEO inicia sesión con
 `a.bustos@vitam.tech`** y la misma contraseña. Se le comunica explícitamente.
