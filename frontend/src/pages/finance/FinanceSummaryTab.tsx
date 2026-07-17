@@ -12,6 +12,7 @@ import { formatDate, formatMoney } from '@/lib/domain';
 import { periodLabel } from '@/lib/period';
 import { getErrorMessage } from '@/lib/errors';
 import { useFinanceSummary, type Granularity } from '@/hooks/useFinance';
+import { ExportExcelButton } from '@/components/ExportExcelButton';
 import { ConsolidatedPosition } from './ConsolidatedPosition';
 
 export function FinanceSummaryTab({
@@ -43,6 +44,14 @@ export function FinanceSummaryTab({
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <ExportExcelButton
+          endpoint="/finance/export/report"
+          params={{ organizationId, granularity, period: consolidatedPeriod }}
+          label="Reporte a Excel"
+        />
+      </div>
+
       <ConsolidatedPosition
         organizationId={organizationId}
         granularity={granularity}

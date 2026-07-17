@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Landmark, Wallet } from 'lucide-react';
 import { PeriodFilter } from '@/components/PeriodFilter';
+import { ExportExcelButton } from '@/components/ExportExcelButton';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { MetricCard } from '@/components/ui/metric';
@@ -247,7 +248,19 @@ export function BanksTab({
       />
 
       {/* Acciones de categorías */}
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <ExportExcelButton
+          endpoint="/finance/export/bank"
+          params={{
+            organizationId,
+            bankAccountId: bankAccountId || undefined,
+            granularity,
+            period,
+            search: search || undefined,
+            category: category || undefined,
+            reconciliation: reconciliation || undefined,
+          }}
+        />
         <Button variant="outline" onClick={() => setPanelOpen(true)}>Gestionar categorías y reglas</Button>
       </div>
 

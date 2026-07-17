@@ -17,6 +17,7 @@ import {
   type Granularity,
 } from '@/hooks/useFinance';
 import { PeriodFilter } from '@/components/PeriodFilter';
+import { ExportExcelButton } from '@/components/ExportExcelButton';
 import type { ExpenseRecord } from '@/types/domain';
 import { ExpenseForm } from './ExpenseForm';
 
@@ -70,9 +71,12 @@ export function ExpensesTab({ organizationId }: { organizationId?: string }) {
             onPeriodChange={(period) => setExtra((x) => ({ ...x, period }))}
           />
         </div>
-        <Button onClick={() => setForm({ open: true, item: null })}>
-          <Plus className="h-4 w-4" /> Nuevo gasto
-        </Button>
+        <div className="flex items-center gap-2">
+          <ExportExcelButton endpoint="/finance/export/expenses" params={filters} />
+          <Button onClick={() => setForm({ open: true, item: null })}>
+            <Plus className="h-4 w-4" /> Nuevo gasto
+          </Button>
+        </div>
       </div>
 
       {isLoading && <Spinner />}

@@ -66,6 +66,38 @@ export const api = {
   del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
 };
 
+/**
+ * Descarga un archivo (p. ej. un .xlsx) respetando la cookie de sesión.
+ * Toma el nombre del header Content-Disposition si viene; si no, usa el fallback.
+ */
+export async function downloadFile(path: string, fallbackName = 'export'): Promise<void> {
+  const res = await fetch(`${API_URL}${path}`, { credentials: 'include' });
+  if (!res.ok) {
+    let message = `Error ${res.status}`;
+    try {
+      const body = await res.json();
+      message = (body?.error as string) ?? message;
+    } catch {
+      /* la respuesta no era JSON */
+    }
+    throw new ApiError(res.status, message);
+  }
+
+  const blob = await res.blob();
+  const disposition = res.headers.get('content-disposition') ?? '';
+  const match = /filename="?([^"]+)"?/.exec(disposition);
+  const name = match ? match[1] : fallbackName;
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 /** Construye un query string a partir de filtros (omite vacíos). */
 export function toQuery(
   params: Record<string, string | undefined | null>,

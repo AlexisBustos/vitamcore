@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Pencil, Plus, Repeat, Trash2 } from 'lucide-react';
 import { PeriodFilter } from '@/components/PeriodFilter';
+import { ExportExcelButton } from '@/components/ExportExcelButton';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
@@ -70,9 +71,12 @@ export function IncomeTab({ organizationId }: { organizationId?: string }) {
             onPeriodChange={(period) => setExtra((x) => ({ ...x, period }))}
           />
         </div>
-        <Button onClick={() => setForm({ open: true, item: null })}>
-          <Plus className="h-4 w-4" /> Nuevo ingreso
-        </Button>
+        <div className="flex items-center gap-2">
+          <ExportExcelButton endpoint="/finance/export/income" params={filters} />
+          <Button onClick={() => setForm({ open: true, item: null })}>
+            <Plus className="h-4 w-4" /> Nuevo ingreso
+          </Button>
+        </div>
       </div>
 
       {isLoading && <Spinner />}
