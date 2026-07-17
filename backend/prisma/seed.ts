@@ -34,7 +34,7 @@ dotenv.config();
 const prisma = new PrismaClient();
 
 const CEO_NAME = process.env.SEED_CEO_NAME ?? 'CEO VITAM';
-const CEO_EMAIL = process.env.SEED_CEO_EMAIL ?? 'ceo@vitam.tech';
+const CEO_EMAIL = process.env.SEED_CEO_EMAIL ?? 'a.bustos@vitam.tech';
 const CEO_PASSWORD = process.env.SEED_CEO_PASSWORD ?? 'VitamCore2026!';
 
 const COLLAB_EMAIL = process.env.SEED_COLLAB_EMAIL ?? 'colaborador@vitam.tech';

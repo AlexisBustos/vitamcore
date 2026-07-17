@@ -38,7 +38,7 @@ npm run lint                # tsc --noEmit (no hay ESLint; el typecheck ES el li
 
 No hay framework de tests configurado en ningún paquete. La verificación es el typecheck (`npm run lint` en frontend, `npm run build` en backend).
 
-Credenciales del seed: `ceo@vitam.tech` / `VitamCore2026!` (definidas en `backend/.env`).
+Credenciales del seed: `a.bustos@vitam.tech` / `VitamCore2026!` (definidas en `backend/.env`).
 
 ## Arquitectura backend (Express + Prisma)
 
