@@ -19,6 +19,8 @@ const envSchema = z.object({
     .min(32, 'JWT_SECRET debe tener al menos 32 caracteres'),
   JWT_EXPIRES_IN: z.string().default('7d'),
   CORS_ORIGIN: z.string().url().default('http://localhost:5173'),
+  // URL pública del frontend, usada para construir enlaces en correos.
+  APP_URL: z.string().url().default('http://localhost:5173'),
   // Nivel de logging (pino): trace|debug|info|warn|error|fatal|silent.
   LOG_LEVEL: z
     .enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'])
