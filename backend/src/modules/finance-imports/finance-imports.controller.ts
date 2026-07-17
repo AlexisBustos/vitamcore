@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import {
   bulkCategorySchema,
   confirmImportSchema,
+  coverageQuery,
   createBankAccountSchema,
   listAccountsQuery,
   listBatchesQuery,
@@ -40,6 +41,11 @@ export async function previewController(req: Request, res: Response) {
 export async function confirmController(req: Request, res: Response) {
   const input = confirmImportSchema.parse(req.body);
   res.json({ data: await service.confirmImport(input.batchId) });
+}
+
+export async function coverageController(req: Request, res: Response) {
+  const filters = coverageQuery.parse(req.query);
+  res.json({ data: await service.getCoverage(filters) });
 }
 
 export async function listBatchesController(req: Request, res: Response) {

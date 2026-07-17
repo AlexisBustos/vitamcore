@@ -23,6 +23,7 @@ import {
   type ImportPreviewResponse,
   type ImportPreviewRow,
 } from '@/hooks/useFinance';
+import { CoverageGrid } from './CoverageGrid';
 
 const importTypeOptions: { value: FinancialImportType; label: string }[] = [
   { value: 'SALES_REPORT', label: 'Reporte de ventas' },
@@ -154,6 +155,8 @@ export function FinanceImportsTab({
 
   return (
     <div className="space-y-5">
+      <CoverageGrid organizationId={organizationId} />
+
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="p-5">
           <div className="mb-4 flex items-center gap-2">

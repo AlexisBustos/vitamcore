@@ -17,11 +17,13 @@ export type {
   BankTransactionsResponse, BankCategoryBreakdown, BankCategoryKind, RuleDirection,
   BankCategory, BankCategoryRule, BankPeriodicPoint, BankTransaction,
   ReconciliationCandidate, FinancialImportBatch,
+  CoverageStatus, CoverageCell, CoverageRow, CoverageResponse,
 } from './banking';
 export type {
   IncomeStatus, ExpenseStatus, DocumentKind, RecurrenceFrequency, IncomeRecord,
   ExpenseRecord, ClientStats, Client, ClientDetail, VendorStats, Vendor, VendorDetail,
   FinanceSummary, ReconciliationSummary, ConsolidatedOrg, ConsolidatedResponse,
   AutoReconcilePair, AutoReconcileResult, RecognizeTransfer, RecognizeTransfersResult,
+  TrendPoint,
 } from './finance';
 export type { DashboardSummary } from './dashboard';

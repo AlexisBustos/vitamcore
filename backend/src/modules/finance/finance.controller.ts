@@ -5,6 +5,7 @@ import {
   consolidatedQuery,
   recognizeTransfersSchema,
   summaryQuery,
+  trendQuery,
 } from './finance.schema';
 
 export async function summaryController(req: Request, res: Response) {
@@ -17,6 +18,11 @@ export async function summaryController(req: Request, res: Response) {
 export async function consolidatedController(req: Request, res: Response) {
   const filters = consolidatedQuery.parse(req.query);
   res.json({ data: await service.getConsolidated(filters) });
+}
+
+export async function trendController(req: Request, res: Response) {
+  const filters = trendQuery.parse(req.query);
+  res.json({ data: await service.getTrend(filters) });
 }
 
 export async function autoReconcileController(req: Request, res: Response) {

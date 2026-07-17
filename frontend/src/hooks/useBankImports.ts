@@ -10,6 +10,7 @@ import type {
   BankCategoryBreakdown,
   BankPeriodicPoint,
   BankTransactionsResponse,
+  CoverageResponse,
   FinancialImportBatch,
   FinancialImportType,
   SalesImportSummary,
@@ -150,6 +151,24 @@ export function useBankByCategory(filters: {
       api
         .get<{ data: BankCategoryBreakdown[] }>(
           `/finance/imports/transactions/by-category${toQuery(filters)}`,
+        )
+        .then((r) => r.data),
+  });
+}
+
+// Cobertura de importación: qué fuentes/períodos están cargados (o faltan).
+export function useImportCoverage(filters: {
+  organizationId?: string;
+  granularity: Granularity;
+  from: string;
+  to: string;
+}) {
+  return useQuery({
+    queryKey: ['finance-imports', 'coverage', filters],
+    queryFn: () =>
+      api
+        .get<{ data: CoverageResponse }>(
+          `/finance/imports/coverage${toQuery(filters)}`,
         )
         .then((r) => r.data),
   });

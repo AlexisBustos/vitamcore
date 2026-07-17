@@ -222,3 +222,12 @@ export interface RecognizeTransfersResult {
   totalAmount: number;
   details: RecognizeTransfer[];
 }
+
+// ---- Tendencia (Fase 4 granularidad semanal) ----
+// Un punto por período; los períodos sin datos vienen en cero (hueco explícito).
+export interface TrendPoint {
+  period: string; // 'YYYY-Www' o 'YYYY-MM'
+  income: number;
+  expense: number;
+  result: number; // income − expense
+}

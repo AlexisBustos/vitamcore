@@ -82,6 +82,15 @@ export const listPeriodicQuery = z.object({
   granularity,
 });
 
+// Cobertura de importación: rango de períodos [from, to] (claves, no fechas).
+export const coverageQuery = z.object({
+  organizationId: z.string().optional(),
+  granularity,
+  from: periodKeyInput,
+  to: periodKeyInput,
+});
+export type CoverageFilters = z.infer<typeof coverageQuery>;
+
 export const setCategorySchema = z.object({
   category: z.string().nullable(),
 });

@@ -4,6 +4,7 @@ import { asyncHandler } from '../../utils/async-handler';
 import {
   bulkCategoryController,
   confirmController,
+  coverageController,
   createAccountController,
   getBatchController,
   listAccountsController,
@@ -36,6 +37,7 @@ financeImportsRouter.post(
   asyncHandler(previewController),
 );
 financeImportsRouter.post('/confirm', asyncHandler(confirmController));
+financeImportsRouter.get('/coverage', asyncHandler(coverageController));
 financeImportsRouter.get('/batches', asyncHandler(listBatchesController));
 financeImportsRouter.get('/batches/:id', asyncHandler(getBatchController));
 financeImportsRouter.get(

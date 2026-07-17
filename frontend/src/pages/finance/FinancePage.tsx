@@ -5,6 +5,7 @@ import { PeriodFilter } from '@/components/PeriodFilter';
 import { cn } from '@/lib/utils';
 import { useBankTransactionPeriods, type Granularity } from '@/hooks/useFinance';
 import { FinanceSummaryTab } from './FinanceSummaryTab';
+import { TrendTab } from './TrendTab';
 import { IncomeTab } from './IncomeTab';
 import { ExpensesTab } from './ExpensesTab';
 import { FinanceImportsTab } from './FinanceImportsTab';
@@ -16,6 +17,7 @@ import { RecognizeTransfersModal } from './RecognizeTransfersModal';
 
 type Tab =
   | 'summary'
+  | 'trend'
   | 'income'
   | 'expenses'
   | 'imports'
@@ -25,6 +27,7 @@ type Tab =
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'summary', label: 'Resumen' },
+  { id: 'trend', label: 'Tendencia' },
   { id: 'receivables', label: 'Cuentas por cobrar' },
   { id: 'income', label: 'Ingresos' },
   { id: 'expenses', label: 'Gastos' },
@@ -146,6 +149,7 @@ export function FinancePage() {
           onRecognizeTransfers={openRecognizeTransfers}
         />
       )}
+      {tab === 'trend' && <TrendTab organizationId={organizationId} />}
       {tab === 'receivables' && <ReceivablesTab organizationId={organizationId} />}
       {tab === 'income' && <IncomeTab organizationId={organizationId} />}
       {tab === 'expenses' && <ExpensesTab organizationId={organizationId} />}

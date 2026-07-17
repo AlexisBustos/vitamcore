@@ -142,3 +142,21 @@ export interface FinancialImportBatch {
   organization?: Ref;
   bankAccount?: Pick<BankAccount, 'id' | 'name' | 'accountNumber'> | null;
 }
+
+// ---- Cobertura de importación (Fase 4 granularidad semanal) ----
+export type CoverageStatus = 'covered' | 'partial' | 'missing';
+
+export interface CoverageCell {
+  period: string;
+  status: CoverageStatus;
+}
+
+export interface CoverageRow {
+  source: { type: FinancialImportType; bankAccountId?: string; label: string };
+  cells: CoverageCell[];
+}
+
+export interface CoverageResponse {
+  periods: string[];
+  rows: CoverageRow[];
+}

@@ -47,18 +47,40 @@ function lunesDeClave(key: string): Date {
   return new Date(lunesDeLaSemana1(year).getTime() + (week - 1) * 7 * DIA_MS);
 }
 
-/// Clave del período en curso ('2026-W28' o '2026-07'), resuelto en Chile.
-export function currentPeriodKey(g: Granularity, now = new Date()): string {
-  const hoy = new Date(`${hoyEnChile(now)}T00:00:00.000Z`);
+/// Clave del período que contiene esa fecha de calendario (UTC).
+function claveDeFecha(g: Granularity, fecha: Date): string {
   if (g === 'month') {
-    const mes = String(hoy.getUTCMonth() + 1).padStart(2, '0');
-    return `${hoy.getUTCFullYear()}-${mes}`;
+    const mes = String(fecha.getUTCMonth() + 1).padStart(2, '0');
+    return `${fecha.getUTCFullYear()}-${mes}`;
   }
-  const jueves = new Date(hoy.getTime() + (4 - diaIso(hoy)) * DIA_MS);
+  const jueves = new Date(fecha.getTime() + (4 - diaIso(fecha)) * DIA_MS);
   const year = jueves.getUTCFullYear();
   const semana =
     Math.round((jueves.getTime() - lunesDeLaSemana1(year).getTime()) / (7 * DIA_MS)) + 1;
   return `${year}-W${String(semana).padStart(2, '0')}`;
+}
+
+/// Clave del período en curso ('2026-W28' o '2026-07'), resuelto en Chile.
+export function currentPeriodKey(g: Granularity, now = new Date()): string {
+  return claveDeFecha(g, new Date(`${hoyEnChile(now)}T00:00:00.000Z`));
+}
+
+/// Clave desplazada `delta` períodos (negativo = hacia atrás), misma granularidad.
+export function shiftPeriodKey(key: string, delta: number): string {
+  if (key.includes('W')) {
+    const lunes = lunesDeClave(key);
+    return claveDeFecha('week', new Date(lunes.getTime() + delta * 7 * DIA_MS));
+  }
+  const [y, m] = key.split('-').map(Number);
+  return claveDeFecha('month', new Date(Date.UTC(y, m - 1 + delta, 1)));
+}
+
+/// Las últimas `n` claves de período hasta la actual (inclusive), ascendente.
+export function lastPeriods(g: Granularity, n: number, now = new Date()): string[] {
+  const current = currentPeriodKey(g, now);
+  const out: string[] = [];
+  for (let i = n - 1; i >= 0; i--) out.push(shiftPeriodKey(current, -i));
+  return out;
 }
 
 /// Etiqueta legible: '2026-07' → 'Julio 2026'; '2026-W28' → 'Semana del 6 al 12 jul'.
@@ -79,6 +101,16 @@ export function periodLabel(key: string): string {
   const [y, m] = key.split('-').map(Number);
   const nombre = MESES[m - 1];
   return nombre != null ? `${nombre} ${y}` : key;
+}
+
+/// Etiqueta compacta para ejes: '2026-W28' → 'S28'; '2026-07' → 'jul'.
+export function periodShortLabel(key: string): string {
+  if (key.includes('W')) {
+    const m = /-W(\d{2})$/.exec(key);
+    return m ? `S${Number(m[1])}` : key;
+  }
+  const [, m] = key.split('-').map(Number);
+  return MESES_CORTOS[m - 1] ?? key;
 }
 
 /// Granularidad implícita en una clave de período.

@@ -4,6 +4,7 @@
  * finance-summary.service y finance-reconciliation.service.
  */
 export { getSummary, getConsolidated } from './finance-summary.service';
+export { getTrend } from './finance-trend.service';
 export {
   getReconciliationSummary,
   autoReconcile,

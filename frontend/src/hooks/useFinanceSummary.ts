@@ -1,7 +1,7 @@
 // Hooks de resumen financiero (KPIs y vista consolidada) por empresa/unidad/proyecto.
 import { useQuery } from '@tanstack/react-query';
 import { api, toQuery } from '@/lib/api';
-import type { FinanceSummary, ConsolidatedResponse } from '@/types/domain';
+import type { FinanceSummary, ConsolidatedResponse, TrendPoint } from '@/types/domain';
 import type { Granularity } from './finance-shared';
 
 // ----- Resumen financiero -----
@@ -23,6 +23,27 @@ export function useFinanceSummary(
       api
         .get<{ data: FinanceSummary }>(
           `/finance/summary${toQuery({ organizationId, ...filters })}`,
+        )
+        .then((r) => r.data),
+  });
+}
+
+// Tendencia: serie income/expense/result de los últimos `last` períodos.
+export function useFinanceTrend(filters: {
+  granularity: Granularity;
+  last?: number;
+  organizationId?: string;
+}) {
+  return useQuery({
+    queryKey: ['finance', 'trend', filters],
+    queryFn: () =>
+      api
+        .get<{ data: TrendPoint[] }>(
+          `/finance/trend${toQuery({
+            organizationId: filters.organizationId,
+            granularity: filters.granularity,
+            last: filters.last != null ? String(filters.last) : undefined,
+          })}`,
         )
         .then((r) => r.data),
   });

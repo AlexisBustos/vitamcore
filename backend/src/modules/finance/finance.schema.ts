@@ -13,6 +13,13 @@ export const consolidatedQuery = z.object({
   period: periodKeyInput.optional(),
 });
 
+export const trendQuery = z.object({
+  organizationId: z.string().optional(),
+  granularity,
+  // Cuántos períodos hacia atrás (incluyendo el actual). 12 semanas = un trimestre.
+  last: z.coerce.number().int().min(1).max(52).default(12),
+});
+
 export const autoReconcileSchema = z.object({
   organizationId: z.string().min(1, 'La empresa es obligatoria'),
   granularity,
@@ -41,5 +48,6 @@ export const recognizeTransfersSchema = z.object({
 
 export type SummaryFilters = z.infer<typeof summaryQuery>;
 export type ConsolidatedFilters = z.infer<typeof consolidatedQuery>;
+export type TrendFilters = z.infer<typeof trendQuery>;
 export type AutoReconcileInput = z.infer<typeof autoReconcileSchema>;
 export type RecognizeTransfersInput = z.infer<typeof recognizeTransfersSchema>;

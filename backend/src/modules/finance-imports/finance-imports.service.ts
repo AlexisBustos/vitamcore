@@ -9,3 +9,4 @@ export {
 } from './bank-transactions.service';
 export { previewImport, confirmImport, listBatches, getBatch } from './import-pipeline.service';
 export { listReconciliationCandidates } from './reconciliation-candidates.service';
+export { getCoverage } from './coverage.service';
