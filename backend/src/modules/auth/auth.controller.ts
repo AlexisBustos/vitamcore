@@ -8,14 +8,14 @@ import { SESSION_COOKIE } from '../../utils/jwt';
 import { changePasswordSchema, loginSchema } from './auth.schema';
 import * as authService from './auth.service';
 
-const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-
+// Sin `maxAge`/`expires`: es una cookie de sesión. El navegador la borra al
+// cerrarse, así que apagar el equipo o cerrar la ventana obliga a iniciar
+// sesión de nuevo. El JWT (JWT_EXPIRES_IN) actúa como caducidad de respaldo.
 const cookieOptions: CookieOptions = {
   httpOnly: true,
   secure: isProduction, // solo HTTPS en producción
   sameSite: 'lax',
   path: '/',
-  maxAge: SEVEN_DAYS_MS,
 };
 
 export async function loginController(req: Request, res: Response) {
