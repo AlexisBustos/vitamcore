@@ -3,6 +3,7 @@ import { KeyRound, LogOut, Menu } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { ChangePasswordModal } from '@/components/ChangePasswordModal';
+import logoSymbolDark from '@/assets/logo-vitam-symbol-dark.png';
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -27,15 +28,20 @@ export function Header({ onToggleSidebar }: HeaderProps) {
 
   return (
     <header className="flex h-16 items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-card)] px-4 md:px-6">
-      <button
-        onClick={onToggleSidebar}
-        className="rounded-md p-2 text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] md:hidden"
-        aria-label="Abrir menú"
-      >
-        <Menu className="h-5 w-5" />
-      </button>
-
-      <div className="hidden md:block" />
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onToggleSidebar}
+          className="rounded-md p-2 text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] md:hidden"
+          aria-label="Abrir menú"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        <img
+          src={logoSymbolDark}
+          alt="Vitam"
+          className="h-7 w-auto md:hidden"
+        />
+      </div>
 
       <div className="flex items-center gap-3">
         <div className="text-right leading-tight">

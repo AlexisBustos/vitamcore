@@ -3,6 +3,7 @@ import { useAuth } from '@/context/AuthContext';
 import { canAccessPath } from '@/lib/permissions';
 import { navItems } from '@/lib/nav';
 import { cn } from '@/lib/utils';
+import logoSymbol from '@/assets/logo-vitam-symbol.png';
 
 interface SidebarProps {
   open: boolean;
@@ -20,10 +21,12 @@ export function Sidebar({ open, onNavigate }: SidebarProps) {
         open ? 'translate-x-0' : '-translate-x-full',
       )}
     >
-      <div className="flex h-16 items-center gap-2 px-6">
-        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[var(--color-accent)] text-sm font-bold text-white">
-          V
-        </div>
+      <div className="flex h-16 items-center gap-2.5 px-6">
+        <img
+          src={logoSymbol}
+          alt="Vitam"
+          className="h-8 w-auto"
+        />
         <div className="leading-tight">
           <p className="text-sm font-semibold text-white">VITAM CORE</p>
           <p className="text-[11px] text-[var(--color-sidebar-foreground)]">
